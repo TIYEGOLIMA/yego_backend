@@ -104,4 +104,33 @@ export class AuthController {
       changePasswordDto.newPassword
     );
   }
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Cerrar sesión completa y liberar módulo' })
+  @ApiResponse({ status: 200, description: 'Logout exitoso, módulo liberado' })
+  @ApiResponse({ status: 400, description: 'Error al cerrar sesión' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async cerrarSesion(@Request() req) {
+    console.log(`🔓 Usuario ${req.user.username} (ID: ${req.user.id}) iniciando logout completo`);
+    
+    try {
+      // Extraer token del header Authorization
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.replace('Bearer ', '') || '';
+      
+      await this.authService.cerrarSesion(req.user.id, token);
+      
+      return { 
+        message: 'Logout exitoso, módulo liberado',
+        success: true,
+        timestamp: new Date().toISOString(),
+        user: req.user.username
+      };
+    } catch (error) {
+      console.error(`❌ Error en logout para usuario ${req.user.username}:`, error);
+      throw error;
+    }
+  }
 } 

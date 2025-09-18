@@ -184,4 +184,49 @@ export class AuthService {
       lastLogin: user.lastLogin,
     };
   }
+
+  async cerrarSesion(userId: number, token: string): Promise<void> {
+    console.log(`🔄 Usuario ${userId} cerrando sesión`);
+    
+    try {
+      const user = await this.userRepository.findOne({ 
+        where: { id: userId } 
+      });
+
+      if (!user) {
+        console.warn(`⚠️ Usuario ${userId} no encontrado para logout`);
+        return;
+      }
+
+      // 🆕 LIBERAR MÓDULO EN BACKEND EXTERNO (igual que en frontend)
+      try {
+        console.log('🔄 [AuthService] Liberando módulo asignado en backend...');
+        
+        const backendUrl = 'http://10.10.12.117:3030/api';
+        const response = await fetch(`${backendUrl}/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          signal: AbortSignal.timeout(5000) // 5 segundos de timeout
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        console.log('✅ [AuthService] Módulo liberado exitosamente en backend');
+      } catch (moduleError) {
+        console.warn('⚠️ [AuthService] No se pudo liberar módulo en backend:', moduleError.message);
+        // Continuar con el logout aunque falle la liberación del módulo
+      }
+
+      console.log(`✅ Logout completado para usuario ${user.username} (ID: ${userId})`);
+      
+    } catch (error) {
+      console.error(`❌ Error en logout para usuario ${userId}:`, error);
+      throw new BadRequestException('Error al cerrar sesión');
+    }
+  }
 } 
