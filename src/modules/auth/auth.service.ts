@@ -209,7 +209,7 @@ export class AuthService {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          signal: AbortSignal.timeout(5000) // 5 segundos de timeout
+          signal: AbortSignal.timeout(10000) 
         });
         
         if (!response.ok) {
