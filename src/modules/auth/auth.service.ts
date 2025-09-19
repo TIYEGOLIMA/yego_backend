@@ -203,7 +203,7 @@ export class AuthService {
         console.log('🔄 [AuthService] Liberando módulo asignado en backend...');
         
         // const backendUrl = 'http://10.10.12.117:3030/api' para local;
-        const backendUrl = 'http://5.161.86.63:3030/backendB';
+        const backendUrl = 'http://5.161.86.63:3030/api';
         const response = await fetch(`${backendUrl}/auth/logout`, {
           method: 'POST', 
           headers: {
