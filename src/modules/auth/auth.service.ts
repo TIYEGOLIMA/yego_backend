@@ -202,7 +202,7 @@ export class AuthService {
       try {
         console.log('🔄 [AuthService] Liberando módulo asignado en backend...');
         
-        const backendUrl = 'http://10.10.12.117:3030/api';
+        const backendUrl = 'http://10.10.12.117:3030/backendB';
         const response = await fetch(`${backendUrl}/auth/logout`, {
           method: 'POST',
           headers: {
