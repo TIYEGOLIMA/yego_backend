@@ -1,9 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { JwtModule } from '@nestjs/jwt';
 import { getDatabaseConfig } from './config/database.config';
-import { getJwtConfig } from './config/jwt.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { RolesModule } from './modules/roles/roles.module';
@@ -57,12 +55,6 @@ import { Ticket } from './modules/tickets/entities/ticket.entity';
       inject: [ConfigService],
     }),
     
-    // JWT configuration
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => getJwtConfig(configService),
-      inject: [ConfigService],
-    }),
 
     // Application modules
     SharedModule,

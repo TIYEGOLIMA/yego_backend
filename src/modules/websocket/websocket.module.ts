@@ -3,15 +3,13 @@ import { WebsocketGateway } from './websocket.gateway';
 import { WsJwtGuard } from '../auth/guards/ws-jwt.guard';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { getJwtConfig } from '../../config/jwt.config';
 
 @Module({
   imports: [
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET'),
-        signOptions: { expiresIn: '1d' },
-      }),
+      useFactory: (configService: ConfigService) => getJwtConfig(configService),
       inject: [ConfigService],
     }),
   ],

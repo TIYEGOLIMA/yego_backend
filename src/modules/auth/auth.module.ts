@@ -10,6 +10,7 @@ import { LocalStrategy } from './strategies/local.strategy';
 import { User } from '../users/entities/user.entity';
 import { SessionsModule } from '../sessions/sessions.module';
 import { AuditModule } from '../audit/audit.module';
+import { getJwtConfig } from '../../config/jwt.config';
 
 @Module({
   imports: [
@@ -17,10 +18,7 @@ import { AuditModule } from '../audit/audit.module';
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET'),
-        signOptions: { expiresIn: '1d' },
-      }),
+      useFactory: (configService: ConfigService) => getJwtConfig(configService),
       inject: [ConfigService],
     }),
     SessionsModule,
