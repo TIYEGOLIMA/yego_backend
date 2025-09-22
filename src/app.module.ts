@@ -32,9 +32,9 @@ import { Ticket } from './modules/tickets/entities/ticket.entity';
   imports: [
     // Environment configuration
     ConfigModule.forRoot({
-      envFilePath: process.env.NODE_ENV === 'production' ? '.env' : '.env.development',
+      envFilePath: process.env.NODE_ENV === 'production' ? '.env.production' : '.env.development',
       isGlobal: true,
-    }),
+    }),    
     
     // Database configuration
     TypeOrmModule.forRootAsync({
