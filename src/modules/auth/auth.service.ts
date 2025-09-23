@@ -185,49 +185,71 @@ export class AuthService {
     };
   }
 
-  async cerrarSesion(userId: number, token: string): Promise<void> {
-    console.log(`🔄 Usuario ${userId} cerrando sesión`);
+  // Método para decodificar token sin verificar (útil para tokens expirados)
+  decodeToken(token: string): any {
+    try {
+      return this.jwtService.decode(token);
+    } catch (error) {
+      console.warn('⚠️ Error decodificando token:', error.message);
+      return null;
+    }
+  }
+
+  async cerrarSesion(userId: number | null, token: string): Promise<void> {
+    console.log(`🔄 Cerrando sesión para usuario ${userId || 'desconocido'}`);
     
     try {
-      const user = await this.userRepository.findOne({ 
-        where: { id: userId } 
-      });
+      let user = null;
+      
+      if (userId) {
+        user = await this.userRepository.findOne({ 
+          where: { id: userId } 
+        });
+      }
 
-      if (!user) {
+      if (!user && userId) {
         console.warn(`⚠️ Usuario ${userId} no encontrado para logout`);
-        return;
       }
 
       // 🆕 LIBERAR MÓDULO EN BACKEND EXTERNO (igual que en frontend)
-      try {
-        console.log('🔄 [AuthService] Liberando módulo asignado en backend...');
-        
-        // const backendUrl = 'http://10.10.12.117:3030/api' para local;
-        const backendUrl = 'https://api-tick.yego.pro/api';
-        const response = await fetch(`${backendUrl}/auth/logout`, {
-          method: 'POST', 
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          signal: AbortSignal.timeout(10000) 
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      if (token) {
+        try {
+          console.log('🔄 [AuthService] Liberando módulo asignado en backend...');
+          
+          // const backendUrl = 'http://10.10.12.117:3030/api' para local;
+          const backendUrl = 'https://api-tick.yego.pro/api';
+          const response = await fetch(`${backendUrl}/auth/logout`, {
+            method: 'POST', 
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            signal: AbortSignal.timeout(5000) // Reducir timeout para evitar bloqueos
+          });
+          
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          
+          console.log('✅ [AuthService] Módulo liberado exitosamente en backend');
+        } catch (moduleError) {
+          console.warn('⚠️ [AuthService] No se pudo liberar módulo en backend:', moduleError.message);
+          
+          // Si es error 401, es normal durante logout con token expirado
+          if (moduleError.message.includes('401')) {
+            console.log('ℹ️ [AuthService] Token expirado en API tercera - esto es esperado durante logout');
+          }
+          
+          // Continuar con el logout aunque falle la liberación del módulo
         }
-        
-        console.log('✅ [AuthService] Módulo liberado exitosamente en backend');
-      } catch (moduleError) {
-        console.warn('⚠️ [AuthService] No se pudo liberar módulo en backend:', moduleError.message);
-        // Continuar con el logout aunque falle la liberación del módulo
       }
 
-      console.log(`✅ Logout completado para usuario ${user.username} (ID: ${userId})`);
+      console.log(`✅ Logout completado para usuario ${user?.username || 'desconocido'} (ID: ${userId || 'N/A'})`);
       
     } catch (error) {
       console.error(`❌ Error en logout para usuario ${userId}:`, error);
-      throw new BadRequestException('Error al cerrar sesión');
+      // No lanzar error para evitar loops infinitos en el frontend
+      console.warn('⚠️ Continuando con logout a pesar del error');
     }
   }
 } 

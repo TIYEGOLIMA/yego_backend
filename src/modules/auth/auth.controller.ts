@@ -105,31 +105,88 @@ export class AuthController {
   }
 
   @Post('logout')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Cerrar sesión completa y liberar módulo' })
   @ApiResponse({ status: 200, description: 'Logout exitoso, módulo liberado' })
   @ApiResponse({ status: 400, description: 'Error al cerrar sesión' })
-  @ApiResponse({ status: 401, description: 'No autorizado' })
   async cerrarSesion(@Request() req) {
-    console.log(`🔓 Usuario ${req.user.username} (ID: ${req.user.id}) iniciando logout completo`);
+    console.log(`🔓 Iniciando logout`);
     
     try {
       // Extraer token del header Authorization
       const authHeader = req.headers.authorization;
       const token = authHeader?.replace('Bearer ', '') || '';
       
-      await this.authService.cerrarSesion(req.user.id, token);
+      if (!token) {
+        return { 
+          message: 'Logout exitoso - no hay token activo',
+          success: true,
+          timestamp: new Date().toISOString()
+        };
+      }
+
+      // Intentar obtener información del usuario del token (incluso si está expirado)
+      let userId = null;
+      let username = 'usuario';
+      
+      try {
+        // Decodificar token sin verificar (para obtener info incluso si expiró)
+        const decoded = this.authService.decodeToken(token);
+        userId = decoded?.sub || decoded?.userId;
+        username = decoded?.username || 'usuario';
+        console.log(`🔓 Usuario ${username} (ID: ${userId}) iniciando logout completo`);
+      } catch (decodeError) {
+        console.log('⚠️ No se pudo decodificar el token, continuando con logout genérico');
+      }
+
+      await this.authService.cerrarSesion(userId, token);
       
       return { 
         message: 'Logout exitoso, módulo liberado',
         success: true,
         timestamp: new Date().toISOString(),
-        user: req.user.username
+        user: username
       };
     } catch (error) {
-      console.error(`❌ Error en logout para usuario ${req.user.username}:`, error);
-      throw error;
+      console.error(`❌ Error en logout:`, error);
+      // Siempre devolver éxito en logout para evitar loops infinitos
+      return { 
+        message: 'Logout completado con advertencias',
+        success: true,
+        timestamp: new Date().toISOString(),
+        warning: 'Algunos recursos no pudieron ser liberados'
+      };
+    }
+  }
+
+  @Post('force-logout')
+  @ApiOperation({ summary: 'Forzar logout sin autenticación (para casos de emergencia)' })
+  @ApiResponse({ status: 200, description: 'Logout forzado exitoso' })
+  async forceLogout(@Request() req) {
+    console.log(`🚨 Logout forzado solicitado`);
+    
+    try {
+      // Extraer token del header Authorization si existe
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.replace('Bearer ', '') || '';
+      
+      if (token) {
+        // Intentar liberar recursos con el token disponible
+        await this.authService.cerrarSesion(null, token);
+      }
+      
+      return { 
+        message: 'Logout forzado exitoso',
+        success: true,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error(`❌ Error en logout forzado:`, error);
+      // Siempre devolver éxito para evitar loops
+      return { 
+        message: 'Logout forzado completado',
+        success: true,
+        timestamp: new Date().toISOString()
+      };
     }
   }
 } 
