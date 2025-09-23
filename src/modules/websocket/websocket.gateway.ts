@@ -13,7 +13,7 @@ import { WsJwtGuard } from '../auth/guards/ws-jwt.guard';
 import { JwtService } from '@nestjs/jwt';
 
 @WebSocketGateway({
-  namespace: 'ws',
+  namespace: '/socketio-ws',
   cors: {
     origin: [
       // URLs de desarrollo
