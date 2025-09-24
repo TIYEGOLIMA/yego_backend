@@ -13,7 +13,7 @@ import { WsJwtGuard } from '../auth/guards/ws-jwt.guard';
 import { JwtService } from '@nestjs/jwt';
 
 @WebSocketGateway({
-  namespace: '/socketio-ws',
+  namespace: 'wss',
   cors: {
     origin: [
       // URLs de desarrollo
@@ -30,6 +30,7 @@ import { JwtService } from '@nestjs/jwt';
       // URLs de producción HTTPS (principales)
       'https://integral.yego.pro',
       'https://api-int.yego.pro',
+      'https://api-tick.yego.pro',
       'https://yego.pro',
       'https://www.yego.pro',
       
