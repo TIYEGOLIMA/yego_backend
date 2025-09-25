@@ -1,306 +1,297 @@
-# YEGO Integral API
+# Yego Backend - Spring Boot
 
-API del Sistema YEGO Integral construida con NestJS y TypeScript.
+Este proyecto es la conversión del backend de Yego de **NestJS/TypeScript** a **Java con Spring Boot**, manteniendo la misma funcionalidad y siguiendo las mejores prácticas de arquitectura de Spring.
 
-## Descripción
+## 🏗️ Arquitectura de Paquetes
 
-Sistema empresarial completo para la gestión integral de YEGO, incluyendo:
-- Gestión de usuarios y roles con permisos dinámicos
-- Sistema de autenticación JWT con refresh tokens
-- WebSockets para comunicación en tiempo real
-- Base de datos PostgreSQL con auditoría completa
-- Sistema de sesiones activas
-- Configuraciones dinámicas del sistema
-- Documentación automática con Swagger
-
-## Tecnologías
-
-- **Framework**: NestJS
-- **Lenguaje**: TypeScript
-- **Base de datos**: PostgreSQL
-- **ORM**: TypeORM
-- **Autenticación**: JWT + Passport
-- **WebSockets**: Socket.IO
-- **Documentación**: Swagger/OpenAPI
-- **Validación**: class-validator
-- **Testing**: Jest + Supertest
-- **Seguridad**: bcrypt, rate limiting, CORS
-
-## Instalación
-
-1. Clonar el repositorio
-2. Instalar dependencias:
-   ```bash
-   npm install
-   ```
-
-3. Configurar variables de entorno:
-   ```bash
-   cp env.example .env
-   # Editar .env con tus configuraciones
-   ```
-
-4. Configurar base de datos PostgreSQL:
-   - Crear base de datos `yego_integral`
-   - Ejecutar el script `database/schema.sql`
-
-5. Inicializar el sistema:
-   ```bash
-   npm run init:system
-   ```
-
-6. Iniciar el servidor:
-   ```bash
-   # Desarrollo
-   npm run start:dev
-   
-   # Producción
-   npm run start:prod
-   ```
-
-## Estructura del Proyecto
+El proyecto sigue una estructura de paquetes moderna y organizada con separación clara entre DTOs y entidades:
 
 ```
-src/
-├── config/                    # Configuraciones
-├── modules/                   # Módulos de la aplicación
-│   ├── auth/                  # Autenticación y autorización
-│   ├── users/                 # Gestión de usuarios
-│   ├── roles/                 # Gestión de roles y permisos
-│   ├── sessions/              # Gestión de sesiones activas
-│   ├── audit/                 # Logs de auditoría
-│   ├── configuration/         # Configuraciones del sistema
-│   └── websocket/             # WebSockets y comunicación en tiempo real
-├── scripts/                   # Scripts de inicialización
-└── main.ts                   # Punto de entrada
+com.yego.backend/
+├── controller/          # REST Controllers (@RestController)
+├── entity/             # Entidades y DTOs organizados
+│   ├── api/           # DTOs para API (@Data, validaciones)
+│   └── entities/      # Entidades JPA (@Entity)
+├── repository/         # Interfaces JpaRepository
+├── service/            # Interfaces de servicios
+│   └── impl/          # Implementaciones (@Service)
+├── config/            # Configuraciones (@Configuration)
+├── emitteds/          # Eventos y mensajes (ApplicationEvent)
+└── YegoBackendApplication.java
 ```
 
-## API Endpoints
+### 📁 Organización de Entity
+
+- **`entity/api/`**: Contiene todos los DTOs (Data Transfer Objects) para la API
+  - DTOs de request/response (`LoginDto`, `RegisterDto`, etc.)
+  - DTOs de WebSocket (`ConnectionStatsDto`, `SessionDataDto`, etc.)
+  - Validaciones con Bean Validation (`@NotBlank`, `@Email`, etc.)
+
+- **`entity/entities/`**: Contiene únicamente las entidades JPA
+  - Entidades de base de datos (`User`, `Session`)
+  - Anotaciones JPA (`@Entity`, `@Table`, `@Column`)
+  - Relaciones entre entidades (`@ManyToOne`, `@OneToMany`)
+
+## 🚀 Características Principales
+
+### ✅ Funcionalidades Convertidas
+
+- **Autenticación JWT**: Login, registro, cambio de contraseña
+- **WebSocket**: Conexiones en tiempo real con autenticación JWT
+- **Gestión de Sesiones**: Tracking de sesiones activas con geolocalización
+- **Seguridad**: Filtros JWT, CORS, validación de contraseñas
+- **Eventos**: Sistema de eventos para WebSocket y auditoría
+- **Base de Datos**: Entidades JPA para PostgreSQL
+
+### 🔧 Tecnologías Utilizadas
+
+- **Spring Boot 2.7.14**
+- **Spring Security** (JWT Authentication)
+- **Spring Data JPA** (PostgreSQL)
+- **Spring WebSocket** (STOMP)
+- **Lombok** (Reducir boilerplate)
+- **BCrypt** (Hash de contraseñas)
+- **JJWT** (JSON Web Tokens)
+
+## 📋 Requisitos Previos
+
+- **Java 11** o superior
+- **Maven 3.6+**
+- **PostgreSQL 12+**
+- **IDE** (IntelliJ IDEA, Eclipse, VS Code)
+
+## ⚙️ Configuración
+
+### 1. Variables de Entorno
+
+Crear archivo `.env` o configurar variables del sistema:
+
+```bash
+# Base de datos
+DB_USERNAME=postgres
+DB_PASSWORD=tu_password
+DB_URL=jdbc:postgresql://localhost:5432/yego_db
+
+# JWT
+JWT_SECRET=tu-clave-secreta-muy-larga-y-segura-aqui
+JWT_EXPIRES_IN=3600
+
+# Frontend URLs
+FRONTEND_URL=http://localhost:3000
+FRONTEND_DEV_URL=http://localhost:5173
+
+# Backend externo
+EXTERNAL_BACKEND_URL=https://api-tick.yego.pro/api
+```
+
+### 2. Base de Datos
+
+Crear la base de datos PostgreSQL:
+
+```sql
+CREATE DATABASE yego_db;
+CREATE USER yego_user WITH PASSWORD 'tu_password';
+GRANT ALL PRIVILEGES ON DATABASE yego_db TO yego_user;
+```
+
+### 3. Configuración application.yml
+
+El archivo `application.yml` ya está configurado con valores por defecto. Ajustar según el entorno:
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/yego_db
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:password}
+
+jwt:
+  secret: ${JWT_SECRET:your-secret-key}
+  expiration: ${JWT_EXPIRES_IN:3600}
+```
+
+## 🚀 Ejecución
+
+### Desarrollo
+
+```bash
+# Compilar y ejecutar
+mvn spring-boot:run
+
+# O usando el wrapper
+./mvnw spring-boot:run
+```
+
+### Producción
+
+```bash
+# Compilar JAR
+mvn clean package
+
+# Ejecutar JAR
+java -jar target/yego-backend-1.0.0.jar
+```
+
+La aplicación estará disponible en: `http://localhost:8080`
+
+## 📡 Endpoints API
 
 ### Autenticación
-- `POST /api/v1/auth/login` - Iniciar sesión
-- `POST /api/v1/auth/register` - Registrar usuario
-- `POST /api/v1/auth/logout` - Cerrar sesión
-- `POST /api/v1/auth/refresh` - Renovar token
-- `POST /api/v1/auth/create-superadmin` - Crear superadmin
-- `POST /api/v1/auth/create-test-user` - Crear usuario de prueba
 
-### Usuarios
-- `GET /api/v1/users` - Listar usuarios (paginado)
-- `POST /api/v1/users` - Crear usuario
-- `GET /api/v1/users/:id` - Obtener usuario
-- `PUT /api/v1/users/:id` - Actualizar usuario
-- `DELETE /api/v1/users/:id` - Eliminar usuario (soft delete)
-- `POST /api/v1/users/:id/change-password` - Cambiar contraseña
+```http
+POST /api/auth/login
+POST /api/auth/register
+POST /api/auth/logout
+POST /api/auth/change-password
+GET  /api/auth/profile
+GET  /api/auth/validate
+```
 
-### Roles
-- `GET /api/v1/roles` - Listar roles
-- `POST /api/v1/roles` - Crear rol
-- `GET /api/v1/roles/:id` - Obtener rol
-- `PUT /api/v1/roles/:id` - Actualizar rol
-- `DELETE /api/v1/roles/:id` - Eliminar rol
-- `POST /api/v1/roles/initialize` - Inicializar roles por defecto
+### WebSocket
 
-### Sesiones
-- `GET /api/v1/sessions` - Listar sesiones activas
-- `GET /api/v1/sessions/stats` - Estadísticas de sesiones
-- `GET /api/v1/sessions/websocket/stats` - Estadísticas WebSocket
-- `GET /api/v1/sessions/websocket/sessions` - Sesiones WebSocket activas
-- `DELETE /api/v1/sessions/:id` - Cerrar sesión específica
-- `DELETE /api/v1/sessions/user/:userId` - Cerrar todas las sesiones de un usuario
-- `POST /api/v1/sessions/cleanup` - Limpiar sesiones expiradas
+```
+Endpoint: ws://localhost:8080/wss
+Protocolo: STOMP
 
-### Auditoría
-- `GET /api/v1/audit` - Listar logs de auditoría (con filtros)
-- `GET /api/v1/audit/stats` - Estadísticas de auditoría
-- `GET /api/v1/audit/recent` - Actividad reciente
-- `GET /api/v1/audit/user/:userId` - Logs de un usuario específico
-- `GET /api/v1/audit/action/:action` - Logs por acción
-- `GET /api/v1/audit/resource/:resource` - Logs por recurso
+Mensajes:
+- /app/register-session
+- /app/ping
+- /user/queue/pong
+- /user/queue/connection-established
+```
 
-### Configuración
-- `GET /api/v1/configuration` - Listar todas las configuraciones
-- `GET /api/v1/configuration/system` - Configuración del sistema por categorías
-- `GET /api/v1/configuration/categories` - Categorías de configuración
-- `GET /api/v1/configuration/category/:category` - Configuraciones por categoría
-- `GET /api/v1/configuration/:key` - Obtener configuración específica
-- `PUT /api/v1/configuration/:key` - Actualizar configuración
-- `POST /api/v1/configuration/:key` - Establecer valor de configuración
-- `DELETE /api/v1/configuration/:key` - Eliminar configuración
-- `POST /api/v1/configuration/initialize` - Inicializar configuraciones por defecto
+## 🔄 Mapeo de Conceptos NestJS → Spring Boot
 
-## WebSockets
+| NestJS | Spring Boot |
+|--------|-------------|
+| `@Controller` | `@RestController` |
+| `@Injectable` | `@Service` |
+| `@Entity` (TypeORM) | `@Entity` (JPA) |
+| `Repository<T>` | `JpaRepository<T, ID>` |
+| `@WebSocketGateway` | `@Controller` + `@MessageMapping` |
+| `@UseGuards(JwtAuthGuard)` | `JwtRequestFilter` |
+| `EventEmitter` | `ApplicationEventPublisher` |
+| `@SubscribeMessage` | `@MessageMapping` |
+| `ConfigService` | `@Value` + `application.yml` |
 
-### Eventos Disponibles
-- `connection-established` - Conexión establecida
-- `session-registered` - Sesión registrada
-- `session-closed` - Sesión cerrada
-- `force-logout` - Logout forzado
-- `ping/pong` - Heartbeat
+## 🏃‍♂️ Guía de Migración
 
-### Métodos del Servicio
-- `emitToUser(userId, event, data)` - Emitir a usuario específico
-- `emitToSession(sessionId, event, data)` - Emitir a sesión específica
-- `emitToAll(event, data)` - Emitir a todos
-- `closeSession(sessionId, reason)` - Cerrar sesión
-- `forceLogout(userId, reason)` - Forzar logout
+### 1. Estructura de Archivos
 
-## Documentación
+```
+# NestJS
+src/modules/auth/auth.service.ts
+src/modules/auth/dto/login.dto.ts
+src/modules/users/entities/user.entity.ts
 
-La documentación de la API está disponible en:
-- **Swagger UI**: `http://localhost:3001/api/docs`
-- **OpenAPI JSON**: `http://localhost:3001/api/docs-json`
+# Spring Boot
+service/AuthService.java
+service/impl/AuthServiceImpl.java
+entity/api/LoginDto.java
+entity/entities/User.java
+```
 
-## Testing
+### 2. Decoradores → Anotaciones
+
+```typescript
+// NestJS
+@Injectable()
+export class AuthService {
+  @InjectRepository(User)
+  private userRepository: Repository<User>
+}
+```
+
+```java
+// Spring Boot
+@Service
+public class AuthServiceImpl implements AuthService {
+    private final UserRepository userRepository;
+}
+```
+
+### 3. WebSocket
+
+```typescript
+// NestJS
+@WebSocketGateway()
+export class WebsocketGateway {
+  @SubscribeMessage('ping')
+  handlePing() { /* ... */ }
+}
+```
+
+```java
+// Spring Boot
+@Controller
+public class WebSocketController {
+    @MessageMapping("/ping")
+    @SendToUser("/queue/pong")
+    public PongResponseDto handlePing() { /* ... */ }
+}
+```
+
+## 🧪 Testing
 
 ```bash
-# Ejecutar tests unitarios
-npm run test
+# Ejecutar tests
+mvn test
 
-# Ejecutar tests con coverage
-npm run test:cov
-
-# Ejecutar tests e2e
-npm run test:e2e
-
-# Ejecutar tests en modo watch
-npm run test:watch
+# Tests con cobertura
+mvn test jacoco:report
 ```
 
-## Variables de Entorno
+## 📦 Build y Deploy
 
-### Requeridas
-- `DB_HOST` - Host de la base de datos
-- `DB_PORT` - Puerto de la base de datos
-- `DB_USER` - Usuario de la base de datos
-- `DB_PASSWORD` - Contraseña de la base de datos
-- `DB_NAME` - Nombre de la base de datos
-- `JWT_SECRET` - Secreto para JWT
-
-### Opcionales
-- `PORT` - Puerto del servidor (default: 3001)
-- `NODE_ENV` - Entorno (development/production)
-- `FRONTEND_URL` - URL del frontend para CORS
-- `SOCKET_PORT` - Puerto para WebSockets (default: 3010)
-- `ENABLE_AUDIT_LOGS` - Habilitar logs de auditoría
-- `SESSION_TIMEOUT` - Tiempo de sesión en segundos
-
-## Scripts Disponibles
-
-- `npm run start:dev` - Iniciar en modo desarrollo
-- `npm run start:prod` - Iniciar en modo producción
-- `npm run build` - Construir la aplicación
-- `npm run test` - Ejecutar tests
-- `npm run lint` - Ejecutar linter
-- `npm run format` - Formatear código
-- `npm run init:system` - Inicializar sistema con datos por defecto
-
-## Base de Datos
-
-### Configuración
-- **Tipo**: PostgreSQL
-- **Nombre**: `yego_integral`
-- **Puerto**: 5432 (por defecto)
-
-### Tablas Principales
-- `users` - Usuarios del sistema
-- `roles` - Roles y permisos
-- `user_roles` - Relación usuarios-roles
-- `sessions` - Sesiones activas
-- `audit_logs` - Logs de auditoría
-- `configurations` - Configuraciones del sistema
-- `modules` - Módulos del sistema
-- `imports` - Registro de importaciones
-- `password_resets` - Reset de contraseñas
-- `notifications` - Notificaciones
-
-### Vistas Útiles
-- `v_users_with_roles` - Usuarios con sus roles
-- `v_active_sessions` - Sesiones activas
-- `v_audit_stats` - Estadísticas de auditoría
-
-## Seguridad
-
-- Autenticación JWT con refresh tokens
-- Contraseñas hasheadas con bcrypt (12 rounds)
-- Validación de datos con class-validator
-- CORS configurado
-- Rate limiting configurable
-- Logs de auditoría completos
-- WebSockets con autenticación JWT
-- Control de sesiones activas
-- Soft delete para usuarios
-
-## Roles y Permisos
-
-### Roles por Defecto
-- **superadmin**: Acceso total al sistema
-- **admin**: Administrador con permisos amplios
-- **supervisor**: Supervisor con permisos limitados
-- **operador**: Operador básico
-- **conductor**: Conductor con acceso mínimo
-
-### Sistema de Permisos
-- Permisos granulares por módulo y acción
-- Verificación de permisos en tiempo real
-- Roles dinámicos configurables
-- Middleware de autorización automático
-
-## Desarrollo
-
-### Estructura de Módulos
-Cada módulo sigue la estructura:
-```
-module/
-├── dto/              # Data Transfer Objects
-├── entities/         # Entidades de TypeORM
-├── guards/           # Guards de autenticación/autorización
-├── strategies/       # Estrategias de Passport
-├── module.controller.ts
-├── module.service.ts
-└── module.module.ts
-```
-
-### Agregar Nuevo Módulo
-1. Crear carpeta del módulo en `src/modules/`
-2. Implementar entidad, DTO, servicio y controlador
-3. Registrar el módulo en `app.module.ts`
-4. Agregar entidad a la configuración de TypeORM
-5. Configurar permisos en el sistema de roles
-
-## Producción
-
-### Variables de Entorno
 ```bash
-NODE_ENV=production
-PORT=3001
-DB_HOST=your-db-host
-DB_USER=your-db-user
-DB_PASSWORD=your-secure-password
-DB_NAME=yego_integral
-JWT_SECRET=your-super-secure-jwt-secret
-ENABLE_AUDIT_LOGS=true
-SESSION_TIMEOUT=3600
+# Build para producción
+mvn clean package -Pprod
+
+# Docker (opcional)
+docker build -t yego-backend .
+docker run -p 8080:8080 yego-backend
 ```
 
-### Optimizaciones
-- Habilitar compresión
-- Configurar rate limiting
-- Usar HTTPS
-- Configurar logs de producción
-- Monitoreo y métricas
-- Cache de configuraciones
-- Limpieza automática de sesiones expiradas
+## 🔍 Monitoreo
 
-## Credenciales por Defecto
+Spring Boot Actuator está habilitado:
 
-Después de ejecutar `npm run init:system`:
+- Health: `http://localhost:8080/actuator/health`
+- Info: `http://localhost:8080/actuator/info`
+- Metrics: `http://localhost:8080/actuator/metrics`
 
-- **Usuario**: `superadmin`
-- **Contraseña**: `superadmin123`
+## 📝 Notas de Conversión
 
-⚠️ **IMPORTANTE**: Cambia la contraseña del superadmin después del primer login.
+### Cambios Principales
 
-## Licencia
+1. **TypeScript → Java**: Tipado estático nativo
+2. **Decoradores → Anotaciones**: `@Injectable` → `@Service`
+3. **Promises → CompletableFuture**: Para operaciones asíncronas
+4. **EventEmitter → ApplicationEvent**: Sistema de eventos de Spring
+5. **Socket.io → STOMP**: Protocolo WebSocket estándar
 
-MIT
+### Funcionalidades Equivalentes
+
+- ✅ Autenticación JWT
+- ✅ WebSocket con autenticación
+- ✅ Gestión de sesiones
+- ✅ Validación de DTOs
+- ✅ Manejo de errores
+- ✅ CORS configurado
+- ✅ Logging estructurado
+
+## 🤝 Contribución
+
+1. Fork del proyecto
+2. Crear rama feature (`git checkout -b feature/nueva-funcionalidad`)
+3. Commit cambios (`git commit -am 'Agregar nueva funcionalidad'`)
+4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
+5. Crear Pull Request
+
+## 📄 Licencia
+
+Este proyecto está bajo la licencia MIT - ver el archivo [LICENSE](LICENSE) para detalles.
+
+---
+
+**Desarrollado con ❤️ usando Spring Boot**

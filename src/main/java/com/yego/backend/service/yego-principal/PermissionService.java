@@ -1,0 +1,58 @@
+package com.yego.backend.service.yego_principal;
+
+import com.yego.backend.entity.yego_principal.api.*;
+import com.yego.backend.entity.yego_principal.entities.Permission;
+
+import java.util.List;
+
+/**
+ * Interfaz del servicio de permisos del sistema YEGO Principal
+ * Equivalente a PermissionsService de NestJS
+ */
+public interface PermissionService {
+    
+    /**
+     * Crear nuevo permiso
+     */
+    PermissionResponseDto create(CreatePermissionDto createPermissionDto);
+    
+    /**
+     * Obtener todos los permisos activos
+     */
+    List<PermissionResponseDto> findAll();
+    
+    /**
+     * Obtener permisos por módulo
+     */
+    List<PermissionResponseDto> findByModule(String module);
+    
+    /**
+     * Obtener permiso por ID
+     */
+    PermissionResponseDto findOne(Long id);
+    
+    /**
+     * Buscar permiso por nombre
+     */
+    Permission findByName(String name);
+    
+    /**
+     * Actualizar permiso
+     */
+    PermissionResponseDto update(Long id, UpdatePermissionDto updatePermissionDto);
+    
+    /**
+     * Eliminar permiso (soft delete)
+     */
+    void remove(Long id);
+    
+    /**
+     * Inicializar permisos por defecto
+     */
+    void initializeDefaultPermissions();
+    
+    /**
+     * Verificar si un usuario tiene un permiso específico
+     */
+    boolean checkPermission(Long userId, String permissionName);
+}

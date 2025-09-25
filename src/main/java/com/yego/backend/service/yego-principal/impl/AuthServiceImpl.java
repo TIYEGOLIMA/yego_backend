@@ -1,0 +1,360 @@
+package com.yego.backend.service.yego_principal.impl;
+
+import com.yego.backend.entity.yego_principal.api.*;
+import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.repository.yego_principal.UserRepository;
+import com.yego.backend.service.yego_principal.AuthService;
+import com.yego.backend.service.yego_principal.AuditService;
+import com.yego.backend.service.yego_principal.SessionService;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.servlet.http.HttpServletRequest;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Implementación del servicio de autenticación del sistema YEGO Principal
+ * Equivalente a AuthService de NestJS
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class AuthServiceImpl implements AuthService {
+    
+    private final UserRepository userRepository;
+    private final SessionService sessionService;
+    private final AuditService auditService;
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(12);
+    
+    @Value("${jwt.secret:defaultSecret}")
+    private String jwtSecret;
+    
+    @Value("${jwt.expiration:86400}")
+    private Long jwtExpiration;
+    
+    @Override
+    public UserResponseDto validateUser(String username, String password, HttpServletRequest request) {
+        // Buscar usuario por username o email
+        Optional<User> userOpt = userRepository.findByUsernameOrEmail(username, username);
+        
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            
+            if (passwordEncoder.matches(password, user.getPassword())) {
+                return mapToUserResponseDto(user);
+            } else {
+                // Registrar intento fallido de login
+                String clientIp = getClientIpAddress(request);
+                String userAgent = request.getHeader("User-Agent");
+                auditService.logFailedLogin(username, clientIp, userAgent);
+            }
+        }
+        
+        return null;
+    }
+    
+    @Override
+    @Transactional
+    public LoginResponseDto login(LoginDto loginDto, HttpServletRequest request) {
+        UserResponseDto user = validateUser(loginDto.getUsername(), loginDto.getPassword(), request);
+        
+        if (user == null) {
+            throw new RuntimeException("Credenciales inválidas");
+        }
+        
+        // Actualizar last_login
+        userRepository.updateLastLogin(user.getId(), LocalDateTime.now());
+        
+        // Generar JWT token
+        String accessToken = generateToken(user);
+        
+        // Crear sesión con geolocalización
+        CreateSessionDto sessionDto = CreateSessionDto.builder()
+                .tokenHash(passwordEncoder.encode(accessToken))
+                .userAgent(request.getHeader("User-Agent"))
+                .expiresAt(LocalDateTime.now().plusDays(1))
+                .build();
+        
+        sessionService.create(sessionDto, user.getId(), request);
+        
+        // Registrar login exitoso en auditoría
+        String clientIp = getClientIpAddress(request);
+        String userAgent = request.getHeader("User-Agent");
+        auditService.logLogin(user.getId(), clientIp, userAgent);
+        
+        // Construir respuesta
+        LoginResponseDto.LoginUserDto loginUser = LoginResponseDto.LoginUserDto.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .name(user.getName())
+                .role(user.getRole())
+                .moduleId(user.getModuleId())
+                .active(user.getActive())
+                .lastLogin(LocalDateTime.now())
+                .build();
+        
+        return LoginResponseDto.builder()
+                .accessToken(accessToken)
+                .user(loginUser)
+                .build();
+    }
+    
+    @Override
+    @Transactional
+    public UserResponseDto register(RegisterDto registerDto) {
+        // Verificar si el usuario ya existe
+        if (userRepository.existsByUsernameOrEmail(registerDto.getUsername(), registerDto.getEmail())) {
+            throw new RuntimeException("El usuario o email ya existe");
+        }
+        
+        // Hash de la contraseña
+        String passwordHash = passwordEncoder.encode(registerDto.getPassword());
+        
+        // Crear usuario
+        User user = User.builder()
+                .username(registerDto.getUsername())
+                .email(registerDto.getEmail())
+                .name(registerDto.getNombre())
+                .password(passwordHash)
+                .dni(registerDto.getDni())
+                .telefono(registerDto.getTelefono())
+                .direccion(registerDto.getDireccion())
+                .role("usuario")
+                .active(true)
+                .build();
+        
+        User savedUser = userRepository.save(user);
+        
+        log.info("✅ Usuario registrado: {}", savedUser.getUsername());
+        
+        return mapToUserResponseDto(savedUser);
+    }
+    
+    @Override
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
+        
+        // Verificar contraseña actual
+        if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
+            throw new RuntimeException("Contraseña actual incorrecta");
+        }
+        
+        // Validar nueva contraseña
+        if (!validatePassword(newPassword)) {
+            throw new RuntimeException("La nueva contraseña no cumple con los requisitos de seguridad");
+        }
+        
+        // Verificar que la nueva contraseña no sea igual a la actual
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new RuntimeException("La nueva contraseña no puede ser igual a la actual");
+        }
+        
+        // Hash nueva contraseña y actualizar
+        String newPasswordHash = passwordEncoder.encode(newPassword);
+        userRepository.updatePassword(userId, newPasswordHash);
+        
+        log.info("✅ Contraseña cambiada para usuario: {}", user.getUsername());
+    }
+    
+    @Override
+    @Transactional
+    public void resetPassword(ChangePasswordDto changePasswordDto) {
+        UserResponseDto user = validateUser(changePasswordDto.getUsername(), 
+                changePasswordDto.getCurrentPassword(), null);
+        
+        if (user == null) {
+            throw new RuntimeException("Credenciales inválidas");
+        }
+        
+        // Verificar que el usuario requiera cambio de contraseña
+        User userEntity = userRepository.findById(user.getId())
+                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
+        
+        if (!userEntity.getRequiereCambioPassword()) {
+            throw new RuntimeException("Este usuario no requiere cambio de contraseña");
+        }
+        
+        changePassword(user.getId(), changePasswordDto.getCurrentPassword(), 
+                changePasswordDto.getNewPassword());
+    }
+    
+    @Override
+    public boolean validatePassword(String password) {
+        // Verificar contraseñas débiles
+        List<String> weakPasswords = Arrays.asList("123456", "admin", "password", "123456789", "qwerty");
+        if (weakPasswords.contains(password.toLowerCase())) {
+            return false;
+        }
+        
+        // Verificar requisitos mínimos
+        boolean hasUpperCase = password.matches(".*[A-Z].*");
+        boolean hasLowerCase = password.matches(".*[a-z].*");
+        boolean hasNumbers = password.matches(".*\\d.*");
+        boolean hasSpecialChar = password.matches(".*[!@#$%^&*(),.?\":{}|<>].*");
+        boolean isLongEnough = password.length() >= 8;
+        
+        return hasUpperCase && hasLowerCase && hasNumbers && hasSpecialChar && isLongEnough;
+    }
+    
+    @Override
+    public UserProfileDto getUserProfile(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
+        
+        return UserProfileDto.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .name(user.getName())
+                .role(user.getRole())
+                .moduleId(user.getModuleId())
+                .active(user.getActive())
+                .lastLogin(user.getLastLogin())
+                .build();
+    }
+    
+    @Override
+    public Object decodeToken(String token) {
+        try {
+            Claims claims = Jwts.parser()
+                    .setSigningKey(jwtSecret)
+                    .parseClaimsJws(token)
+                    .getBody();
+            
+            return claims;
+        } catch (Exception e) {
+            log.warn("⚠️ Error decodificando token: {}", e.getMessage());
+            return null;
+        }
+    }
+    
+    @Override
+    public void cerrarSesion(Long userId, String token) {
+        log.info("🔄 Cerrando sesión para usuario {}", userId != null ? userId : "desconocido");
+        
+        try {
+            User user = null;
+            
+            if (userId != null) {
+                user = userRepository.findById(userId).orElse(null);
+            }
+            
+            if (user == null && userId != null) {
+                log.warn("⚠️ Usuario {} no encontrado para logout", userId);
+            }
+            
+            // Liberar módulo en backend externo
+            if (token != null && !token.isEmpty()) {
+                try {
+                    log.info("🔄 [AuthService] Liberando módulo asignado en backend...");
+                    
+                    String backendUrl = "https://api-tick.yego.pro/api";
+                    
+                    HttpClient client = HttpClient.newBuilder()
+                            .connectTimeout(Duration.ofSeconds(5))
+                            .build();
+                    
+                    HttpRequest request = HttpRequest.newBuilder()
+                            .uri(URI.create(backendUrl + "/auth/logout"))
+                            .header("Authorization", "Bearer " + token)
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                            .timeout(Duration.ofSeconds(5))
+                            .build();
+                    
+                    HttpResponse<String> response = client.send(request, 
+                            HttpResponse.BodyHandlers.ofString());
+                    
+                    if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                        log.info("✅ [AuthService] Módulo liberado exitosamente en backend");
+                    } else {
+                        log.warn("⚠️ [AuthService] Respuesta no exitosa del backend: {}", response.statusCode());
+                    }
+                    
+                } catch (Exception moduleError) {
+                    log.warn("⚠️ [AuthService] No se pudo liberar módulo en backend: {}", moduleError.getMessage());
+                    
+                    // Si es error 401, es normal durante logout con token expirado
+                    if (moduleError.getMessage().contains("401")) {
+                        log.info("ℹ️ [AuthService] Token expirado en API tercera - esto es esperado durante logout");
+                    }
+                }
+            }
+            
+            log.info("✅ Logout completado para usuario {} (ID: {})", 
+                    user != null ? user.getUsername() : "desconocido", 
+                    userId != null ? userId : "N/A");
+            
+        } catch (Exception error) {
+            log.error("❌ Error en logout para usuario {}: {}", userId, error.getMessage());
+            log.warn("⚠️ Continuando con logout a pesar del error");
+        }
+    }
+    
+    private String generateToken(UserResponseDto user) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + jwtExpiration * 1000);
+        
+        return Jwts.builder()
+                .setSubject(user.getId().toString())
+                .claim("username", user.getUsername())
+                .claim("userId", user.getId())
+                .claim("role", user.getRole())
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
+                .signWith(SignatureAlgorithm.HS512, jwtSecret)
+                .compact();
+    }
+    
+    private UserResponseDto mapToUserResponseDto(User user) {
+        return UserResponseDto.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .name(user.getName())
+                .dni(user.getDni())
+                .telefono(user.getTelefono())
+                .direccion(user.getDireccion())
+                .role(user.getRole())
+                .moduleId(user.getModuleId())
+                .active(user.getActive())
+                .lastLogin(user.getLastLogin())
+                .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
+                .build();
+    }
+    
+    private String getClientIpAddress(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        
+        String xRealIp = request.getHeader("X-Real-IP");
+        if (xRealIp != null && !xRealIp.isEmpty()) {
+            return xRealIp;
+        }
+        
+        return request.getRemoteAddr();
+    }
+}

@@ -1,0 +1,92 @@
+# =====================================================
+# YEGO INTEGRAL - CONFIGURACIÓN SPRING BOOT
+# =====================================================
+# Basado en el archivo .env de NestJS
+
+server:
+  port: ${PORT:3000}
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: yego-backend
+  
+  # Configuración de base de datos PostgreSQL
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:168.119.226.236}:${DB_PORT:5432}/${DB_NAME:yego_integral}
+    username: ${DB_USER:yego_user}
+    password: ${DB_PASSWORD:37>MNA&-35+}
+    driver-class-name: org.postgresql.Driver
+  
+  # Configuración JPA/Hibernate
+  jpa:
+    hibernate:
+      ddl-auto: ${TYPEORM_SYNCHRONIZE:validate}
+    show-sql: ${TYPEORM_LOGGING:true}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+  
+  # Configuración de seguridad
+  security:
+    user:
+      name: admin
+      password: admin
+
+# Configuración JWT
+jwt:
+  secret: ${JWT_SECRET:ticketera-secret-key-2024-very-secure-and-long-enough-for-hs256}
+  expiration: ${JWT_EXPIRES_IN:86400} # 24 horas en segundos
+
+# Configuración de la aplicación
+app:
+  frontend:
+    url: ${FRONTEND_URL:http://localhost:5173}
+    cors:
+      origin: ${CORS_ORIGIN:*}
+      origin-dev: ${CORS_ORIGIN_DEV:*}
+      origin-prod: ${CORS_ORIGIN_PROD:https://roaring-naiad-334278.netlify.app}
+  backend:
+    external:
+      url: ${EXTERNAL_BACKEND_URL:https://api-tick.yego.pro/api}
+  
+  # API Externa para DNI
+  factiliza:
+    api-url: ${FACTILIZA_API_URL:https://api.factiliza.com/pe/v1/dni/info}
+    api-token: ${FACTILIZA_API_TOKEN:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NTkiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJjb25zdWx0b3IifQ.NaoAXramusCzks7mRCzWFWcMiBaSA0d8rNBgw-OVeYg}
+  
+  # Configuración de seguridad
+  security:
+    bcrypt-rounds: ${BCRYPT_ROUNDS:12}
+    session-timeout: ${SESSION_TIMEOUT:3600}
+    max-login-attempts: ${MAX_LOGIN_ATTEMPTS:5}
+  
+  # Configuración de importaciones
+  import:
+    max-file-size: ${IMPORT_MAX_FILE_SIZE:10485760}
+    allowed-extensions: ${IMPORT_ALLOWED_EXTENSIONS:csv,xlsx}
+
+# Configuración de logging
+logging:
+  level:
+    com.yego.backend: ${LOG_LEVEL:INFO}
+    org.springframework.security: DEBUG
+    org.springframework.web.socket: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE:logs/app.log}
+
+# Configuración de Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized

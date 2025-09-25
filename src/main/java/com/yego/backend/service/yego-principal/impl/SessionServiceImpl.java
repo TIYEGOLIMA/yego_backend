@@ -1,0 +1,286 @@
+package com.yego.backend.service.yego_principal.impl;
+
+import com.yego.backend.entity.yego_principal.api.*;
+import com.yego.backend.entity.yego_principal.entities.Session;
+import com.yego.backend.entity.yego_principal.entities.ConnectionLog;
+import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.repository.yego_principal.SessionRepository;
+import com.yego.backend.repository.yego_principal.ConnectionLogRepository;
+import com.yego.backend.repository.yego_principal.UserRepository;
+import com.yego.backend.service.yego_principal.SessionService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import jakarta.persistence.EntityNotFoundException;
+import jakarta.servlet.http.HttpServletRequest;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Implementación del servicio de sesiones del sistema YEGO Principal
+ * Equivalente a SessionsService de NestJS
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class SessionServiceImpl implements SessionService {
+    
+    private final SessionRepository sessionRepository;
+    private final ConnectionLogRepository connectionLogRepository;
+    private final UserRepository userRepository;
+    
+    @Override
+    @Transactional
+    public SessionResponseDto create(CreateSessionDto createSessionDto, Long userId, HttpServletRequest request) {
+        // Obtener información adicional del request si es necesario
+        String ipAddress = createSessionDto.getIpAddress();
+        if (ipAddress == null && request != null) {
+            ipAddress = getClientIP(request);
+        }
+        
+        // Buscar el usuario
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
+        
+        // Crear sesión
+        Session session = Session.builder()
+                .user(user)
+                .sessionId(createSessionDto.getSessionId())
+                .socketId(createSessionDto.getSocketId())
+                .ipAddress(ipAddress)
+                .userAgent(createSessionDto.getUserAgent())
+                .deviceInfo(createSessionDto.getDeviceInfo())
+                .location(createSessionDto.getLocation())
+                .isActive(true)
+                .build();
+        
+        Session savedSession = sessionRepository.save(session);
+        
+        log.info("✅ Sesión YEGO Principal creada para usuario {}: {} desde {}", 
+                userId, savedSession.getId(), ipAddress);
+        
+        return mapToResponseDto(savedSession);
+    }
+    
+    @Override
+    public List<SessionResponseDto> findAll(Long userId) {
+        List<Session> sessions;
+        
+        if (userId != null) {
+            sessions = sessionRepository.findActiveSessionsByUserId(userId);
+        } else {
+            // Obtener todas las sesiones activas
+            Pageable pageable = PageRequest.of(0, 100); // Limitar a 100 por rendimiento
+            Page<Session> sessionPage = sessionRepository.findAll(pageable);
+            sessions = sessionPage.getContent().stream()
+                    .filter(Session::getIsActive)
+                    .collect(Collectors.toList());
+        }
+        
+        return sessions.stream()
+                .map(this::mapToResponseDto)
+                .collect(Collectors.toList());
+    }
+    
+    @Override
+    public SessionResponseDto findOne(Long id) {
+        Session session = sessionRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Sesión no encontrada"));
+        
+        return mapToResponseDto(session);
+    }
+    
+    @Override
+    public Session findByTokenHash(String tokenHash) {
+        return sessionRepository.findBySessionId(tokenHash)
+                .orElse(null);
+    }
+    
+    @Override
+    @Transactional
+    public void deactivate(Long id) {
+        Session session = sessionRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Sesión no encontrada"));
+        
+        session.setIsActive(false);
+        session.setEndedAt(LocalDateTime.now());
+        sessionRepository.save(session);
+        
+        log.info("🚪 Sesión YEGO Principal {} desactivada", id);
+    }
+    
+    @Override
+    @Transactional
+    public void deactivateByUserId(Long userId, String reason) {
+        List<Session> sessions = sessionRepository.findActiveSessionsByUserId(userId);
+        
+        for (Session session : sessions) {
+            session.setIsActive(false);
+            session.setEndedAt(LocalDateTime.now());
+            sessionRepository.save(session);
+        }
+        
+        log.info("🚪 {} sesiones YEGO Principal desactivadas para usuario {}: {}", 
+                sessions.size(), userId, reason);
+    }
+    
+    @Override
+    @Transactional
+    public void deactivateByTokenHash(String tokenHash) {
+        Session session = sessionRepository.findBySessionId(tokenHash).orElse(null);
+        
+        if (session != null) {
+            session.setIsActive(false);
+            session.setEndedAt(LocalDateTime.now());
+            sessionRepository.save(session);
+            
+            log.info("🚪 Sesión YEGO Principal con token {} desactivada", tokenHash);
+        }
+    }
+    
+    @Override
+    @Transactional
+    public Integer cleanupExpiredSessions() {
+        LocalDateTime now = LocalDateTime.now();
+        List<Session> expiredSessions = sessionRepository.findInactiveSessionsForCleanup(now);
+        
+        for (Session session : expiredSessions) {
+            session.setIsActive(false);
+            session.setEndedAt(now);
+            sessionRepository.save(session);
+        }
+        
+        log.info("🧹 {} sesiones expiradas YEGO Principal limpiadas", expiredSessions.size());
+        return expiredSessions.size();
+    }
+    
+    @Override
+    public Long getActiveSessionsCount(Long userId) {
+        if (userId != null) {
+            return (long) sessionRepository.findActiveSessionsByUserId(userId).size();
+        } else {
+            return sessionRepository.countActiveSessions();
+        }
+    }
+    
+    @Override
+    public SessionStatsDto getSessionStats() {
+        Long totalActive = sessionRepository.countActiveSessions();
+        Long totalCreatedToday = sessionRepository.countSessionsCreatedAfter(LocalDateTime.now().minusDays(1));
+        
+        return SessionStatsDto.builder()
+                .totalActive(totalActive)
+                .totalCreatedToday(totalCreatedToday)
+                .build();
+    }
+    
+    @Override
+    public ConnectionStatsDto getWebSocketStats() {
+        // Simulación de estadísticas WebSocket
+        // En una implementación real, esto vendría del WebSocketGateway
+        return ConnectionStatsDto.builder()
+                .totalConnections(0L)
+                .activeConnections(0L)
+                .build();
+    }
+    
+    @Override
+    public List<SessionDataDto> getWebSocketSessions() {
+        // Simulación de sesiones WebSocket activas
+        // En una implementación real, esto vendría del WebSocketGateway
+        return List.of();
+    }
+    
+    @Override
+    public List<ConnectionLogResponseDto> getConnectionLogs(Integer days, Integer limit, Long userId, String roleName) {
+        try {
+            log.info("🔍 Iniciando getConnectionLogs YEGO Principal - days: {}, limit: {}, userId: {}, roleName: {}", 
+                    days, limit, userId, roleName);
+            
+            Pageable pageable = PageRequest.of(0, limit != null ? limit : 50);
+            Page<ConnectionLog> logs = connectionLogRepository.findTop50ByOrderByCreatedAtDesc(pageable);
+            
+            List<ConnectionLogResponseDto> result = logs.getContent().stream()
+                    .map(this::mapToConnectionLogResponseDto)
+                    .collect(Collectors.toList());
+            
+            log.info("📊 Obtenidos {} logs de conexión YEGO Principal", result.size());
+            return result;
+            
+        } catch (Exception e) {
+            log.error("❌ Error al obtener logs de conexión YEGO Principal: {}", e.getMessage());
+            return List.of(); // Retornar lista vacía en caso de error
+        }
+    }
+    
+    @Override
+    @Transactional
+    public void forceLogout(Long sessionId, Long adminUserId) {
+        Session session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new EntityNotFoundException("Sesión no encontrada"));
+        
+        session.setIsActive(false);
+        session.setEndedAt(LocalDateTime.now());
+        sessionRepository.save(session);
+        
+        // Registrar el log de conexión
+        ConnectionLog connectionLog = ConnectionLog.builder()
+                .userId(session.getUser().getId())
+                .sessionId(sessionId)
+                .action("FORCED_LOGOUT")
+                .ipAddress(session.getIpAddress())
+                .deviceInfo(session.getDeviceInfo())
+                .location(session.getLocation())
+                .roleName("admin")
+                .build();
+        
+        connectionLogRepository.save(connectionLog);
+        
+        log.info("🚪 Sesión YEGO Principal {} forzada a cerrar por admin {}", sessionId, adminUserId);
+    }
+    
+    private SessionResponseDto mapToResponseDto(Session session) {
+        return SessionResponseDto.builder()
+                .id(session.getId())
+                .sessionId(session.getSessionId())
+                .socketId(session.getSocketId())
+                .userId(session.getUser().getId())
+                .ipAddress(session.getIpAddress())
+                .userAgent(session.getUserAgent())
+                .deviceInfo(session.getDeviceInfo())
+                .location(session.getLocation())
+                .isActive(session.getIsActive())
+                .createdAt(session.getCreatedAt())
+                .lastActivity(session.getLastActivity())
+                .endedAt(session.getEndedAt())
+                .build();
+    }
+    
+    private ConnectionLogResponseDto mapToConnectionLogResponseDto(ConnectionLog log) {
+        return ConnectionLogResponseDto.builder()
+                .id(log.getId())
+                .userId(log.getUserId())
+                .sessionId(log.getSessionId())
+                .action(log.getAction())
+                .ipAddress(log.getIpAddress())
+                .deviceInfo(log.getDeviceInfo())
+                .location(log.getLocation())
+                .roleName(log.getRoleName())
+                .createdAt(log.getCreatedAt())
+                .build();
+    }
+    
+    private String getClientIP(HttpServletRequest request) {
+        String xfHeader = request.getHeader("X-Forwarded-For");
+        if (xfHeader == null) {
+            return request.getRemoteAddr();
+        }
+        return xfHeader.split(",")[0];
+    }
+}

@@ -1,0 +1,111 @@
+# =====================================================
+# YEGO INTEGRAL - CONFIGURACIÓN DE PRODUCCIÓN
+# =====================================================
+# Basado en .env de producción
+
+server:
+  port: ${PORT:3010}
+
+spring:
+  # Configuración de base de datos PostgreSQL - PRODUCCIÓN
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:168.119.226.236}:${DB_PORT:5432}/${DB_NAME:yego_integral}
+    username: ${DB_USER:yego_user}
+    password: ${DB_PASSWORD:37>MNA&-35+}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  
+  # JPA/Hibernate para producción - optimizado
+  jpa:
+    hibernate:
+      ddl-auto: ${TYPEORM_SYNCHRONIZE:validate}  # false en .env = validate en Spring
+    show-sql: ${TYPEORM_LOGGING:false}           # false en .env
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: false
+        jdbc:
+          batch_size: 20
+        order_inserts: true
+        order_updates: true
+
+# JWT para producción
+jwt:
+  secret: ${JWT_SECRET:36a1b3af92e59c2164ce4ad31a068469}
+  expiration: ${JWT_EXPIRES_IN:3600}  # 1 hora en producción
+
+# Configuración de la aplicación para producción
+app:
+  frontend:
+    url: ${FRONTEND_URL:https://yego-integral.netlify.app}
+    cors:
+      origin-dev: ${CORS_ORIGIN_DEV:http://localhost:5173}
+      origin-prod: ${CORS_ORIGIN_PROD:https://yego-integral.netlify.app}
+  
+  # API Externa para DNI (producción)
+  factiliza:
+    api-url: ${FACTILIZA_API_URL:https://api.factiliza.com/pe/v1/dni/info}
+    api-token: ${FACTILIZA_API_TOKEN:tu_token_aqui}
+  
+  # Configuración de seguridad para producción
+  security:
+    bcrypt-rounds: ${BCRYPT_ROUNDS:12}
+    session-timeout: ${SESSION_TIMEOUT:3600}
+    max-login-attempts: ${MAX_LOGIN_ATTEMPTS:5}
+  
+  # Configuración de importaciones
+  import:
+    max-file-size: ${IMPORT_MAX_FILE_SIZE:10485760}
+    allowed-extensions: ${IMPORT_ALLOWED_EXTENSIONS:csv,xlsx}
+  
+  # Rate Limiting para producción
+  rate-limit:
+    window-ms: ${RATE_LIMIT_WINDOW_MS:900000}
+    max-requests: ${RATE_LIMIT_MAX_REQUESTS:100}
+
+# Logging optimizado para producción
+logging:
+  level:
+    com.yego.backend: ${LOG_LEVEL:info}
+    org.springframework.security: WARN
+    org.springframework.web.socket: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE:logs/app.log}
+
+# WebSocket para producción
+websocket:
+  port: ${SOCKET_PORT:3010}
+
+# Swagger para producción
+swagger:
+  title: ${SWAGGER_TITLE:Yego Integral API}
+  description: ${SWAGGER_DESCRIPTION:API del Sistema Yego Integral}
+  version: ${SWAGGER_VERSION:1.0.0}
+
+# Configuración de notificaciones para producción
+notification:
+  email:
+    enabled: ${NOTIFICATION_EMAIL_ENABLED:true}
+  smtp:
+    host: ${SMTP_HOST:smtp.gmail.com}
+    port: ${SMTP_PORT:587}
+    user: ${SMTP_USER:notificaciones@yego.pro}
+    password: ${SMTP_PASS:password_seguro_aqui}
+
+# Actuator para producción - más restrictivo
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
