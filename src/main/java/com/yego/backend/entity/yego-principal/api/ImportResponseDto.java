@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 /**
  * DTO de respuesta para importaciones del sistema YEGO Principal
@@ -26,7 +25,7 @@ public class ImportResponseDto {
     private Integer processedRows;
     private Integer successRows;
     private Integer errorRows;
-    private Map<String, Object> errors;
+    private String errors;
     private List<Object> preview;
     private String type; // users, roles, permissions
     private LocalDateTime createdAt;

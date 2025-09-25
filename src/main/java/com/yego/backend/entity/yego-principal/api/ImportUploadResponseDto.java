@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * DTO de respuesta para subida de archivos de importación del sistema YEGO Principal
@@ -20,6 +19,6 @@ public class ImportUploadResponseDto {
     private String message;
     private Long importId;
     private List<Object> preview;
-    private Map<String, Object> errors;
+    private String errors;
     private Integer totalRows;
 }

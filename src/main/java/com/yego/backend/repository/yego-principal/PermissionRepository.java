@@ -22,15 +22,25 @@ public interface PermissionRepository extends JpaRepository<Permission, Long> {
     /**
      * Buscar permisos activos ordenados
      */
-    List<Permission> findByActiveTrueOrderByResourceAscActionAsc();
+    List<Permission> findByActiveTrueOrderByModuleAscActionAsc();
     
     /**
-     * Buscar permisos por recurso
+     * Buscar permisos por módulo
      */
-    List<Permission> findByResourceAndActiveTrueOrderByActionAsc(String resource);
+    List<Permission> findByModuleAndActiveTrueOrderByActionAsc(String module);
     
     /**
      * Verificar si existe un permiso por nombre
      */
     boolean existsByName(String name);
+    
+    /**
+     * Buscar permisos activos ordenados por módulo y acción
+     */
+    List<Permission> findByActiveOrderByModuleAscActionAsc(boolean active);
+    
+    /**
+     * Buscar permisos por módulo y estado activo
+     */
+    List<Permission> findByModuleAndActiveOrderByActionAsc(String module, boolean active);
 }

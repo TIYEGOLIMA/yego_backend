@@ -5,8 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.Map;
-
 /**
  * DTO para actualizar permisos del sistema YEGO Principal
  */
@@ -20,6 +18,6 @@ public class UpdatePermissionDto {
     private String description;
     private String module;
     private String action;
-    private Map<String, Object> conditions;
+    private String conditions;
     private Boolean active;
 }

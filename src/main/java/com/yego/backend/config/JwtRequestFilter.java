@@ -3,6 +3,9 @@ package com.yego.backend.config;
 import com.yego.backend.service.yego_principal.AuthService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.JwtParser;
+import io.jsonwebtoken.security.Keys;
+import javax.crypto.SecretKey;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +36,14 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     @Value("${jwt.secret}")
     private String jwtSecret;
     
+    private SecretKey getSigningKey() {
+        return Keys.hmacShaKeyFor(jwtSecret.getBytes());
+    }
+    
+    private JwtParser getJwtParser() {
+        return Jwts.parser().setSigningKey(getSigningKey()).build();
+    }
+    
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
                                     FilterChain chain) throws ServletException, IOException {
@@ -46,8 +57,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
             jwtToken = requestTokenHeader.substring(7);
             try {
-                Claims claims = Jwts.parser()
-                        .setSigningKey(jwtSecret)
+                Claims claims = getJwtParser()
                         .parseClaimsJws(jwtToken)
                         .getBody();
                 
@@ -87,8 +97,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     
     private Boolean validateToken(String token, UserDetails userDetails) {
         try {
-            Claims claims = Jwts.parser()
-                    .setSigningKey(jwtSecret)
+            Claims claims = getJwtParser()
                     .parseClaimsJws(token)
                     .getBody();
             

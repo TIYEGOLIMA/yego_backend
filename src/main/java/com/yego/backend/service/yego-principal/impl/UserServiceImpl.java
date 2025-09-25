@@ -115,8 +115,8 @@ public class UserServiceImpl implements UserService {
             }
         }
         
-        List<UserResponseDto> users = userPage.getContent().stream()
-                .map(this::mapToResponseDto)
+        List<UserResponseCompleteDto> users = userPage.getContent().stream()
+                .map(this::mapToUserResponseCompleteDto)
                 .collect(Collectors.toList());
         
         log.info("📋 Usuarios YEGO Principal obtenidos: {} de {} total", users.size(), userPage.getTotalElements());
@@ -285,6 +285,20 @@ public class UserServiceImpl implements UserService {
                 .active(user.getActive())
                 .lastLogin(user.getLastLogin())
                 .createdAt(user.getCreatedAt())
+                .build();
+    }
+    
+    private UserResponseCompleteDto mapToUserResponseCompleteDto(User user) {
+        return UserResponseCompleteDto.builder()
+                .id(user.getId())
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .name(user.getName())
+                .role(user.getRole())
+                .active(user.getActive())
+                .createdAt(user.getCreatedAt())
+                .lastLogin(user.getLastLogin())
+                .moduleId(user.getModuleId())
                 .build();
     }
 }

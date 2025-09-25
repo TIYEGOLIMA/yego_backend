@@ -6,8 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import java.util.Map;
 
 /**
  * DTO para crear permisos del sistema YEGO Principal
@@ -29,7 +27,7 @@ public class CreatePermissionDto {
     @NotBlank(message = "La acción es obligatoria")
     private String action;
     
-    private Map<String, Object> conditions;
+    private String conditions;
     
     @Builder.Default
     private Boolean active = true;

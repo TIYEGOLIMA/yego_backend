@@ -70,10 +70,10 @@ public interface AuditService {
      * Registrar acción de usuario
      */
     void logUserAction(Long userId, String action, String resource, String resourceId, 
-                      Map<String, Object> details, String ipAddress, String userAgent);
+                      String details, String ipAddress, String userAgent);
     
     /**
      * Registrar acción del sistema
      */
-    void logSystemAction(String action, String resource, String resourceId, Map<String, Object> details);
+    void logSystemAction(String action, String resource, String resourceId, String details);
 }

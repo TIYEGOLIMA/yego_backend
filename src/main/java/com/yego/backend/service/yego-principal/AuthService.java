@@ -1,6 +1,8 @@
 package com.yego.backend.service.yego_principal;
 
 import com.yego.backend.entity.yego_principal.api.*;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -8,7 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
  * Interfaz del servicio de autenticación del sistema YEGO Principal
  * Equivalente a AuthService de NestJS
  */
-public interface AuthService {
+public interface AuthService extends UserDetailsService {
     
     /**
      * Validar usuario con username y password
@@ -54,4 +56,9 @@ public interface AuthService {
      * Cerrar sesión y liberar recursos
      */
     void cerrarSesion(Long userId, String token);
+    
+    /**
+     * Cargar usuario por username para Spring Security
+     */
+    UserDetails loadUserByUsername(String username);
 }

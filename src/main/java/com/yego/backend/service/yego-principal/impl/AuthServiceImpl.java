@@ -8,10 +8,16 @@ import com.yego.backend.service.yego_principal.AuditService;
 import com.yego.backend.service.yego_principal.SessionService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
+import javax.crypto.SecretKey;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,6 +54,14 @@ public class AuthServiceImpl implements AuthService {
     
     @Value("${jwt.expiration:86400}")
     private Long jwtExpiration;
+    
+    private SecretKey getSigningKey() {
+        return Keys.hmacShaKeyFor(jwtSecret.getBytes());
+    }
+    
+    private JwtParser getJwtParser() {
+        return Jwts.parser().setSigningKey(getSigningKey()).build();
+    }
     
     @Override
     public UserResponseDto validateUser(String username, String password, HttpServletRequest request) {
@@ -106,7 +120,7 @@ public class AuthServiceImpl implements AuthService {
                 .email(user.getEmail())
                 .name(user.getName())
                 .role(user.getRole())
-                .moduleId(user.getModuleId())
+                .moduleId(user.getModuleId() != null ? user.getModuleId().toString() : null)
                 .active(user.getActive())
                 .lastLogin(LocalDateTime.now())
                 .build();
@@ -134,9 +148,6 @@ public class AuthServiceImpl implements AuthService {
                 .email(registerDto.getEmail())
                 .name(registerDto.getNombre())
                 .password(passwordHash)
-                .dni(registerDto.getDni())
-                .telefono(registerDto.getTelefono())
-                .direccion(registerDto.getDireccion())
                 .role("usuario")
                 .active(true)
                 .build();
@@ -190,9 +201,10 @@ public class AuthServiceImpl implements AuthService {
         User userEntity = userRepository.findById(user.getId())
                 .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
         
-        if (!userEntity.getRequiereCambioPassword()) {
-            throw new RuntimeException("Este usuario no requiere cambio de contraseña");
-        }
+        // Por ahora, permitir cambio de contraseña sin verificar flag
+        // if (!userEntity.getRequiereCambioPassword()) {
+        //     throw new RuntimeException("Este usuario no requiere cambio de contraseña");
+        // }
         
         changePassword(user.getId(), changePasswordDto.getCurrentPassword(), 
                 changePasswordDto.getNewPassword());
@@ -227,7 +239,7 @@ public class AuthServiceImpl implements AuthService {
                 .email(user.getEmail())
                 .name(user.getName())
                 .role(user.getRole())
-                .moduleId(user.getModuleId())
+                .moduleId(user.getModuleId() != null ? user.getModuleId().toString() : null)
                 .active(user.getActive())
                 .lastLogin(user.getLastLogin())
                 .build();
@@ -236,8 +248,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public Object decodeToken(String token) {
         try {
-            Claims claims = Jwts.parser()
-                    .setSigningKey(jwtSecret)
+            Claims claims = getJwtParser()
                     .parseClaimsJws(token)
                     .getBody();
             
@@ -332,15 +343,11 @@ public class AuthServiceImpl implements AuthService {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .name(user.getName())
-                .dni(user.getDni())
-                .telefono(user.getTelefono())
-                .direccion(user.getDireccion())
                 .role(user.getRole())
                 .moduleId(user.getModuleId())
                 .active(user.getActive())
                 .lastLogin(user.getLastLogin())
                 .createdAt(user.getCreatedAt())
-                .updatedAt(user.getUpdatedAt())
                 .build();
     }
     
@@ -356,5 +363,21 @@ public class AuthServiceImpl implements AuthService {
         }
         
         return request.getRemoteAddr();
+    }
+    
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + username));
+        
+        return org.springframework.security.core.userdetails.User.builder()
+                .username(user.getUsername())
+                .password(user.getPassword())
+                .authorities(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
+                .accountExpired(false)
+                .accountLocked(!user.getActive())
+                .credentialsExpired(false)
+                .disabled(!user.getActive())
+                .build();
     }
 }

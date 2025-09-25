@@ -232,7 +232,7 @@ public class ReportServiceImpl implements ReportService {
         for (AuditLog log : auditLogs) {
             Row row = sheet.createRow(rowNum++);
             row.createCell(0).setCellValue(log.getId());
-            row.createCell(1).setCellValue(log.getUser() != null ? log.getUser().getName() : "Sistema");
+            row.createCell(1).setCellValue(log.getUserId() != null ? "Usuario " + log.getUserId() : "Sistema");
             row.createCell(2).setCellValue(log.getAction());
             row.createCell(3).setCellValue(log.getResource());
             row.createCell(4).setCellValue(log.getDetails());
@@ -265,7 +265,7 @@ public class ReportServiceImpl implements ReportService {
         for (Session session : sessions) {
             Row row = sheet.createRow(rowNum++);
             row.createCell(0).setCellValue(session.getId());
-            row.createCell(1).setCellValue(session.getUser() != null ? session.getUser().getName() : "Desconocido");
+            row.createCell(1).setCellValue(session.getUserId() != null ? "Usuario " + session.getUserId() : "Desconocido");
             row.createCell(2).setCellValue(session.getIpAddress());
             row.createCell(3).setCellValue(session.getDevice());
             row.createCell(4).setCellValue(session.getCity());
@@ -329,11 +329,11 @@ public class ReportServiceImpl implements ReportService {
     
     private RecentActivityDto mapToRecentActivityDto(AuditLog auditLog) {
         RecentActivityDto.ActivityUserDto userDto = null;
-        if (auditLog.getUser() != null) {
+        if (auditLog.getUserId() != null) {
             userDto = RecentActivityDto.ActivityUserDto.builder()
-                    .id(auditLog.getUser().getId())
-                    .username(auditLog.getUser().getUsername())
-                    .name(auditLog.getUser().getName())
+                    .id(auditLog.getUserId())
+                    .username("Usuario " + auditLog.getUserId())
+                    .name("Usuario " + auditLog.getUserId())
                     .build();
         }
         

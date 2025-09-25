@@ -4,11 +4,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Type;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import java.util.Map;
 
 /**
  * Entidad JPA para roles del sistema YEGO Principal
@@ -32,9 +30,8 @@ public class Role {
     @Column(name = "description", length = 255)
     private String description;
     
-    @Type(type = "jsonb")
     @Column(name = "permissions", columnDefinition = "jsonb")
-    private Map<String, Object> permissions;
+    private String permissions;
     
     @Column(name = "activo", nullable = false)
     private Boolean activo = true;

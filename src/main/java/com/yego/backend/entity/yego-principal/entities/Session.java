@@ -24,43 +24,74 @@ public class Session {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @Column(name = "session_id", nullable = false, unique = true)
-    private String sessionId;
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
     
-    @Column(name = "socket_id")
-    private String socketId;
+    @Column(name = "token_hash", nullable = false, length = 255)
+    private String tokenHash;
     
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
-    
-    @Column(name = "ip_address")
+    @Column(name = "ip_address", columnDefinition = "inet")
     private String ipAddress;
     
-    @Column(name = "user_agent")
+    @Column(name = "user_agent", columnDefinition = "TEXT")
     private String userAgent;
     
-    @Column(name = "device_info")
-    private String deviceInfo;
+    @Column(name = "expires_at", nullable = false)
+    private LocalDateTime expiresAt;
     
-    @Column(name = "location")
-    private String location;
-    
-    @Column(name = "is_active", nullable = false)
-    private Boolean isActive = true;
+    @Column(name = "active", nullable = false)
+    private Boolean active = true;
     
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
     
-    @Column(name = "last_activity")
-    private LocalDateTime lastActivity;
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
     
-    @Column(name = "ended_at")
-    private LocalDateTime endedAt;
+    @Column(name = "device", length = 100)
+    private String device;
+    
+    @Column(name = "browser", length = 100)
+    private String browser;
+    
+    @Column(name = "operating_system", length = 100)
+    private String operatingSystem;
+    
+    @Column(name = "city", length = 100)
+    private String city;
+    
+    @Column(name = "region", length = 100)
+    private String region;
+    
+    @Column(name = "country", length = 100)
+    private String country;
+    
+    @Column(name = "country_code", length = 10)
+    private String countryCode;
+    
+    @Column(name = "latitude", precision = 10)
+    private Double latitude;
+    
+    @Column(name = "longitude", precision = 10)
+    private Double longitude;
+    
+    @Column(name = "timezone", length = 50)
+    private String timezone;
+    
+    @Column(name = "isp", length = 200)
+    private String isp;
+    
+    @Column(name = "organization", length = 200)
+    private String organization;
     
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
-        lastActivity = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+    
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 }

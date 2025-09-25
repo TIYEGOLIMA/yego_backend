@@ -65,7 +65,9 @@ public class ImportServiceImpl implements ImportService {
             
             // Actualizar importación con vista previa
             savedImport.setPreview(result.getPreview());
-            savedImport.setErrors(result.getErrors());
+            // Convertir Map a JSON string
+            savedImport.setErrors(result.getErrors() != null ? 
+                result.getErrors().toString() : null);
             savedImport.setTotalRows(result.getTotalRows());
             
             importRepository.save(savedImport);
@@ -74,7 +76,8 @@ public class ImportServiceImpl implements ImportService {
                     .message("Archivo subido y procesado exitosamente")
                     .importId(savedImport.getId())
                     .preview(result.getPreview())
-                    .errors(result.getErrors())
+                    .errors(result.getErrors() != null ? 
+                        result.getErrors().toString() : null)
                     .totalRows(result.getTotalRows())
                     .build();
                     
@@ -170,7 +173,8 @@ public class ImportServiceImpl implements ImportService {
             importRecord.setStatus(Import.ImportStatus.COMPLETED);
             importRecord.setProcessedRows(importRecord.getTotalRows());
             
-            int errorCount = importRecord.getErrors() != null ? importRecord.getErrors().size() : 0;
+            int errorCount = importRecord.getErrors() != null ? 
+                (importRecord.getErrors().isEmpty() ? 0 : 1) : 0;
             importRecord.setSuccessRows(importRecord.getTotalRows() - errorCount);
             importRecord.setErrorRows(errorCount);
             

@@ -78,7 +78,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     /**
      * Estadísticas por usuario en un rango de fechas
      */
-    @Query("SELECT a.userId as userId, u.username as username, COUNT(a) as count FROM AuditLog a LEFT JOIN User u ON a.userId = u.id WHERE a.createdAt >= :startDate AND a.userId IS NOT NULL GROUP BY a.userId, u.username ORDER BY COUNT(a) DESC")
+    @Query("SELECT a.userId as userId, COUNT(a) as count FROM AuditLog a WHERE a.createdAt >= :startDate AND a.userId IS NOT NULL GROUP BY a.userId ORDER BY COUNT(a) DESC")
     List<Object[]> getUserStats(@Param("startDate") LocalDateTime startDate);
     
     /**
@@ -90,7 +90,7 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
     /**
      * Búsqueda compleja con filtros múltiples
      */
-    @Query("SELECT a FROM AuditLog a LEFT JOIN FETCH a.user u WHERE " +
+    @Query("SELECT a FROM AuditLog a WHERE " +
            "(:userId IS NULL OR a.userId = :userId) AND " +
            "(:action IS NULL OR a.action = :action) AND " +
            "(:resource IS NULL OR a.resource = :resource) AND " +
@@ -107,4 +107,9 @@ public interface AuditLogRepository extends JpaRepository<AuditLog, Long> {
             @Param("search") String search,
             Pageable pageable
     );
+    
+    /**
+     * Buscar logs creados después de una fecha
+     */
+    List<AuditLog> findByCreatedAtAfterOrderByCreatedAtDesc(LocalDateTime date);
 }

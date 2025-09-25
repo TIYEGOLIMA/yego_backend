@@ -4,12 +4,10 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.Type;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Entidad Import del sistema YEGO Principal
@@ -54,11 +52,9 @@ public class Import {
     @Builder.Default
     private Integer errorRows = 0;
     
-    @Type(type = "jsonb")
     @Column(columnDefinition = "jsonb")
-    private Map<String, Object> errors;
+    private String errors;
     
-    @Type(type = "jsonb")
     @Column(columnDefinition = "jsonb")
     private List<Object> preview;
     

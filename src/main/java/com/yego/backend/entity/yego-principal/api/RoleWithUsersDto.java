@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 
 /**
  * DTO de rol con conteo de usuarios del sistema YEGO Principal
@@ -19,7 +18,7 @@ public class RoleWithUsersDto {
     private Long id;
     private String name;
     private String description;
-    private Map<String, Object> permissions;
+    private String permissions;
     private Boolean activo;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

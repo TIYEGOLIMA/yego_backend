@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 
 /**
  * DTO de respuesta para permisos del sistema YEGO Principal
@@ -22,7 +21,7 @@ public class PermissionResponseDto {
     private String description;
     private String module;
     private String action;
-    private Map<String, Object> conditions;
+    private String conditions;
     private Boolean active;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

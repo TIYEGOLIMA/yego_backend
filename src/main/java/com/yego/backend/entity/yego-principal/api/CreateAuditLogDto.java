@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import jakarta.validation.constraints.NotBlank;
-import java.util.Map;
 
 /**
  * DTO para crear logs de auditoría del sistema YEGO Principal
@@ -24,7 +23,7 @@ public class CreateAuditLogDto {
     
     private String resourceId;
     
-    private Map<String, Object> details;
+    private String details;
     
     private String ipAddress;
     

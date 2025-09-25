@@ -50,4 +50,9 @@ public interface ConnectionLogRepository extends JpaRepository<ConnectionLog, Lo
      * Buscar logs recientes
      */
     List<ConnectionLog> findTop50ByOrderByCreatedAtDesc();
+    
+    /**
+     * Buscar logs recientes con paginación
+     */
+    Page<ConnectionLog> findTop50ByOrderByCreatedAtDesc(Pageable pageable);
 }

@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * DTO para vista previa de importaciones del sistema YEGO Principal
@@ -22,5 +21,5 @@ public class ImportPreviewDto {
     private String type;
     private Integer totalRows;
     private List<Object> preview;
-    private Map<String, Object> errors;
+    private String errors;
 }

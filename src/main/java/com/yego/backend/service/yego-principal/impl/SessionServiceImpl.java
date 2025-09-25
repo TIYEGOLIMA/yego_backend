@@ -50,14 +50,24 @@ public class SessionServiceImpl implements SessionService {
         
         // Crear sesión
         Session session = Session.builder()
-                .user(user)
-                .sessionId(createSessionDto.getSessionId())
-                .socketId(createSessionDto.getSocketId())
+                .userId(createSessionDto.getUserId())
+                .tokenHash(createSessionDto.getTokenHash())
                 .ipAddress(ipAddress)
                 .userAgent(createSessionDto.getUserAgent())
-                .deviceInfo(createSessionDto.getDeviceInfo())
-                .location(createSessionDto.getLocation())
-                .isActive(true)
+                .device(createSessionDto.getDevice())
+                .browser(createSessionDto.getBrowser())
+                .operatingSystem(createSessionDto.getOperatingSystem())
+                .city(createSessionDto.getCity())
+                .region(createSessionDto.getRegion())
+                .country(createSessionDto.getCountry())
+                .countryCode(createSessionDto.getCountryCode())
+                .latitude(createSessionDto.getLatitude())
+                .longitude(createSessionDto.getLongitude())
+                .timezone(createSessionDto.getTimezone())
+                .isp(createSessionDto.getIsp())
+                .organization(createSessionDto.getOrganization())
+                .expiresAt(createSessionDto.getExpiresAt())
+                .active(true)
                 .build();
         
         Session savedSession = sessionRepository.save(session);
@@ -79,7 +89,7 @@ public class SessionServiceImpl implements SessionService {
             Pageable pageable = PageRequest.of(0, 100); // Limitar a 100 por rendimiento
             Page<Session> sessionPage = sessionRepository.findAll(pageable);
             sessions = sessionPage.getContent().stream()
-                    .filter(Session::getIsActive)
+                    .filter(Session::getActive)
                     .collect(Collectors.toList());
         }
         
@@ -98,7 +108,7 @@ public class SessionServiceImpl implements SessionService {
     
     @Override
     public Session findByTokenHash(String tokenHash) {
-        return sessionRepository.findBySessionId(tokenHash)
+        return sessionRepository.findByTokenHash(tokenHash)
                 .orElse(null);
     }
     
@@ -108,8 +118,7 @@ public class SessionServiceImpl implements SessionService {
         Session session = sessionRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Sesión no encontrada"));
         
-        session.setIsActive(false);
-        session.setEndedAt(LocalDateTime.now());
+        session.setActive(false);
         sessionRepository.save(session);
         
         log.info("🚪 Sesión YEGO Principal {} desactivada", id);
@@ -121,8 +130,8 @@ public class SessionServiceImpl implements SessionService {
         List<Session> sessions = sessionRepository.findActiveSessionsByUserId(userId);
         
         for (Session session : sessions) {
-            session.setIsActive(false);
-            session.setEndedAt(LocalDateTime.now());
+            session.setActive(false);
+            // No hay campo endedAt en la entidad Session
             sessionRepository.save(session);
         }
         
@@ -133,11 +142,11 @@ public class SessionServiceImpl implements SessionService {
     @Override
     @Transactional
     public void deactivateByTokenHash(String tokenHash) {
-        Session session = sessionRepository.findBySessionId(tokenHash).orElse(null);
+        Session session = sessionRepository.findByTokenHash(tokenHash).orElse(null);
         
         if (session != null) {
-            session.setIsActive(false);
-            session.setEndedAt(LocalDateTime.now());
+            session.setActive(false);
+            // No hay campo endedAt en la entidad Session
             sessionRepository.save(session);
             
             log.info("🚪 Sesión YEGO Principal con token {} desactivada", tokenHash);
@@ -151,8 +160,8 @@ public class SessionServiceImpl implements SessionService {
         List<Session> expiredSessions = sessionRepository.findInactiveSessionsForCleanup(now);
         
         for (Session session : expiredSessions) {
-            session.setIsActive(false);
-            session.setEndedAt(now);
+            session.setActive(false);
+            // No hay campo endedAt en la entidad Session
             sessionRepository.save(session);
         }
         
@@ -225,18 +234,29 @@ public class SessionServiceImpl implements SessionService {
         Session session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new EntityNotFoundException("Sesión no encontrada"));
         
-        session.setIsActive(false);
-        session.setEndedAt(LocalDateTime.now());
+        session.setActive(false);
+        // No hay campo endedAt en la entidad Session
         sessionRepository.save(session);
         
         // Registrar el log de conexión
         ConnectionLog connectionLog = ConnectionLog.builder()
-                .userId(session.getUser().getId())
+                .userId(session.getUserId())
                 .sessionId(sessionId)
                 .action("FORCED_LOGOUT")
                 .ipAddress(session.getIpAddress())
-                .deviceInfo(session.getDeviceInfo())
-                .location(session.getLocation())
+                .userAgent(session.getUserAgent())
+                .device(session.getDevice())
+                .browser(session.getBrowser())
+                .operatingSystem(session.getOperatingSystem())
+                .city(session.getCity())
+                .region(session.getRegion())
+                .country(session.getCountry())
+                .countryCode(session.getCountryCode())
+                .latitude(session.getLatitude())
+                .longitude(session.getLongitude())
+                .timezone(session.getTimezone())
+                .isp(session.getIsp())
+                .organization(session.getOrganization())
                 .roleName("admin")
                 .build();
         
@@ -248,17 +268,26 @@ public class SessionServiceImpl implements SessionService {
     private SessionResponseDto mapToResponseDto(Session session) {
         return SessionResponseDto.builder()
                 .id(session.getId())
-                .sessionId(session.getSessionId())
-                .socketId(session.getSocketId())
-                .userId(session.getUser().getId())
+                .userId(session.getUserId())
+                .tokenHash(session.getTokenHash())
                 .ipAddress(session.getIpAddress())
                 .userAgent(session.getUserAgent())
-                .deviceInfo(session.getDeviceInfo())
-                .location(session.getLocation())
-                .isActive(session.getIsActive())
+                .expiresAt(session.getExpiresAt())
+                .active(session.getActive())
                 .createdAt(session.getCreatedAt())
-                .lastActivity(session.getLastActivity())
-                .endedAt(session.getEndedAt())
+                .updatedAt(session.getUpdatedAt())
+                .device(session.getDevice())
+                .browser(session.getBrowser())
+                .operatingSystem(session.getOperatingSystem())
+                .city(session.getCity())
+                .region(session.getRegion())
+                .country(session.getCountry())
+                .countryCode(session.getCountryCode())
+                .latitude(session.getLatitude())
+                .longitude(session.getLongitude())
+                .timezone(session.getTimezone())
+                .isp(session.getIsp())
+                .organization(session.getOrganization())
                 .build();
     }
     
@@ -269,8 +298,20 @@ public class SessionServiceImpl implements SessionService {
                 .sessionId(log.getSessionId())
                 .action(log.getAction())
                 .ipAddress(log.getIpAddress())
-                .deviceInfo(log.getDeviceInfo())
-                .location(log.getLocation())
+                .userAgent(log.getUserAgent())
+                .device(log.getDevice())
+                .browser(log.getBrowser())
+                .operatingSystem(log.getOperatingSystem())
+                .city(log.getCity())
+                .region(log.getRegion())
+                .country(log.getCountry())
+                .countryCode(log.getCountryCode())
+                .latitude(log.getLatitude())
+                .longitude(log.getLongitude())
+                .timezone(log.getTimezone())
+                .isp(log.getIsp())
+                .organization(log.getOrganization())
+                .sessionDuration(log.getSessionDuration())
                 .roleName(log.getRoleName())
                 .createdAt(log.getCreatedAt())
                 .build();

@@ -5,53 +5,25 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
- * DTO completo de respuesta de usuario del sistema YEGO Principal
- * Equivalente a UserResponseDto de NestJS (versión completa)
+ * DTO de respuesta completa para usuarios del sistema YEGO Principal
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserResponseCompleteDto {
-    
     private Long id;
-    
     private String username;
-    
     private String email;
-    
-    private String dni;
-    
-    private String nombre;
-    
-    private String telefono;
-    
-    private String direccion;
-    
-    private LocalDate fechaNacimiento;
-    
-    private Boolean activo;
-    
-    private Boolean requiereCambioPassword;
-    
-    private List<RoleSummaryDto> roles;
-    
+    private String name;
+    private String role;
+    private Boolean active;
     private LocalDateTime createdAt;
-    
+    private LocalDateTime lastLogin;
+    private Long moduleId;
     private LocalDateTime updatedAt;
-    
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class RoleSummaryDto {
-        private Long id;
-        private String name;
-        private String description;
-    }
+    private Boolean requiereCambioPassword;
 }

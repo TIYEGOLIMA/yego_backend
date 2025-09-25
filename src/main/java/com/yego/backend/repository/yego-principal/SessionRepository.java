@@ -18,31 +18,26 @@ import java.util.Optional;
 public interface SessionRepository extends JpaRepository<Session, Long> {
     
     /**
-     * Buscar sesión por sessionId
+     * Buscar sesión por tokenHash
      */
-    Optional<Session> findBySessionId(String sessionId);
-    
-    /**
-     * Buscar sesión por socketId
-     */
-    Optional<Session> findBySocketId(String socketId);
+    Optional<Session> findByTokenHash(String tokenHash);
     
     /**
      * Buscar sesiones activas por usuario
      */
-    @Query("SELECT s FROM Session s WHERE s.user.id = :userId AND s.isActive = true")
+    @Query("SELECT s FROM Session s WHERE s.userId = :userId AND s.active = true")
     List<Session> findActiveSessionsByUserId(@Param("userId") Long userId);
     
     /**
      * Buscar todas las sesiones por usuario
      */
-    @Query("SELECT s FROM Session s WHERE s.user.id = :userId ORDER BY s.createdAt DESC")
+    @Query("SELECT s FROM Session s WHERE s.userId = :userId ORDER BY s.createdAt DESC")
     List<Session> findByUserId(@Param("userId") Long userId);
     
     /**
      * Contar sesiones activas
      */
-    @Query("SELECT COUNT(s) FROM Session s WHERE s.isActive = true")
+    @Query("SELECT COUNT(s) FROM Session s WHERE s.active = true")
     Long countActiveSessions();
     
     /**
@@ -54,6 +49,11 @@ public interface SessionRepository extends JpaRepository<Session, Long> {
     /**
      * Buscar sesiones inactivas para limpieza
      */
-    @Query("SELECT s FROM Session s WHERE s.lastActivity < :cutoffTime AND s.isActive = true")
+    @Query("SELECT s FROM Session s WHERE s.expiresAt < :cutoffTime AND s.active = true")
     List<Session> findInactiveSessionsForCleanup(@Param("cutoffTime") LocalDateTime cutoffTime);
+    
+    /**
+     * Buscar sesiones creadas después de una fecha
+     */
+    List<Session> findByCreatedAtAfterOrderByCreatedAtDesc(LocalDateTime date);
 }

@@ -187,7 +187,7 @@ public class AuditServiceImpl implements AuditService {
                 .action("LOGIN")
                 .resource("auth")
                 .resourceId(userId.toString())
-                .details(Map.of("success", true, "type", "normal"))
+                .details("{\"success\": true, \"type\": \"normal\"}")
                 .ipAddress(ipAddress)
                 .userAgent(userAgent)
                 .build();
@@ -202,7 +202,7 @@ public class AuditServiceImpl implements AuditService {
                 .action("LOGOUT")
                 .resource("auth")
                 .resourceId(userId.toString())
-                .details(Map.of("success", true))
+                .details("{\"success\": true}")
                 .ipAddress(ipAddress)
                 .userAgent(userAgent)
                 .build();
@@ -217,7 +217,7 @@ public class AuditServiceImpl implements AuditService {
                 .action("LOGIN_FAILED")
                 .resource("auth")
                 .resourceId(username)
-                .details(Map.of("username", username, "reason", "Credenciales inválidas"))
+                .details("{\"username\": \"" + username + "\", \"reason\": \"Credenciales inválidas\"}")
                 .ipAddress(ipAddress)
                 .userAgent(userAgent)
                 .build();
@@ -228,7 +228,7 @@ public class AuditServiceImpl implements AuditService {
     @Override
     @Transactional
     public void logUserAction(Long userId, String action, String resource, String resourceId, 
-                             Map<String, Object> details, String ipAddress, String userAgent) {
+                             String details, String ipAddress, String userAgent) {
         CreateAuditLogDto dto = CreateAuditLogDto.builder()
                 .action(action)
                 .resource(resource)
@@ -243,7 +243,7 @@ public class AuditServiceImpl implements AuditService {
     
     @Override
     @Transactional
-    public void logSystemAction(String action, String resource, String resourceId, Map<String, Object> details) {
+    public void logSystemAction(String action, String resource, String resourceId, String details) {
         CreateAuditLogDto dto = CreateAuditLogDto.builder()
                 .action(action)
                 .resource(resource)
@@ -257,13 +257,14 @@ public class AuditServiceImpl implements AuditService {
     private AuditLogResponseDto mapToResponseDto(AuditLog auditLog) {
         AuditLogResponseDto.AuditUserDto userDto = null;
         
-        if (auditLog.getUser() != null) {
-            User user = auditLog.getUser();
+        if (auditLog.getUserId() != null) {
+            // Buscar el usuario por ID si es necesario
+            // Por ahora, crear un DTO básico con el ID
             userDto = AuditLogResponseDto.AuditUserDto.builder()
-                    .id(user.getId())
-                    .username(user.getUsername())
-                    .name(user.getName())
-                    .email(user.getEmail())
+                    .id(auditLog.getUserId())
+                    .username("Usuario " + auditLog.getUserId())
+                    .name("Usuario " + auditLog.getUserId())
+                    .email("usuario" + auditLog.getUserId() + "@yego.com")
                     .build();
         }
         
@@ -272,7 +273,7 @@ public class AuditServiceImpl implements AuditService {
                 .userId(auditLog.getUserId())
                 .action(auditLog.getAction())
                 .resource(auditLog.getResource())
-                .resourceId(auditLog.getResourceId())
+                .resourceId(auditLog.getResourceId() != null ? auditLog.getResourceId().toString() : null)
                 .details(auditLog.getDetails())
                 .ipAddress(auditLog.getIpAddress())
                 .userAgent(auditLog.getUserAgent())

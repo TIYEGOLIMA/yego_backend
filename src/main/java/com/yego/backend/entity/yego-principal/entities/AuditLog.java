@@ -24,23 +24,22 @@ public class AuditLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
-    private User user;
+    @Column(name = "user_id")
+    private Long userId;
     
-    @Column(name = "action", nullable = false, length = 100)
+    @Column(name = "action", nullable = false, length = 50)
     private String action;
     
     @Column(name = "resource", length = 100)
     private String resource;
     
-    @Column(name = "resource_id")
-    private Long resourceId;
+    @Column(name = "resource_id", length = 50)
+    private String resourceId;
     
-    @Column(name = "details", columnDefinition = "TEXT")
+    @Column(name = "details", columnDefinition = "jsonb")
     private String details;
     
-    @Column(name = "ip_address", length = 45)
+    @Column(name = "ip_address", columnDefinition = "inet")
     private String ipAddress;
     
     @Column(name = "user_agent", columnDefinition = "TEXT")

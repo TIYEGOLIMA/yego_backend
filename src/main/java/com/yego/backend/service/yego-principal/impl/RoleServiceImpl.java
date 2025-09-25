@@ -41,7 +41,8 @@ public class RoleServiceImpl implements RoleService {
         Role role = Role.builder()
                 .name(createRoleDto.getName())
                 .description(createRoleDto.getDescription())
-                .permissions(createRoleDto.getPermissions())
+                .permissions(createRoleDto.getPermissions() != null ? 
+                    createRoleDto.getPermissions().toString() : null)
                 .activo(true)
                 .build();
         
@@ -96,7 +97,7 @@ public class RoleServiceImpl implements RoleService {
             role.setDescription(updateRoleDto.getDescription());
         }
         if (updateRoleDto.getPermissions() != null) {
-            role.setPermissions(updateRoleDto.getPermissions());
+            role.setPermissions(updateRoleDto.getPermissions().toString());
         }
         
         Role savedRole = roleRepository.save(role);

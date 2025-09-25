@@ -22,12 +22,14 @@ spring:
   # Configuración JPA/Hibernate
   jpa:
     hibernate:
-      ddl-auto: ${TYPEORM_SYNCHRONIZE:validate}
+      ddl-auto: ${TYPEORM_SYNCHRONIZE:none}
     show-sql: ${TYPEORM_LOGGING:true}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+        hbm2ddl:
+          auto: none
     database-platform: org.hibernate.dialect.PostgreSQLDialect
   
   # Configuración de seguridad

@@ -68,4 +68,33 @@ public interface UserRepository extends JpaRepository<User, Long> {
      */
     @Query("SELECT u FROM User u ORDER BY u.createdAt DESC")
     Page<User> findAllOrderByCreatedAtDesc(Pageable pageable);
+    
+    /**
+     * Buscar usuario por username o email
+     */
+    @Query("SELECT u FROM User u WHERE u.username = :username OR u.email = :email")
+    Optional<User> findByUsernameOrEmail(@Param("username") String username, @Param("email") String email);
+    
+    /**
+     * Actualizar último login
+     */
+    @Query("UPDATE User u SET u.lastLogin = :lastLogin WHERE u.id = :userId")
+    void updateLastLogin(@Param("userId") Long userId, @Param("lastLogin") LocalDateTime lastLogin);
+    
+    /**
+     * Actualizar contraseña
+     */
+    @Query("UPDATE User u SET u.password = :password WHERE u.id = :userId")
+    void updatePassword(@Param("userId") Long userId, @Param("password") String password);
+    
+    /**
+     * Obtener todos los usuarios ordenados por fecha de creación (sin paginación)
+     */
+    @Query("SELECT u FROM User u ORDER BY u.createdAt DESC")
+    java.util.List<User> findAllByOrderByCreatedAtDesc();
+    
+    /**
+     * Contar usuarios creados después de una fecha
+     */
+    Long countByCreatedAtAfter(LocalDateTime date);
 }

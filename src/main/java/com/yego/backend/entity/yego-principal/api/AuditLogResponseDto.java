@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 
 /**
  * DTO de respuesta para logs de auditoría del sistema YEGO Principal
@@ -22,7 +21,7 @@ public class AuditLogResponseDto {
     private String action;
     private String resource;
     private String resourceId;
-    private Map<String, Object> details;
+    private String details;
     private String ipAddress;
     private String userAgent;
     private LocalDateTime createdAt;
