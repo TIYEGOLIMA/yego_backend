@@ -4,7 +4,7 @@
 # Basado en .env de desarrollo
 
 server:
-  port: ${PORT:3000}
+  port: ${PORT:3030}
 
 spring:
   # Configuración de base de datos PostgreSQL - DESARROLLO
@@ -26,7 +26,7 @@ spring:
 
 # JWT para desarrollo
 jwt:
-  secret: ${JWT_SECRET:ticketera-secret-key-2024-very-secure-and-long-enough-for-hs256}
+  secret: ${JWT_SECRET:YegoBackendSecretKey2024VerySecureAndLongEnoughForHS512AlgorithmWithAtLeast64Characters}
   expiration: ${JWT_EXPIRES_IN:86400} # 24h = 86400 segundos
 
 # Configuración de la aplicación para desarrollo

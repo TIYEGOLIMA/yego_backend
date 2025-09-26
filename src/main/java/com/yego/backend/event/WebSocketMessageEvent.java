@@ -45,3 +45,4 @@ public class WebSocketMessageEvent extends ApplicationEvent {
         this.broadcastToAll = true;
     }
 }
+

@@ -4,7 +4,7 @@
 # Basado en el archivo .env de NestJS
 
 server:
-  port: ${PORT:3000}
+  port: ${PORT:3030}
   servlet:
     context-path: /
 
@@ -40,7 +40,7 @@ spring:
 
 # Configuración JWT
 jwt:
-  secret: ${JWT_SECRET:ticketera-secret-key-2024-very-secure-and-long-enough-for-hs256}
+  secret: ${JWT_SECRET:YegoBackendSecretKey2024VerySecureAndLongEnoughForHS512AlgorithmWithAtLeast64Characters}
   expiration: ${JWT_EXPIRES_IN:86400} # 24 horas en segundos
 
 # Configuración de la aplicación

@@ -18,3 +18,4 @@ public class SessionClosedEvent extends ApplicationEvent {
         this.reason = reason;
     }
 }
+

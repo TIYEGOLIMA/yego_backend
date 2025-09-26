@@ -20,3 +20,4 @@ public class SessionRegistrationEvent extends ApplicationEvent {
         this.socketId = socketId;
     }
 }
+

@@ -18,3 +18,4 @@ public class ForceLogoutEvent extends ApplicationEvent {
         this.reason = reason;
     }
 }
+

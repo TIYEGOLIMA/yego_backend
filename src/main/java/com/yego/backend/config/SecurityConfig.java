@@ -78,9 +78,13 @@ public class SecurityConfig {
             .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/login", "/api/auth/register").permitAll()
+                .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh").permitAll()
+                .requestMatchers("/api/ticketera/auth/refresh").permitAll() // Alias ticketera auth
                 .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                 .requestMatchers("/actuator/**").permitAll() // Actuator endpoints
+                .requestMatchers("/api/modulo-atencion/frontend").permitAll() // Frontend endpoints
+                .requestMatchers("/api/ticketerera/modulo-atencion/frontend").permitAll() // Ticketera endpoints
+                .requestMatchers("/error").permitAll() // Error endpoint
                 .anyRequest().authenticated()
             );
         
@@ -90,3 +94,4 @@ public class SecurityConfig {
         return http.build();
     }
 }
+

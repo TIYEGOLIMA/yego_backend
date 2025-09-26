@@ -14,3 +14,4 @@ public class YegoBackendApplication {
         SpringApplication.run(YegoBackendApplication.class, args);
     }
 }
+

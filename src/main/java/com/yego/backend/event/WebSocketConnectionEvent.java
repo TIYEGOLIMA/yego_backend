@@ -20,3 +20,4 @@ public class WebSocketConnectionEvent extends ApplicationEvent {
         this.socketId = socketId;
     }
 }
+

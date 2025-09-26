@@ -4,7 +4,7 @@
 # Basado en .env de producción
 
 server:
-  port: ${PORT:3010}
+  port: ${PORT:3030}
 
 spring:
   # Configuración de base de datos PostgreSQL - PRODUCCIÓN
