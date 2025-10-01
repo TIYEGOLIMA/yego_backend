@@ -7,18 +7,18 @@ server:
   port: ${PORT:3030}
 
 spring:
-  # Configuración de base de datos PostgreSQL - DESARROLLO
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:168.119.226.236}:${DB_PORT:5432}/${DB_NAME:yego_integral}
     username: ${DB_USER:yego_user}
     password: ${DB_PASSWORD:37>MNA&-35+}
     driver-class-name: org.postgresql.Driver
   
-  # JPA/Hibernate para desarrollo
+  # Hibernate para desarrollo
   jpa:
     hibernate:
-      ddl-auto: ${TYPEORM_SYNCHRONIZE:validate}  # false en .env = validate en Spring
-    show-sql: ${TYPEORM_LOGGING:true}            # true en .env
+      ddl-auto: ${TYPEORM_SYNCHRONIZE:validate}  
+    show-sql: ${TYPEORM_LOGGING:true}           
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -27,7 +27,7 @@ spring:
 # JWT para desarrollo
 jwt:
   secret: ${JWT_SECRET:YegoBackendSecretKey2024VerySecureAndLongEnoughForHS512AlgorithmWithAtLeast64Characters}
-  expiration: ${JWT_EXPIRES_IN:86400} # 24h = 86400 segundos
+  expiration: ${JWT_EXPIRES_IN:86400} 
 
 # Configuración de la aplicación para desarrollo
 app:
@@ -35,7 +35,6 @@ app:
     url: ${FRONTEND_URL:http://localhost:5173}
     cors:
       origin: ${CORS_ORIGIN_DEV:*}  # Permitir todo en desarrollo
-      origin: ${CORS_ORIGIN:*}
   
   backend:
     external:
@@ -68,12 +67,6 @@ logging:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:
     name: ${LOG_FILE:logs/app.log}
-
-# Rate Limiting para desarrollo (más permisivo)
-app:
-  rate-limit:
-    window-ms: ${RATE_LIMIT_WINDOW_MS:900000}
-    max-requests: ${RATE_LIMIT_MAX_REQUESTS:100}
 
 # WebSocket para desarrollo
 websocket:

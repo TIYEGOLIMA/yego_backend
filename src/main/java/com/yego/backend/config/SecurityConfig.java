@@ -82,8 +82,6 @@ public class SecurityConfig {
                 .requestMatchers("/api/ticketera/auth/refresh").permitAll() // Alias ticketera auth
                 .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                 .requestMatchers("/actuator/**").permitAll() // Actuator endpoints
-                .requestMatchers("/api/modulo-atencion/frontend").permitAll() // Frontend endpoints
-                .requestMatchers("/api/ticketerera/modulo-atencion/frontend").permitAll() // Ticketera endpoints
                 .requestMatchers("/error").permitAll() // Error endpoint
                 .anyRequest().authenticated()
             );

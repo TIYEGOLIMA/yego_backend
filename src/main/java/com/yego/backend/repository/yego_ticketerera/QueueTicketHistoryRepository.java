@@ -3,17 +3,27 @@ package com.yego.backend.repository.yego_ticketerera;
 import com.yego.backend.entity.yego_ticketerera.entities.QueueTicketHistory;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+
 import java.util.List;
 
 /**
- * Repository para la entidad QueueTicketHistory del sistema YEGO Ticketerera
+ * Repositorio para QueueTicketHistory del sistema YEGO Ticketerera
  */
 @Repository
 public interface QueueTicketHistoryRepository extends JpaRepository<QueueTicketHistory, Long> {
     
-    // Buscar historial por ticket
+    /**
+     * Buscar historial por ticket ID
+     */
     List<QueueTicketHistory> findByTicketIdOrderByCreatedAtDesc(Long ticketId);
     
-    // Buscar historial por agente
+    /**
+     * Buscar historial por agente ID
+     */
     List<QueueTicketHistory> findByAgentIdOrderByCreatedAtDesc(Long agentId);
+    
+    /**
+     * Buscar historial por ticket y estado
+     */
+    List<QueueTicketHistory> findByTicketIdAndNewStatus(Long ticketId, String newStatus);
 }

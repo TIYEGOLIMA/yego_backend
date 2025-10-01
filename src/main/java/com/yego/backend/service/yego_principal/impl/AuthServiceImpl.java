@@ -7,6 +7,7 @@ import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_principal.AuthService;
 import com.yego.backend.service.yego_principal.AuditService;
 import com.yego.backend.service.yego_principal.SessionService;
+import com.yego.backend.service.yego_ticketerera.QueueAgentService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.JwtParser;
@@ -25,11 +26,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Date;
@@ -48,9 +44,10 @@ public class AuthServiceImpl implements AuthService {
     private final UserRepository userRepository;
     private final SessionService sessionService;
     private final AuditService auditService;
+    private final QueueAgentService queueAgentService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(12);
     
-    @Value("${jwt.secret:defaultSecret}")
+    @Value("${jwt.secret}")
     private String jwtSecret;
     
     @Value("${jwt.expiration:86400}")
@@ -270,7 +267,7 @@ public class AuthServiceImpl implements AuthService {
     
     @Override
     public void cerrarSesion(Long userId, String token) {
-        log.info("🔄 Cerrando sesión para usuario {}", userId != null ? userId : "desconocido");
+        log.info(" Cerrando sesión para usuario {}", userId != null ? userId : "desconocido");
         
         try {
             User user = null;
@@ -280,44 +277,25 @@ public class AuthServiceImpl implements AuthService {
             }
             
             if (user == null && userId != null) {
-                log.warn("⚠️ Usuario {} no encontrado para logout", userId);
+                log.warn(" Usuario {} no encontrado para logout", userId);
             }
             
-            // Liberar módulo en backend externo
-            if (token != null && !token.isEmpty()) {
+            // Liberar módulo usando el servicio de ticketera
+            if (user != null) {
                 try {
-                    log.info("🔄 [AuthService] Liberando módulo asignado en backend...");
-                    
-                    String backendUrl = "https://api-tick.yego.pro/api";
-                    
-                    HttpClient client = HttpClient.newBuilder()
-                            .connectTimeout(Duration.ofSeconds(5))
-                            .build();
-                    
-                    HttpRequest request = HttpRequest.newBuilder()
-                            .uri(URI.create(backendUrl + "/auth/logout"))
-                            .header("Authorization", "Bearer " + token)
-                            .header("Content-Type", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString("{}"))
-                            .timeout(Duration.ofSeconds(5))
-                            .build();
-                    
-                    HttpResponse<String> response = client.send(request, 
-                            HttpResponse.BodyHandlers.ofString());
-                    
-                    if (response.statusCode() >= 200 && response.statusCode() < 300) {
-                        log.info("✅ [AuthService] Módulo liberado exitosamente en backend");
-                    } else {
-                        log.warn("⚠️ [AuthService] Respuesta no exitosa del backend: {}", response.statusCode());
-                    }
-                    
+                    log.info("🔄 [AuthService] Liberando módulo asignado del usuario...");
+                    queueAgentService.liberarModuloDelUsuario(user.getId());
+                    log.info("✅ [AuthService] Módulo liberado exitosamente para usuario: {}", user.getId());
                 } catch (Exception moduleError) {
-                    log.warn("⚠️ [AuthService] No se pudo liberar módulo en backend: {}", moduleError.getMessage());
-                    
-                    // Si es error 401, es normal durante logout con token expirado
-                    if (moduleError.getMessage().contains("401")) {
-                        log.info("ℹ️ [AuthService] Token expirado en API tercera - esto es esperado durante logout");
-                    }
+                    log.warn("⚠️ [AuthService] No se pudo liberar módulo del usuario {}: {}", user.getId(), moduleError.getMessage());
+                }
+            } else if (userId != null) {
+                try {
+                    log.info("🔄 [AuthService] Liberando módulo asignado del usuario usando userId...");
+                    queueAgentService.liberarModuloDelUsuario(userId);
+                    log.info("✅ [AuthService] Módulo liberado exitosamente para usuario: {}", userId);
+                } catch (Exception moduleError) {
+                    log.warn("⚠️ [AuthService] No se pudo liberar módulo del usuario {}: {}", userId, moduleError.getMessage());
                 }
             }
             
@@ -342,7 +320,7 @@ public class AuthServiceImpl implements AuthService {
                 .claim("role", user.getRole())
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
-                .signWith(SignatureAlgorithm.HS512, jwtSecret)
+                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
                 .compact();
     }
     

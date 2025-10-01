@@ -25,7 +25,7 @@ public class QueueRatingController {
     private final QueueRatingService queueRatingService;
     
     @PostMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TABLET1')")
     public ResponseEntity<QueueRating> crearRating(@Valid @RequestBody CrearRatingRequest request) {
         QueueRating rating = queueRatingService.crearRating(request);
         return ResponseEntity.ok(rating);

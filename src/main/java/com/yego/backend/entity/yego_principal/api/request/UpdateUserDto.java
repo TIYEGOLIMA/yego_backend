@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UpdateUserDto {
-    @Size(min = 3, max = 255, message = "El nombre de usuario debe tener entre 3 y 255 caracteres")
+    @Size(min = 2, max = 255, message = "El nombre de usuario debe tener entre 2 y 255 caracteres")
     private String username;
 
     @Email(message = "El formato del email no es válido")

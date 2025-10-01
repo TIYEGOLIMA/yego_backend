@@ -19,7 +19,7 @@ import jakarta.validation.constraints.Size;
 public class RegisterDto {
     
     @NotBlank(message = "El nombre de usuario es obligatorio")
-    @Size(min = 3, message = "El nombre de usuario debe tener al menos 3 caracteres")
+    @Size(min = 2, message = "El nombre de usuario debe tener al menos 2 caracteres")
     private String username;
     
     @NotBlank(message = "La contraseña es obligatoria")

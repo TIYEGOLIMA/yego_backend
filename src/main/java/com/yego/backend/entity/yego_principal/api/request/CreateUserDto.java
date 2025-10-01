@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class CreateUserDto {
     @NotBlank(message = "El nombre de usuario es obligatorio")
-    @Size(min = 3, max = 255, message = "El nombre de usuario debe tener entre 3 y 255 caracteres")
+    @Size(min = 2, max = 255, message = "El nombre de usuario debe tener entre 2 y 255 caracteres")
     private String username;
 
     @NotBlank(message = "El email es obligatorio")

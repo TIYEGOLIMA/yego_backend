@@ -18,7 +18,7 @@ import java.util.List;
  * Controlador REST para la gestión de tickets del sistema YEGO Ticketerera
  */
 @RestController
-@RequestMapping("/api/ticketerera/tickets")
+@RequestMapping("/api/ticketera/tickets")
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = "*")
@@ -27,35 +27,35 @@ public class TicketController {
     private final TicketService ticketService;
     
     @PostMapping("/create")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('PRINCIPAL')")
     public ResponseEntity<Ticket> crearTicket(@Valid @RequestBody CrearTicketRequest request) {
         Ticket nuevoTicket = ticketService.crearTicket(request);
         return ResponseEntity.ok(nuevoTicket);
     }
     
     @GetMapping("/all")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV')" )
     public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTickets() {
         List<TicketWithCategoryResponse> tickets = ticketService.obtenerTodosLosTicketsConCategorias();
         return ResponseEntity.ok(tickets);
     }
     
     @GetMapping("/waiting")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsEnEspera() {
         List<TicketWithCategoryResponse> tickets = ticketService.obtenerTicketsEnEsperaConCategorias();
         return ResponseEntity.ok(tickets);
     }
     
     @GetMapping("/called")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsLlamados() {
         List<TicketWithCategoryResponse> tickets = ticketService.obtenerTicketsLlamadosConCategorias();
         return ResponseEntity.ok(tickets);
     }
     
     @GetMapping("/in-progress")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsEnProgreso() {
         List<TicketWithCategoryResponse> tickets = ticketService.obtenerTicketsEnProgresoConCategorias();
         return ResponseEntity.ok(tickets);
@@ -70,8 +70,12 @@ public class TicketController {
     
     @PostMapping("/{ticketId}/call/{agentId}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
-    public ResponseEntity<Ticket> llamarTicket(@PathVariable Long ticketId, @PathVariable Long agentId) {
-        Ticket ticket = ticketService.llamarTicket(ticketId, agentId);
+    public ResponseEntity<Ticket> llamarTicket(
+            @PathVariable Long ticketId, 
+            @PathVariable Long agentId,
+            @RequestParam Long moduleId) {
+        log.info("Llamando ticket con ID: {} por agente: {} para módulo: {}", ticketId, agentId, moduleId);
+        Ticket ticket = ticketService.llamarTicket(ticketId, agentId, moduleId);
         return ResponseEntity.ok(ticket);
     }
     

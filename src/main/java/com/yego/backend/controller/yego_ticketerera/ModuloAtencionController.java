@@ -15,7 +15,7 @@ import java.util.List;
  * Controlador REST para la gestión de módulos de atención del sistema YEGO Ticketerera
  */
 @RestController
-@RequestMapping("/api/ticketerera/modulo-atencion")
+@RequestMapping("/api/ticketera/modulo-atencion")
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = "*")
@@ -24,23 +24,25 @@ public class ModuloAtencionController {
     private final ModuloAtencionService moduloAtencionService;
     
     @GetMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<List<ModuloAtencion>> obtenerTodosLosModulos() {
         List<ModuloAtencion> modules = moduloAtencionService.obtenerTodosLosModulos();
         return ResponseEntity.ok(modules);
     }
     
     @GetMapping("/activos")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<List<ModuloAtencion>> obtenerModulosActivos() {
         List<ModuloAtencion> modules = moduloAtencionService.obtenerTodosLosModulosActivos();
         return ResponseEntity.ok(modules);
     }
 
     @GetMapping("/frontend")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<List<ModuloAtencionResponse>> obtenerModulosParaFrontend() {
+        log.info("🎯 [ModuloAtencionController] Endpoint /frontend llamado correctamente");
         List<ModuloAtencionResponse> responses = moduloAtencionService.obtenerModulosParaFrontend();
+        log.info("✅ [ModuloAtencionController] Devolviendo {} módulos", responses.size());
         return ResponseEntity.ok(responses);
     }
     

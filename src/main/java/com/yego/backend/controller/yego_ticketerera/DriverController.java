@@ -13,7 +13,7 @@ import java.util.Map;
  * Controlador REST para la gestión de conductores del sistema YEGO Ticketerera
  */
 @RestController
-@RequestMapping("/api/ticketerera")
+@RequestMapping("/api/ticketera")
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = "*")
@@ -22,7 +22,7 @@ public class DriverController {
     private final DriverConsultaService driverConsultaService;
     
     @GetMapping("/buscar/telefono/{phoneDigits}")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<Map<String, Object>> buscarPorTelefonoFrontend(@PathVariable String phoneDigits) {
         return driverConsultaService.buscarConductorConRespuestaCompleta(phoneDigits);
     }

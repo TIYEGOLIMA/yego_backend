@@ -18,7 +18,7 @@ import java.util.Map;
  * Controlador REST para la gestión de agentes en cola del sistema YEGO Ticketerera
  */
 @RestController
-@RequestMapping("/api/ticketerera/queue-agents")
+@RequestMapping("/api/ticketera/queue-agents")
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = "*")
@@ -27,7 +27,7 @@ public class QueueAgentController {
     private final QueueAgentService queueAgentService;
     
     @PostMapping("/asignar")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<QueueAgent> asignarModuloAUsuario(
             @RequestBody Map<String, Object> request,
             Authentication authentication) {
@@ -35,7 +35,7 @@ public class QueueAgentController {
     }
     
     @PostMapping("/liberar")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<Void> liberarModuloDeUsuario(
             @RequestBody Map<String, Object> request,
             Authentication authentication) {
@@ -43,28 +43,28 @@ public class QueueAgentController {
     }
     
     @GetMapping("/activos")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<List<QueueAgent>> obtenerAgentesActivos() {
         List<QueueAgent> agentes = queueAgentService.obtenerAgentesActivos();
         return ResponseEntity.ok(agentes);
     }
     
     @GetMapping("/user/{userId}/status")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<UserModuleStatusResponse> verificarEstadoModuloUsuario(@PathVariable Long userId) {
         UserModuleStatusResponse status = queueAgentService.verificarEstadoModuloUsuario(userId);
         return ResponseEntity.ok(status);
     }
     
     @PostMapping("/user/{userId}/restore")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<RecuperarModuloResponse> restaurarModuloUsuario(@PathVariable Long userId) {
         RecuperarModuloResponse response = queueAgentService.restaurarModuloUsuario(userId);
         return ResponseEntity.ok(response);
     }
     
     @GetMapping("/jwt-verify")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<Map<String, Object>> verificarJWT(Authentication authentication) {
         return queueAgentService.verificarJWT(authentication);
     }

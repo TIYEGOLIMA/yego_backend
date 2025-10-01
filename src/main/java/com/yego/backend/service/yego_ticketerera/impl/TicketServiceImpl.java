@@ -9,6 +9,9 @@ import com.yego.backend.entity.yego_ticketerera.api.response.TicketWithCategoryR
 import com.yego.backend.repository.yego_ticketerera.TicketRepository;
 import com.yego.backend.repository.yego_ticketerera.OptionRepository;
 import com.yego.backend.service.yego_ticketerera.TicketService;
+import com.yego.backend.service.yego_ticketerera.QueueTicketHistoryService;
+import com.yego.backend.service.yego_ticketerera.QueueAgentService;
+import com.yego.backend.service.WebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,9 +30,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 @Slf4j
 public class TicketServiceImpl implements TicketService {
-    
+
     private final TicketRepository ticketRepository;
     private final OptionRepository optionRepository;
+    private final WebSocketService webSocketService;
+    private final QueueTicketHistoryService queueTicketHistoryService;
+    private final QueueAgentService queueAgentService;
     
     // Cache para estadísticas
     private final ConcurrentHashMap<TicketStatus, Long> statsCache = new ConcurrentHashMap<>();
@@ -59,6 +65,9 @@ public class TicketServiceImpl implements TicketService {
         Ticket savedTicket = ticketRepository.save(ticket);
         log.info("Ticket creado: {} (sin asignar agente aún)", savedTicket.getTicketNumber());
         
+        // Enviar notificación WebSocket
+        webSocketService.enviarNuevoTicket(savedTicket);
+        
         // Limpiar caches relacionados
         limpiarCaches();
         
@@ -79,15 +88,38 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     @Transactional
-    public Ticket llamarTicket(Long ticketId, Long agentId) {
+    public Ticket llamarTicket(Long ticketId, Long agentId, Long moduleId) {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new RuntimeException("Ticket no encontrado"));
         
+        // Guardar estado anterior
+        TicketStatus estadoAnterior = ticket.getStatus();
+        
         ticket.setStatus(TicketStatus.CALLED);
+        ticket.setModuleId(moduleId); // Asignar módulo al llamar
         ticket.setCalledAt(LocalDateTime.now());
         
         Ticket updatedTicket = ticketRepository.save(ticket);
-        log.info("Ticket llamado: {} por agente: {}", updatedTicket.getTicketNumber(), agentId);
+        log.info("Ticket llamado: {} por agente: {} para módulo: {}", updatedTicket.getTicketNumber(), agentId, moduleId);
+        
+        // Registrar en historial
+        try {
+            Optional<Long> queueAgentIdOpt = queueAgentService.obtenerQueueAgentIdPorUsuario(agentId);
+            Long queueAgentId = queueAgentIdOpt.orElse(null);
+            
+            queueTicketHistoryService.registrarCambioEstado(
+                ticketId,
+                queueAgentId,
+                estadoAnterior.name(),
+                "CALLED",
+                "Ticket llamado por el agente"
+            );
+        } catch (Exception e) {
+            log.error("Error registrando historial para ticket llamado {}: {}", ticketId, e.getMessage());
+        }
+        
+        // Enviar notificación WebSocket
+        webSocketService.enviarTicketLlamado(convertirTicketConCategorias(updatedTicket));
         
         return updatedTicket;
     }
@@ -104,11 +136,38 @@ public class TicketServiceImpl implements TicketService {
             throw new IllegalStateException("Solo se pueden completar tickets que estén en proceso");
         }
         
+        // Guardar estado anterior
+        TicketStatus estadoAnterior = ticket.getStatus();
+        
         ticket.setStatus(TicketStatus.COMPLETED);
         ticket.setCompletedAt(LocalDateTime.now());
         
         Ticket ticketGuardado = ticketRepository.save(ticket);
         log.info("Ticket {} completado exitosamente", ticketId);
+
+         // Preparar notas (si están vacías, usar mensaje por defecto)
+         String notas = (request.getNotes() != null && !request.getNotes().trim().isEmpty()) 
+         ? request.getNotes().trim()
+         : "Ticket completado sin notas adicionales";
+        
+        // Registrar en historial
+        try {
+            Optional<Long> queueAgentIdOpt = queueAgentService.obtenerQueueAgentIdPorUsuario(request.getAgentId());
+            Long queueAgentId = queueAgentIdOpt.orElse(null);
+            
+            queueTicketHistoryService.registrarCambioEstado(
+                ticketId,
+                queueAgentId,
+                estadoAnterior.name(),
+                "COMPLETED",
+                notas
+            );
+        } catch (Exception e) {
+            log.error("Error registrando historial para ticket completado {}: {}", ticketId, e.getMessage());
+        }
+        
+        // Enviar notificación WebSocket
+        webSocketService.enviarTicketCompletado(convertirTicketConCategorias(ticketGuardado));
         
         return ticketGuardado;
     }
@@ -133,10 +192,32 @@ public class TicketServiceImpl implements TicketService {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new RuntimeException("Ticket no encontrado"));
         
+        // Guardar estado anterior
+        TicketStatus estadoAnterior = ticket.getStatus();
+        
         ticket.setStatus(TicketStatus.IN_PROGRESS);
         
         Ticket updatedTicket = ticketRepository.save(ticket);
         log.info("Atención iniciada para ticket: {} por agente: {}", updatedTicket.getTicketNumber(), agentId);
+        
+        // Registrar en historial
+        try {
+            Optional<Long> queueAgentIdOpt = queueAgentService.obtenerQueueAgentIdPorUsuario(agentId);
+            Long queueAgentId = queueAgentIdOpt.orElse(null);
+            
+            queueTicketHistoryService.registrarCambioEstado(
+                ticketId,
+                queueAgentId,
+                estadoAnterior.name(),
+                "IN_PROGRESS",
+                "Atención iniciada por el agente"
+            );
+        } catch (Exception e) {
+            log.error("Error registrando historial para ticket en progreso {}: {}", ticketId, e.getMessage());
+        }
+        
+        // Enviar notificación WebSocket
+        webSocketService.enviarTicketIniciado(convertirTicketConCategorias(updatedTicket));
         
         return updatedTicket;
     }
@@ -312,12 +393,14 @@ public class TicketServiceImpl implements TicketService {
             // Obtener el siguiente número consecutivo para este módulo (máximo 9)
             long consecutivo = (ticketRepository.countByModuleId(moduleId) % 9) + 1;
             
-            // Generar 3 dígitos aleatorios
-            java.util.Random random = new java.util.Random();
-            int aleatorios = random.nextInt(1000); // 0-999
+            // Obtener la hora actual (hora, minutos, segundos)
+            LocalDateTime now = LocalDateTime.now();
+            int hora = now.getHour();
+            int minutos = now.getMinute();
+            int segundos = now.getSecond();
             
-            // Formato: M + módulo(1 dígito) + consecutivo(1 dígito) + aleatorios(3 dígitos)
-            ticketNumber = String.format("M%d%d%03d", moduleId, consecutivo, aleatorios);
+            // Formato: M + módulo(1 dígito) + consecutivo(1 dígito) + hora(2 dígitos) + minutos(2 dígitos) + segundos(2 dígitos)
+            ticketNumber = String.format("M%d%d%02d%02d%02d", moduleId, consecutivo, hora, minutos, segundos);
             
             intentos++;
             

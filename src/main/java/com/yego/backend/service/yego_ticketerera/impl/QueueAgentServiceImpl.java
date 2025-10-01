@@ -8,6 +8,7 @@ import com.yego.backend.repository.yego_ticketerera.QueueAgentRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_ticketerera.QueueAgentService;
 import com.yego.backend.service.yego_ticketerera.ModuloAtencionService;
+import com.yego.backend.service.WebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -28,6 +30,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
     private final QueueAgentRepository queueAgentRepository;
     private final ModuloAtencionService moduloAtencionService;
     private final UserRepository userRepository;
+    private final WebSocketService webSocketService;
     
     @Override
     @Transactional
@@ -66,6 +69,13 @@ public class QueueAgentServiceImpl implements QueueAgentService {
         }
         
         QueueAgent savedAgent = queueAgentRepository.save(queueAgent);
+        
+        // Enviar notificación WebSocket
+        webSocketService.sendTicketeraEvent("module_assigned", Map.of(
+            "userId", userId,
+            "moduleId", moduleId,
+            "status", "OCUPADO"
+        ));
         
         try {
             moduloAtencionService.cambiarEstadoModulo(moduleId, false);
@@ -340,12 +350,15 @@ public class QueueAgentServiceImpl implements QueueAgentService {
                 return org.springframework.http.ResponseEntity.status(401).build();
             }
             
-            String username = authentication.getName();
+            String userIdString = authentication.getName();
             String role = authentication.getAuthorities().iterator().next().getAuthority().replace("ROLE_", "");
             
-            Long requestingUserId = obtenerUserIdPorUsername(username);
-            if (requestingUserId == null) {
-                log.warn("❌ [QueueAgent] Usuario {} no encontrado", username);
+            Long requestingUserId;
+            try {
+                requestingUserId = Long.parseLong(userIdString);
+                log.debug("✅ [QueueAgent] Usuario autenticado con ID: {}", requestingUserId);
+            } catch (NumberFormatException e) {
+                log.warn("❌ [QueueAgent] ID de usuario inválido: {}", userIdString);
                 return org.springframework.http.ResponseEntity.status(401).build();
             }
             
@@ -360,7 +373,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
             // Verificar permisos
             if (!puedeAsignarModulo(requestingUserId, targetUserId, role)) {
                 log.warn("❌ [QueueAgent] Usuario {} ({}) no tiene permisos para asignar módulo a usuario {}", 
-                        username, role, targetUserId);
+                        requestingUserId, role, targetUserId);
                 return org.springframework.http.ResponseEntity.status(403).build();
             }
             
@@ -383,12 +396,15 @@ public class QueueAgentServiceImpl implements QueueAgentService {
                 return org.springframework.http.ResponseEntity.status(401).build();
             }
             
-            String username = authentication.getName();
+            String userIdString = authentication.getName();
             String role = authentication.getAuthorities().iterator().next().getAuthority().replace("ROLE_", "");
             
-            Long requestingUserId = obtenerUserIdPorUsername(username);
-            if (requestingUserId == null) {
-                log.warn("❌ [QueueAgent] Usuario {} no encontrado", username);
+            Long requestingUserId;
+            try {
+                requestingUserId = Long.parseLong(userIdString);
+                log.debug("✅ [QueueAgent] Usuario autenticado con ID: {}", requestingUserId);
+            } catch (NumberFormatException e) {
+                log.warn("❌ [QueueAgent] ID de usuario inválido: {}", userIdString);
                 return org.springframework.http.ResponseEntity.status(401).build();
             }
             
@@ -402,7 +418,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
             // Verificar permisos
             if (!puedeLiberarModulo(requestingUserId, targetUserId, role)) {
                 log.warn("❌ [QueueAgent] Usuario {} ({}) no tiene permisos para liberar módulo de usuario {}", 
-                        username, role, targetUserId);
+                        requestingUserId, role, targetUserId);
                 return org.springframework.http.ResponseEntity.status(403).build();
             }
             
@@ -445,16 +461,22 @@ public class QueueAgentServiceImpl implements QueueAgentService {
                     .body(java.util.Map.of("error", "Token inválido o expirado"));
         }
         
-        String username = authentication.getName();
+        String userIdString = authentication.getName();
         String role = authentication.getAuthorities().iterator().next().getAuthority().replace("ROLE_", "");
         
-        Long userId = obtenerUserIdPorUsername(username);
+        Long userId;
+        try {
+            userId = Long.parseLong(userIdString);
+            log.debug("✅ [QueueAgent] Usuario autenticado con ID: {}", userId);
+        } catch (NumberFormatException e) {
+            log.warn("❌ [QueueAgent] ID de usuario inválido: {}", userIdString);
+            return org.springframework.http.ResponseEntity.status(401).build();
+        }
         
         return org.springframework.http.ResponseEntity.ok(java.util.Map.of(
                 "valid", true,
-                "username", username,
-                "role", role,
-                "userId", userId != null ? userId : "unknown"
+                "userId", userId,
+                "role", role
         ));
     }
     

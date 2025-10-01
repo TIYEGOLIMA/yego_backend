@@ -1,7 +1,6 @@
 package com.yego.backend.service.yego_ticketerera.impl;
 
 import com.yego.backend.entity.yego_ticketerera.entities.QueueTicketHistory;
-import com.yego.backend.entity.yego_ticketerera.entities.Ticket;
 import com.yego.backend.repository.yego_ticketerera.QueueTicketHistoryRepository;
 import com.yego.backend.service.yego_ticketerera.QueueTicketHistoryService;
 import lombok.RequiredArgsConstructor;
@@ -12,58 +11,53 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 /**
- * Implementación del servicio de QueueTicketHistory del sistema YEGO Ticketerera
+ * Implementación del servicio de historial de tickets del sistema YEGO Ticketerera
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class QueueTicketHistoryServiceImpl implements QueueTicketHistoryService {
     
     private final QueueTicketHistoryRepository queueTicketHistoryRepository;
     
     @Override
     @Transactional
-    public QueueTicketHistory registrarCambioEstado(Long ticketId, Long agentId, 
-                                                   String estadoAnterior, String nuevoEstado, 
-                                                   String notas) {
-        log.info("Registrando cambio de estado para ticket {}: {} -> {}", 
-                ticketId, estadoAnterior, nuevoEstado);
+    public QueueTicketHistory registrarCambioEstado(
+            Long ticketId,
+            Long agentId,
+            String previousStatus,
+            String newStatus,
+            String notes) {
         
-        QueueTicketHistory historial = QueueTicketHistory.builder()
+        log.info("📝 Registrando cambio de estado para ticket {}: {} -> {}", 
+                 ticketId, previousStatus, newStatus);
+        
+        QueueTicketHistory history = QueueTicketHistory.builder()
                 .ticketId(ticketId)
                 .agentId(agentId)
-                .previousStatus(estadoAnterior)
-                .newStatus(nuevoEstado)
-                .notes(notas)
+                .previousStatus(previousStatus)
+                .newStatus(newStatus)
+                .notes(notes)
                 .build();
+        // No es necesario setear createdAt porque @PrePersist lo hace automáticamente
         
-        QueueTicketHistory saved = queueTicketHistoryRepository.save(historial);
-        log.info("Historial registrado con ID: {}", saved.getId());
+        QueueTicketHistory savedHistory = queueTicketHistoryRepository.save(history);
+        log.info("✅ Historial registrado con ID: {}", savedHistory.getId());
         
-        return saved;
+        return savedHistory;
     }
     
     @Override
-    @Transactional
-    public QueueTicketHistory registrarTicketCompletado(Ticket ticket, Long agentId, String notas) {
-        return registrarCambioEstado(
-            ticket.getId(),
-            agentId,
-            ticket.getStatus().name(),
-            "COMPLETED",
-            notas
-        );
-    }
-    
-    @Override
+    @Transactional(readOnly = true)
     public List<QueueTicketHistory> obtenerHistorialPorTicket(Long ticketId) {
-        log.info("Obteniendo historial para ticket: {}", ticketId);
+        log.debug("Obteniendo historial para ticket: {}", ticketId);
         return queueTicketHistoryRepository.findByTicketIdOrderByCreatedAtDesc(ticketId);
     }
     
     @Override
+    @Transactional(readOnly = true)
     public List<QueueTicketHistory> obtenerHistorialPorAgente(Long agentId) {
-        log.info("Obteniendo historial para agente: {}", agentId);
+        log.debug("Obteniendo historial para agente: {}", agentId);
         return queueTicketHistoryRepository.findByAgentIdOrderByCreatedAtDesc(agentId);
     }
 }

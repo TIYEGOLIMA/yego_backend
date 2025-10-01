@@ -1,7 +1,9 @@
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\config\JwtAuthenticationEntryPoint.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\config\JwtRequestFilter.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\config\SecurityConfig.java
+C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\config\WebSocketAuthInterceptor.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\config\WebSocketConfig.java
+C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\controller\WebSocketController.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\controller\yego_principal\AuditController.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\controller\yego_principal\AuthController.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\controller\yego_principal\ConfigurationController.java
@@ -71,6 +73,7 @@ C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\entity\yego_
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\entity\yego_principal\entities\Role.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\entity\yego_principal\entities\Session.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\entity\yego_principal\entities\User.java
+C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\entity\yego_ticketerera\api\request\AsignarModuloRequest.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\entity\yego_ticketerera\api\request\CompletarTicketRequest.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\entity\yego_ticketerera\api\request\CrearRatingRequest.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\entity\yego_ticketerera\api\request\CrearTicketRequest.java
@@ -104,6 +107,7 @@ C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\repository\y
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\repository\yego_ticketerera\QueueRatingRepository.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\repository\yego_ticketerera\QueueTicketHistoryRepository.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\repository\yego_ticketerera\TicketRepository.java
+C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\service\WebSocketService.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\service\yego_principal\AuditService.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\service\yego_principal\AuthService.java
 C:\Users\Giomar\Desktop\yego_backend\src\main\java\com\yego\backend\service\yego_principal\ConfigurationService.java

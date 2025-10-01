@@ -56,12 +56,15 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         // JWT Token está en la forma "Bearer token". Remover la palabra Bearer y obtener solo el token
         if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
             jwtToken = requestTokenHeader.substring(7);
+            log.info("🔑 [JwtRequestFilter] Token JWT recibido para: {}", request.getRequestURI());
             try {
                 Claims claims = getJwtParser()
                         .parseClaimsJws(jwtToken)
                         .getBody();
                 
                 username = claims.get("username", String.class);
+                String role = claims.get("role", String.class);
+                log.info("✅ [JwtRequestFilter] Usuario autenticado: {} con rol: {}", username, role);
                 
                 // Almacenar claims en el request para uso posterior
                 request.setAttribute("jwtClaims", claims);
@@ -70,7 +73,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 log.warn("No se pudo obtener el username del token JWT: {}", e.getMessage());
             }
         } else {
-            log.debug("JWT Token no comienza con Bearer String");
+            log.warn("⚠️ [JwtRequestFilter] No se recibió token Bearer para: {}", request.getRequestURI());
         }
         
         // Una vez que obtenemos el token, validamos
@@ -81,11 +84,31 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             // Si el token es válido, configurar Spring Security para establecer manualmente la autenticación
             if (validateToken(jwtToken, userDetails)) {
                 
+                // Obtener userId del token para usarlo como nombre de autenticación
+                String userId = null;
+                try {
+                    // Decodificar el token directamente sin usar authService para evitar dependencias circulares
+                    SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
+                    io.jsonwebtoken.Claims tokenClaims = Jwts.parser()
+                            .verifyWith(key)
+                            .build()
+                            .parseSignedClaims(jwtToken)
+                            .getPayload();
+                    // El userId viene como Integer en el token, lo convertimos a String
+                    Integer userIdInt = tokenClaims.get("userId", Integer.class);
+                    userId = userIdInt != null ? userIdInt.toString() : null;
+                } catch (Exception e) {
+                    log.warn("No se pudo obtener userId del token: {}", e.getMessage());
+                    userId = username; // Fallback al username si no se puede obtener userId
+                }
+                
                 UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = 
                         new UsernamePasswordAuthenticationToken(
-                                userDetails, null, userDetails.getAuthorities());
+                                userId, null, userDetails.getAuthorities());
                 usernamePasswordAuthenticationToken
                         .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                
+                log.info("🔐 [JwtRequestFilter] Authorities asignadas: {}", userDetails.getAuthorities());
                 
                 // Después de establecer la autenticación en el contexto, especificamos
                 // que el usuario actual está autenticado. Así pasa los filtros de Spring Security.
