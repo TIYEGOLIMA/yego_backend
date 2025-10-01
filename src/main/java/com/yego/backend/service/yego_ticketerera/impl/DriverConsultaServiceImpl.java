@@ -4,11 +4,15 @@ import com.yego.backend.service.yego_ticketerera.DriverConsultaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.sql.Date;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -165,6 +169,7 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
         }
     }
 
+
     @Override
     public Map<String, Object> registrarNuevoConductor(String firstName, String lastName, String phone) {
         log.info("🆕 [DriverConsultaService] Registrando nuevo conductor");
@@ -183,9 +188,10 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
             }
             
             // Generar driver_id aleatorio de 32 caracteres
-            String driverId = java.util.UUID.randomUUID().toString().replace("-", "");
+            String driverId = UUID.randomUUID().toString().replace("-", "");
             String fullName = firstName + " " + lastName;
-            String hireDate = java.time.LocalDate.now().toString(); // yyyy-mm-dd
+            LocalDate hireDateLocal = LocalDate.now();
+            Date hireDate = Date.valueOf(hireDateLocal); // Convertir a java.sql.Date para PostgreSQL
             
             log.info("🆔 [DriverConsultaService] Driver ID generado: '{}'", driverId);
             log.info("👥 [DriverConsultaService] Nombre completo: '{}'", fullName);
@@ -213,7 +219,7 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
                 "first_name", firstName,
                 "last_name", lastName,
                 "work_status", "working",
-                "hire_date", hireDate
+                "hire_date", hireDate.toString() // Convertir a String para el frontend
             );
             
             log.info("📋 [DriverConsultaService] Datos del nuevo conductor: {}", nuevoConductor);
@@ -236,20 +242,20 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
     // Métodos simplificados para el controlador (sin lógica de negocio en el controlador)
     
     @Override
-    public org.springframework.http.ResponseEntity<Map<String, Object>> buscarConductorConRespuestaCompleta(String phoneDigits) {
+    public ResponseEntity<Map<String, Object>> buscarConductorConRespuestaCompleta(String phoneDigits) {
         log.info("🔒 [DriverController] Procesando: '{}'", phoneDigits);
         
         Optional<Map<String, Object>> conductor = buscarPorTelefono(phoneDigits);
         
         if (conductor.isPresent()) {
             log.info("✅ [DriverController] Encontrado: {}", conductor.get().get("full_name"));
-            return org.springframework.http.ResponseEntity.ok(conductor.get());
+            return ResponseEntity.ok(conductor.get());
         } else {
             log.warn("❌ [DriverController] No encontrado: '{}'", phoneDigits);
             
             // Validar formato antes de sugerir registro por DNI
             if (phoneDigits.matches("^\\+519\\d{8}$") && phoneDigits.length() == 12) {
-                return org.springframework.http.ResponseEntity.status(404).body(Map.of(
+                return ResponseEntity.status(404).body(Map.of(
                     "found", false,
                     "message", "Conductor no encontrado. Use el endpoint /api/ticketerera/drivers/registrar-dni",
                     "phone", phoneDigits,
@@ -257,7 +263,7 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
                     "registerEndpoint", "/api/ticketerera/drivers/registrar-dni"
                 ));
             } else {
-                return org.springframework.http.ResponseEntity.badRequest().body(Map.of(
+                return ResponseEntity.badRequest().body(Map.of(
                     "found", false,
                     "error", "Formato inválido: debe ser +51 seguido de 9 dígitos empezando con 9",
                     "phone", phoneDigits,
@@ -268,7 +274,7 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
     }
     
     @Override
-    public org.springframework.http.ResponseEntity<Map<String, Object>> registrarConductorManualConRespuesta(Map<String, String> datos) {
+    public ResponseEntity<Map<String, Object>> registrarConductorManualConRespuesta(Map<String, String> datos) {
         log.info("🆕 [DriverController] Registrando conductor manualmente");
         log.info("📋 [DriverController] Datos recibidos: {}", datos);
         
@@ -281,15 +287,15 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
         try {
             Map<String, Object> nuevoConductor = registrarNuevoConductor(firstName, lastName, phone);
             log.info("✅ [DriverController] Conductor registrado exitosamente (manual)");
-            return org.springframework.http.ResponseEntity.ok(nuevoConductor);
+            return ResponseEntity.ok(nuevoConductor);
         } catch (Exception e) {
             log.error("❌ [DriverController] Error registrando conductor manual: {}", e.getMessage());
-            return org.springframework.http.ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
     
     @Override
-    public org.springframework.http.ResponseEntity<Map<String, Object>> registrarConductorPorDniConRespuesta(Map<String, String> datos) {
+    public ResponseEntity<Map<String, Object>> registrarConductorPorDniConRespuesta(Map<String, String> datos) {
         log.info("🆔 [DriverController] Registrando conductor por DNI");
         log.info("📋 [DriverController] Datos recibidos: {}", datos);
         
@@ -301,17 +307,17 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
         try {
             Map<String, Object> nuevoConductor = consultarYRegistrarPorDni(dni, phone);
             log.info("✅ [DriverController] Conductor registrado exitosamente desde DNI");
-            return org.springframework.http.ResponseEntity.ok(nuevoConductor);
+            return ResponseEntity.ok(nuevoConductor);
         } catch (Exception e) {
             log.error("❌ [DriverController] Error registrando conductor por DNI: {}", e.getMessage());
-            return org.springframework.http.ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
     
     @Override
-    public org.springframework.http.ResponseEntity<Map<String, Object>> limpiarCacheConRespuesta() {
+    public ResponseEntity<Map<String, Object>> limpiarCacheConRespuesta() {
         log.info("🧹 [DriverController] Limpiando cache de conductores");
         limpiarCache();
-        return org.springframework.http.ResponseEntity.ok(Map.of("message", "Cache limpiado correctamente"));
+        return ResponseEntity.ok(Map.of("message", "Cache limpiado correctamente"));
     }
 }

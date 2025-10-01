@@ -28,13 +28,13 @@ public class DriverController {
     }
     
     @PostMapping("/drivers/registrar")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('PRINCIPAL')")
     public ResponseEntity<Map<String, Object>> registrarConductorManual(@RequestBody Map<String, String> datos) {
         return driverConsultaService.registrarConductorManualConRespuesta(datos);
     }
     
     @PostMapping("/drivers/registrar-dni")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or  hasRole('PRINCIPAL')")
     public ResponseEntity<Map<String, Object>> registrarConductorPorDni(@RequestBody Map<String, String> datos) {
         return driverConsultaService.registrarConductorPorDniConRespuesta(datos);
     }

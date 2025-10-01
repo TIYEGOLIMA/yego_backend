@@ -16,7 +16,7 @@ import java.util.List;
  * Controlador REST para la gestión de calificaciones del sistema YEGO Ticketerera
  */
 @RestController
-@RequestMapping("/api/ticketerera/ratings")
+@RequestMapping("/api/ticketera/ratings")
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = "*")
@@ -25,7 +25,7 @@ public class QueueRatingController {
     private final QueueRatingService queueRatingService;
     
     @PostMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TABLET1')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TABLET1') or hasRole('TABLET2')")
     public ResponseEntity<QueueRating> crearRating(@Valid @RequestBody CrearRatingRequest request) {
         QueueRating rating = queueRatingService.crearRating(request);
         return ResponseEntity.ok(rating);

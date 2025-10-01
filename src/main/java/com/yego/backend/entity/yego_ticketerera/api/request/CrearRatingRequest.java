@@ -5,6 +5,8 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Max;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 /**
  * DTO de request para crear una calificación en el sistema YEGO Ticketerera
  */
@@ -20,4 +22,6 @@ public class CrearRatingRequest {
     private Integer score;
     
     private String comment;
+    
+    private LocalDateTime timestamp; // Timestamp del frontend
 }
