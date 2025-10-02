@@ -46,6 +46,7 @@ app:
     cors:
       origin-dev: ${CORS_ORIGIN_DEV:http://localhost:5173}
       origin-prod: ${CORS_ORIGIN_PROD:https://integral.yego.pro}
+      origin-api: ${CORS_ORIGIN_API:https://api-int.yego.pro}
   
   # API Externa para DNI (producción)
   factiliza:
