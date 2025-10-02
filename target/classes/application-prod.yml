@@ -42,10 +42,10 @@ jwt:
 # Configuración de la aplicación para producción
 app:
   frontend:
-    url: ${FRONTEND_URL:https://yego-integral.netlify.app}
+    url: ${FRONTEND_URL:https://integral.yego.pro}
     cors:
       origin-dev: ${CORS_ORIGIN_DEV:http://localhost:5173}
-      origin-prod: ${CORS_ORIGIN_PROD:https://yego-integral.netlify.app}
+      origin-prod: ${CORS_ORIGIN_PROD:https://integral.yego.pro}
   
   # API Externa para DNI (producción)
   factiliza:
