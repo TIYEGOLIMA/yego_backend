@@ -10,6 +10,9 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+target/
+*.jar
+
 # Logs
 logs
 *.log
