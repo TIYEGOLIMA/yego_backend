@@ -69,4 +69,17 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     // Buscar el próximo ticket disponible (sin agente asignado)
     @Query("SELECT t FROM Ticket t WHERE t.agentId IS NULL AND t.status = :status ORDER BY t.createdAt ASC")
     Optional<Ticket> findFirstAvailableTicket(@Param("status") TicketStatus status);
+    
+    // Buscar tickets por agente (para estadísticas de SAC)
+    List<Ticket> findByAgentId(Long agentId);
+    
+    // Buscar tickets por estado específico
+    List<Ticket> findByStatus(TicketStatus status);
+    
+    // Contar tickets por agente
+    long countByAgentId(Long agentId);
+    
+    // Contar tickets completados por agente
+    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.agentId = :agentId AND t.status = 'COMPLETED'")
+    long countCompletedTicketsByAgentId(@Param("agentId") Long agentId);
 }

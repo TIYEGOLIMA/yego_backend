@@ -24,21 +24,21 @@ public class ModuloAtencionController {
     private final ModuloAtencionService moduloAtencionService;
     
     @GetMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('SAC') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<List<ModuloAtencion>> obtenerTodosLosModulos() {
         List<ModuloAtencion> modules = moduloAtencionService.obtenerTodosLosModulos();
         return ResponseEntity.ok(modules);
     }
     
     @GetMapping("/activos")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('SAC') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<List<ModuloAtencion>> obtenerModulosActivos() {
         List<ModuloAtencion> modules = moduloAtencionService.obtenerTodosLosModulosActivos();
         return ResponseEntity.ok(modules);
     }
 
     @GetMapping("/frontend")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('SAC') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
     public ResponseEntity<List<ModuloAtencionResponse>> obtenerModulosParaFrontend() {
         log.info("🎯 [ModuloAtencionController] Endpoint /frontend llamado correctamente");
         List<ModuloAtencionResponse> responses = moduloAtencionService.obtenerModulosParaFrontend();
@@ -47,7 +47,7 @@ public class ModuloAtencionController {
     }
     
     @PutMapping("/{moduleId}/estado/{activo}")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('SAC')")
     public ResponseEntity<Void> cambiarEstadoModulo(@PathVariable Long moduleId, @PathVariable boolean activo) {
         moduloAtencionService.cambiarEstadoModulo(moduleId, activo);
         return ResponseEntity.ok().build();

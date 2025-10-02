@@ -100,5 +100,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * Contar usuarios creados después de una fecha
      */
     Long countByCreatedAtAfter(LocalDateTime date);
+    
+    /**
+     * Buscar usuarios por rol
+     */
+    java.util.List<User> findByRole(String role);
 }
 

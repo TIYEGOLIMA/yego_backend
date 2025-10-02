@@ -506,8 +506,8 @@ public class QueueAgentServiceImpl implements QueueAgentService {
             return true;
         }
         
-        // OPERADOR solo puede asignarse a sí mismo
-        if ("OPERADOR".equals(role)) {
+        // OPERADOR y SAC solo pueden asignarse a sí mismos
+        if ("OPERADOR".equals(role) || "SAC".equals(role)) {
             return requestingUserId.equals(targetUserId);
         }
         
@@ -520,8 +520,8 @@ public class QueueAgentServiceImpl implements QueueAgentService {
             return true;
         }
         
-        // OPERADOR solo puede liberarse a sí mismo
-        if ("OPERADOR".equals(role)) {
+        // OPERADOR y SAC solo pueden liberarse a sí mismos
+        if ("OPERADOR".equals(role) || "SAC".equals(role)) {
             return requestingUserId.equals(targetUserId);
         }
         

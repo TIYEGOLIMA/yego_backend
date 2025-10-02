@@ -120,4 +120,5 @@ public class WebSocketService {
         messagingTemplate.convertAndSend("/topic/system", notification);
         log.info("📤 [WebSocket] Sistema: {}", event);
     }
+    
 }
