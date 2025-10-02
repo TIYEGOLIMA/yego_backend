@@ -68,14 +68,14 @@ public class TicketController {
         return ResponseEntity.ok(tickets);
     }
     
-    @PostMapping("/{ticketId}/call/{agentId}")
+    @PostMapping("/{ticketId}/call/{userId}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('SAC')")
     public ResponseEntity<Ticket> llamarTicket(
             @PathVariable Long ticketId, 
-            @PathVariable Long agentId,
+            @PathVariable Long userId,
             @RequestParam Long moduleId) {
-        log.info("Llamando ticket con ID: {} por agente: {} para módulo: {}", ticketId, agentId, moduleId);
-        Ticket ticket = ticketService.llamarTicket(ticketId, agentId, moduleId);
+        log.info("Llamando ticket con ID: {} por usuario: {} para módulo: {}", ticketId, userId, moduleId);
+        Ticket ticket = ticketService.llamarTicket(ticketId, userId, moduleId);
         return ResponseEntity.ok(ticket);
     }
     

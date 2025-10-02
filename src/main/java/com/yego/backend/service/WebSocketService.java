@@ -1,7 +1,10 @@
 package com.yego.backend.service;
 
 import com.yego.backend.entity.yego_ticketerera.entities.Ticket;
+import com.yego.backend.entity.yego_ticketerera.entities.Option;
 import com.yego.backend.entity.yego_ticketerera.api.response.TicketWithCategoryResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.TicketWebSocketResponse;
+import com.yego.backend.repository.yego_ticketerera.OptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -19,14 +22,19 @@ import java.util.Map;
 public class WebSocketService {
     
     private final SimpMessagingTemplate messagingTemplate;
+    private final OptionRepository optionRepository;
     
     /**
      * Enviar nuevo ticket creado
      */
     public void enviarNuevoTicket(Ticket ticket) {
         log.info("📤 Enviando nuevo ticket por WebSocket: {}", ticket.getTicketNumber());
-        messagingTemplate.convertAndSend("/topic/tickets", ticket);
-        messagingTemplate.convertAndSend("/topic/new-ticket", ticket);
+        
+        // Obtener información completa del ticket
+        TicketWebSocketResponse ticketCompleto = obtenerInformacionCompletaTicket(ticket);
+        
+        messagingTemplate.convertAndSend("/topic/tickets", ticketCompleto);
+        messagingTemplate.convertAndSend("/topic/new-ticket", ticketCompleto);
     }
     
     /**
@@ -119,6 +127,86 @@ public class WebSocketService {
         
         messagingTemplate.convertAndSend("/topic/system", notification);
         log.info("📤 [WebSocket] Sistema: {}", event);
+    }
+    
+    // 🚀 MÉTODO: Obtener información completa del ticket
+    private TicketWebSocketResponse obtenerInformacionCompletaTicket(Ticket ticket) {
+        try {
+            // Obtener información de la opción seleccionada
+            String categoryName = "Información del servicio";
+            String categoryDescription = "";
+            String subcategoryName = "";
+            String subcategoryDescription = "";
+            
+            if (ticket.getOptionId() != null) {
+                var option = optionRepository.findById(ticket.getOptionId()).orElse(null);
+                if (option != null) {
+                    if (option.getParentId() != null) {
+                        // Es una subcategoría, obtener la categoría padre
+                        var parentOption = optionRepository.findById(option.getParentId()).orElse(null);
+                        if (parentOption != null) {
+                            categoryName = parentOption.getName();
+                            categoryDescription = parentOption.getDescription() != null ? parentOption.getDescription() : "";
+                            subcategoryName = option.getName();
+                            subcategoryDescription = option.getDescription() != null ? option.getDescription() : "";
+                        } else {
+                            categoryName = option.getName();
+                            categoryDescription = option.getDescription() != null ? option.getDescription() : "";
+                            subcategoryName = "";
+                            subcategoryDescription = "";
+                        }
+                    } else {
+                        // Es una categoría principal
+                        categoryName = option.getName();
+                        categoryDescription = option.getDescription() != null ? option.getDescription() : "";
+                        subcategoryName = "";
+                        subcategoryDescription = "";
+                    }
+                }
+            }
+            
+            // Construir respuesta completa
+            TicketWebSocketResponse response = TicketWebSocketResponse.builder()
+                .id(ticket.getId())
+                .ticketNumber(ticket.getTicketNumber())
+                .status(ticket.getStatus())
+                .createdAt(ticket.getCreatedAt())
+                .priority(ticket.getPriority())
+                .userId(ticket.getUserId())
+                .moduleId(ticket.getModuleId())
+                .licenseNumber(ticket.getLicenseNumber())
+                .optionId(ticket.getOptionId())
+                .categoryName(categoryName)
+                .categoryDescription(categoryDescription)
+                .subcategoryName(subcategoryName)
+                .subcategoryDescription(subcategoryDescription)
+                .driverName("") // Se puede agregar lógica para obtener nombre del conductor si es necesario
+                .build();
+            
+            log.info("✅ Información completa del ticket {} obtenida", ticket.getTicketNumber());
+            return response;
+            
+        } catch (Exception e) {
+            log.error("❌ Error obteniendo información completa del ticket {}: {}", ticket.getTicketNumber(), e.getMessage());
+            
+            // Fallback: respuesta básica
+            return TicketWebSocketResponse.builder()
+                .id(ticket.getId())
+                .ticketNumber(ticket.getTicketNumber())
+                .status(ticket.getStatus())
+                .createdAt(ticket.getCreatedAt())
+                .priority(ticket.getPriority())
+                .userId(ticket.getUserId())
+                .moduleId(ticket.getModuleId())
+                .licenseNumber(ticket.getLicenseNumber())
+                .optionId(ticket.getOptionId())
+                .categoryName("Información del servicio")
+                .categoryDescription("")
+                .subcategoryName("")
+                .subcategoryDescription("")
+                .driverName("")
+                .build();
+        }
     }
     
 }

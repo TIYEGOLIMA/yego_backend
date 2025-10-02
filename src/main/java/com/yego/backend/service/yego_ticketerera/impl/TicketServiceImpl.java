@@ -88,28 +88,30 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     @Transactional
-    public Ticket llamarTicket(Long ticketId, Long agentId, Long moduleId) {
+    public Ticket llamarTicket(Long ticketId, Long userId, Long moduleId) {
         Ticket ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> new RuntimeException("Ticket no encontrado"));
         
         // Guardar estado anterior
         TicketStatus estadoAnterior = ticket.getStatus();
         
+        // Obtener el agentId del userId
+        Optional<Long> queueAgentIdOpt = queueAgentService.obtenerQueueAgentIdPorUsuario(userId);
+        Long agentId = queueAgentIdOpt.orElseThrow(() -> new RuntimeException("No se encontró agentId para el usuario: " + userId));
+        
         ticket.setStatus(TicketStatus.CALLED);
+        ticket.setUserId(userId); // Asignar userId al ticket
         ticket.setModuleId(moduleId); // Asignar módulo al llamar
         ticket.setCalledAt(LocalDateTime.now());
         
         Ticket updatedTicket = ticketRepository.save(ticket);
-        log.info("Ticket llamado: {} por agente: {} para módulo: {}", updatedTicket.getTicketNumber(), agentId, moduleId);
+        log.info("Ticket llamado: {} por usuario: {} (agentId: {}) para módulo: {}", updatedTicket.getTicketNumber(), userId, agentId, moduleId);
         
         // Registrar en historial
         try {
-            Optional<Long> queueAgentIdOpt = queueAgentService.obtenerQueueAgentIdPorUsuario(agentId);
-            Long queueAgentId = queueAgentIdOpt.orElse(null);
-            
             queueTicketHistoryService.registrarCambioEstado(
                 ticketId,
-                queueAgentId,
+                agentId,
                 estadoAnterior.name(),
                 "CALLED",
                 "Ticket llamado por el agente"

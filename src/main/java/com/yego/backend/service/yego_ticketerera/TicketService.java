@@ -20,7 +20,7 @@ public interface TicketService {
     
     List<Ticket> obtenerTicketsPorEstado(TicketStatus status);
     
-    Ticket llamarTicket(Long ticketId, Long agentId, Long moduleId);
+    Ticket llamarTicket(Long ticketId, Long userId, Long moduleId);
     
     Ticket completarTicket(Long ticketId, CompletarTicketRequest request);
     

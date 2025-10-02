@@ -82,4 +82,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     // Contar tickets completados por agente
     @Query("SELECT COUNT(t) FROM Ticket t WHERE t.agentId = :agentId AND t.status = 'COMPLETED'")
     long countCompletedTicketsByAgentId(@Param("agentId") Long agentId);
+    
+    // Buscar tickets por userId
+    List<Ticket> findByUserId(Long userId);
 }

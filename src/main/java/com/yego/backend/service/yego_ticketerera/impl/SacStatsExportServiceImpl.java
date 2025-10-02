@@ -186,8 +186,9 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         org.apache.poi.ss.usermodel.Font font = workbook.createFont();
         font.setBold(true);
         font.setFontHeightInPoints((short) 12);
+        font.setColor(IndexedColors.WHITE.getIndex()); // Letras blancas
         style.setFont(font);
-        style.setFillForegroundColor(IndexedColors.BLUE.getIndex());
+        style.setFillForegroundColor(IndexedColors.RED.getIndex()); // Fondo rojo
         style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
         style.setAlignment(HorizontalAlignment.CENTER);
         style.setVerticalAlignment(VerticalAlignment.CENTER);
