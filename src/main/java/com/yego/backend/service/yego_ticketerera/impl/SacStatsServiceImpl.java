@@ -2,9 +2,14 @@ package com.yego.backend.service.yego_ticketerera.impl;
 
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.RecentRatingResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.SacPerformanceResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.SacPerformanceResponse.RatingResponse;
+import com.yego.backend.entity.yego_ticketerera.entities.QueueAgent;
 import com.yego.backend.entity.yego_ticketerera.entities.QueueRating;
 import com.yego.backend.entity.yego_ticketerera.entities.Ticket;
 import com.yego.backend.repository.yego_principal.UserRepository;
+import com.yego.backend.repository.yego_ticketerera.QueueAgentRepository;
 import com.yego.backend.repository.yego_ticketerera.QueueRatingRepository;
 import com.yego.backend.repository.yego_ticketerera.TicketRepository;
 import com.yego.backend.service.yego_ticketerera.SacStatsService;
@@ -15,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Collectors;
@@ -27,6 +33,7 @@ public class SacStatsServiceImpl implements SacStatsService {
     private final UserRepository userRepository;
     private final TicketRepository ticketRepository;
     private final QueueRatingRepository queueRatingRepository;
+    private final QueueAgentRepository queueAgentRepository;
     
     @Override
     @Transactional(readOnly = true)
@@ -35,12 +42,27 @@ public class SacStatsServiceImpl implements SacStatsService {
         
         // Obtener todos los usuarios con rol SAC
         List<User> sacUsers = userRepository.findByRole("SAC");
+        log.info("👥 Usuarios SAC encontrados: {}", sacUsers.size());
+        
+        // Crear mapa de usuarios para búsqueda eficiente
+        Map<Long, User> userMap = sacUsers.stream()
+                .collect(Collectors.toMap(User::getId, user -> user));
+        
+        // Obtener todos los queue agents para mapear agentId -> userId
+        List<QueueAgent> queueAgents = queueAgentRepository.findAll();
+        Map<Long, Long> agentIdToUserIdMap = queueAgents.stream()
+                .collect(Collectors.toMap(
+                    QueueAgent::getId,
+                    QueueAgent::getUserId
+                ));
+        log.info("🔄 Queue agents encontrados: {}", queueAgents.size());
         
         // Obtener todos los tickets
         List<Ticket> allTickets = ticketRepository.findAll();
         
         // Obtener todas las calificaciones ordenadas por fecha
         List<QueueRating> allRatings = queueRatingRepository.findAllByOrderByCreatedAtDesc();
+        log.info("⭐ Calificaciones encontradas: {}", allRatings.size());
         
         // Calcular estadísticas generales
         int totalSACs = sacUsers.size();
@@ -52,20 +74,20 @@ public class SacStatsServiceImpl implements SacStatsService {
         int totalRatings = allRatings.size();
         
         // Calcular rendimiento de cada SAC
-        List<SacStatsResponse.SacPerformanceResponse> sacPerformance = sacUsers.stream()
+        List<SacPerformanceResponse> sacPerformance = sacUsers.stream()
                 .map(this::calcularRendimientoSac)
                 .collect(Collectors.toList());
         
         // Obtener top performers (ordenados por satisfacción)
-        List<SacStatsResponse.SacPerformanceResponse> topPerformers = sacPerformance.stream()
+        List<SacPerformanceResponse> topPerformers = sacPerformance.stream()
                 .sorted((a, b) -> Double.compare(b.getSatisfactionPercentage(), a.getSatisfactionPercentage()))
                 .limit(3)
                 .collect(Collectors.toList());
         
         // Obtener calificaciones recientes (ya están ordenadas por fecha en la consulta)
-        List<SacStatsResponse.RecentRatingResponse> recentRatings = allRatings.stream()
+        List<RecentRatingResponse> recentRatings = allRatings.stream()
                 .limit(10)
-                .map(this::convertirARecentRating)
+                .map(rating -> convertirARecentRating(rating, userMap, agentIdToUserIdMap))
                 .collect(Collectors.toList());
         
         return SacStatsResponse.builder()
@@ -80,7 +102,7 @@ public class SacStatsServiceImpl implements SacStatsService {
     }
     
     
-    private SacStatsResponse.SacPerformanceResponse calcularRendimientoSac(User sacUser) {
+    private SacPerformanceResponse calcularRendimientoSac(User sacUser) {
         // Obtener tickets asignados a este SAC
         List<Ticket> sacTickets = ticketRepository.findByAgentId(sacUser.getId());
         
@@ -111,12 +133,12 @@ public class SacStatsServiceImpl implements SacStatsService {
                 "Nunca";
         
         // Convertir ratings a formato de respuesta
-        List<SacStatsResponse.SacPerformanceResponse.RatingResponse> ratings = sacRatings.stream()
+        List<RatingResponse> ratings = sacRatings.stream()
                 .limit(3) // Solo los últimos 3 ratings
                 .map(this::convertirARatingResponse)
                 .collect(Collectors.toList());
         
-        return SacStatsResponse.SacPerformanceResponse.builder()
+        return SacPerformanceResponse.builder()
                 .id(sacUser.getId())
                 .name(sacUser.getName())
                 .username(sacUser.getUsername())
@@ -143,13 +165,13 @@ public class SacStatsServiceImpl implements SacStatsService {
         return averageMinutes + " min";
     }
     
-    private SacStatsResponse.SacPerformanceResponse.RatingResponse convertirARatingResponse(QueueRating rating) {
+    private RatingResponse convertirARatingResponse(QueueRating rating) {
         // Obtener el número real del ticket
         String ticketNumber = ticketRepository.findById(rating.getTicketId())
                 .map(Ticket::getTicketNumber)
                 .orElse("TKT-" + rating.getTicketId());
         
-        return SacStatsResponse.SacPerformanceResponse.RatingResponse.builder()
+        return RatingResponse.builder()
                 .id(rating.getId())
                 .score(rating.getScore())
                 .comment(rating.getComment())
@@ -158,21 +180,31 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .build();
     }
     
-    private SacStatsResponse.RecentRatingResponse convertirARecentRating(QueueRating rating) {
-        // Obtener nombre del SAC
-        Optional<User> userOptional = userRepository.findById(rating.getAgentId());
-        System.out.println("🔍 [DEBUG] Usuario encontrado: " + userOptional.isPresent());
+    private RecentRatingResponse convertirARecentRating(QueueRating rating, Map<Long, User> userMap, Map<Long, Long> agentIdToUserIdMap) {
+        // Primero obtener el userId desde queue_agents usando el agentId
+        Long userId = agentIdToUserIdMap.get(rating.getAgentId());
         
-        String sacName = userOptional
-                .map(User::getName)
-                .orElse("SAC Desconocido (ID: " + rating.getAgentId() + ")");
+        String sacName;
+        if (userId != null) {
+            // Ahora buscar el usuario usando el userId obtenido
+            User user = userMap.get(userId);
+            if (user != null) {
+                sacName = user.getName();
+            } else {
+                log.warn("⚠️ No se encontró usuario con userId: {} (agentId: {})", userId, rating.getAgentId());
+                sacName = "SAC (AgentID: " + rating.getAgentId() + ")";
+            }
+        } else {
+            log.warn("⚠️ No se encontró queue agent con agentId: {}", rating.getAgentId());
+            sacName = "SAC (AgentID: " + rating.getAgentId() + ")";
+        }
         
         // Obtener el número real del ticket
         String ticketNumber = ticketRepository.findById(rating.getTicketId())
                 .map(Ticket::getTicketNumber)
                 .orElse("TKT-" + rating.getTicketId());
         
-        return SacStatsResponse.RecentRatingResponse.builder()
+        return RecentRatingResponse.builder()
                 .id(rating.getId())
                 .sacName(sacName)
                 .score(rating.getScore())

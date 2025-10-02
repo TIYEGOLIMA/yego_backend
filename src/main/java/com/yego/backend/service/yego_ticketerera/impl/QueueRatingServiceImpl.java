@@ -54,7 +54,7 @@ public class QueueRatingServiceImpl implements QueueRatingService {
         Long agentId = completadoOpt.get().getAgentId();
         log.info("🔍 [QueueRatingService] Agente encontrado: {} para ticket: {}", agentId, request.getTicketId());
         
-        // Usar el timestamp del frontend si viene, si no usar la hora actual
+        // Usar el timestamp del frontend si viene, si no usar la hora actualc
         LocalDateTime createdAt = request.getTimestamp() != null ? request.getTimestamp() : LocalDateTime.now();
         log.info("⏰ [QueueRatingService] Timestamp del rating: {}", createdAt);
         
