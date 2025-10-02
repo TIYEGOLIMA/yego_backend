@@ -36,7 +36,7 @@ spring:
 
 # JWT para producción
 jwt:
-  secret: ${JWT_SECRET:YegoBackendSecretKey2024VerySecureAndLongEnoughForHS512AlgorithmWithAtLeast64Characters}
+  secret: ${JWT_SECRET:2368f3693c87e07f24f729e8bcb9213d}
   expiration: ${JWT_EXPIRES_IN:3600}  # 1 hora en producción
 
 # Configuración de la aplicación para producción
