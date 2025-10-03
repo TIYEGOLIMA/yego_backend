@@ -1,12 +1,12 @@
 package com.yego.backend.service;
 
 import com.yego.backend.entity.yego_ticketerera.entities.Ticket;
-import com.yego.backend.entity.yego_ticketerera.entities.Option;
 import com.yego.backend.entity.yego_ticketerera.api.response.TicketWithCategoryResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.TicketWebSocketResponse;
 import com.yego.backend.repository.yego_ticketerera.OptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +23,7 @@ public class WebSocketService {
     
     private final SimpMessagingTemplate messagingTemplate;
     private final OptionRepository optionRepository;
+    private final JdbcTemplate jdbcTemplate;
     
     /**
      * Enviar nuevo ticket creado
@@ -165,6 +166,20 @@ public class WebSocketService {
                 }
             }
             
+            // Obtener nombre del conductor por licenseNumber
+            String driverName = "";
+            if (ticket.getLicenseNumber() != null && !ticket.getLicenseNumber().isEmpty()) {
+                try {
+                    String sql = "SELECT full_name FROM drivers WHERE phone = ?";
+                    String fullName = jdbcTemplate.queryForObject(sql, String.class, ticket.getLicenseNumber());
+                    if (fullName != null && !fullName.isEmpty()) {
+                        driverName = fullName;
+                    }
+                } catch (Exception e) {
+                    log.warn("⚠️ No se pudo obtener nombre del conductor para licenseNumber: {}", ticket.getLicenseNumber());
+                }
+            }
+            
             // Construir respuesta completa
             TicketWebSocketResponse response = TicketWebSocketResponse.builder()
                 .id(ticket.getId())
@@ -180,7 +195,7 @@ public class WebSocketService {
                 .categoryDescription(categoryDescription)
                 .subcategoryName(subcategoryName)
                 .subcategoryDescription(subcategoryDescription)
-                .driverName("") // Se puede agregar lógica para obtener nombre del conductor si es necesario
+                .driverName(driverName)
                 .build();
             
             log.info("✅ Información completa del ticket {} obtenida", ticket.getTicketNumber());
@@ -188,6 +203,20 @@ public class WebSocketService {
             
         } catch (Exception e) {
             log.error("❌ Error obteniendo información completa del ticket {}: {}", ticket.getTicketNumber(), e.getMessage());
+            
+            // Obtener nombre del conductor en fallback también
+            String driverName = "";
+            if (ticket.getLicenseNumber() != null && !ticket.getLicenseNumber().isEmpty()) {
+                try {
+                    String sql = "SELECT full_name FROM drivers WHERE phone = ?";
+                    String fullName = jdbcTemplate.queryForObject(sql, String.class, ticket.getLicenseNumber());
+                    if (fullName != null && !fullName.isEmpty()) {
+                        driverName = fullName;
+                    }
+                } catch (Exception ex) {
+                    log.warn("⚠️ No se pudo obtener nombre del conductor para licenseNumber: {}", ticket.getLicenseNumber());
+                }
+            }
             
             // Fallback: respuesta básica
             return TicketWebSocketResponse.builder()
@@ -204,7 +233,7 @@ public class WebSocketService {
                 .categoryDescription("")
                 .subcategoryName("")
                 .subcategoryDescription("")
-                .driverName("")
+                .driverName(driverName)
                 .build();
         }
     }
