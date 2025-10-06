@@ -167,8 +167,6 @@ public class TicketServiceImpl implements TicketService {
         } catch (Exception e) {
             log.error("Error registrando historial para ticket completado {}: {}", ticketId, e.getMessage());
         }
-        
-        // Enviar notificación WebSocket
         webSocketService.enviarTicketCompletado(convertirTicketConCategorias(ticketGuardado));
         
         return ticketGuardado;
