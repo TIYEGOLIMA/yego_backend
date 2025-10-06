@@ -61,8 +61,9 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Permitir dominios específicos de YEGO Integral
+        // Permitir localhost para desarrollo
         configuration.setAllowedOrigins(Arrays.asList(
+            "http://localhost:5173",
             "https://integral.yego.pro",
             "https://api-int.yego.pro"
         ));

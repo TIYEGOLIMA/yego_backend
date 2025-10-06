@@ -46,20 +46,20 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         // Endpoint principal para WebSocket con autenticación
         registry.addEndpoint("/ws")
-                .setAllowedOrigins("https://integral.yego.pro", "https://api-int.yego.pro")
+                .setAllowedOrigins("http://localhost:5173", "https://integral.yego.pro", "https://api-int.yego.pro")
                 .withSockJS();
                 
         // Endpoint específico para cada microfrontend
         registry.addEndpoint("/ws/ticketera")
-                .setAllowedOrigins("https://integral.yego.pro", "https://api-int.yego.pro")
+                .setAllowedOrigins("http://localhost:5173", "https://integral.yego.pro", "https://api-int.yego.pro")
                 .withSockJS();
                 
         registry.addEndpoint("/ws/okr")
-                .setAllowedOrigins("https://integral.yego.pro", "https://api-int.yego.pro")
+                .setAllowedOrigins("http://localhost:5173", "https://integral.yego.pro", "https://api-int.yego.pro")
                 .withSockJS();
                 
         registry.addEndpoint("/ws/marketing")
-                .setAllowedOrigins("https://integral.yego.pro", "https://api-int.yego.pro")
+                .setAllowedOrigins("http://localhost:5173", "https://integral.yego.pro", "https://api-int.yego.pro")
                 .withSockJS();
     }
 }
