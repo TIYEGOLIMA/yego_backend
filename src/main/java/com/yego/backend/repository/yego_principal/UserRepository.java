@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -39,6 +40,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * Buscar usuarios por estado activo
      */
     Page<User> findByActive(Boolean active, Pageable pageable);
+    
+    List<User> findByActive(Boolean active);
     
     /**
      * Buscar usuarios por término de búsqueda
@@ -94,7 +97,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * Obtener todos los usuarios ordenados por fecha de creación (sin paginación)
      */
     @Query("SELECT u FROM User u ORDER BY u.createdAt DESC")
-    java.util.List<User> findAllByOrderByCreatedAtDesc();
+    List<User> findAllByOrderByCreatedAtDesc();
     
     /**
      * Contar usuarios creados después de una fecha
@@ -104,6 +107,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /**
      * Buscar usuarios por rol
      */
-    java.util.List<User> findByRole(String role);
+    List<User> findByRole(String role);
 }
 

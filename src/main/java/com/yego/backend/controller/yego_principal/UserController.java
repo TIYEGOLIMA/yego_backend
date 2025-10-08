@@ -36,19 +36,16 @@ public class UserController {
         return ResponseEntity.ok(user);
     }
     
-    /**
-     * Obtener todos los usuarios
-     */
     @GetMapping
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
-    public ResponseEntity<?> findAll() {
-        List<UserResponseDto> users = userService.findAllUsers();
-        return ResponseEntity.ok(users);
+    public ResponseEntity<?> findAll(@RequestParam(required = false) Integer page,
+                                     @RequestParam(required = false) Integer limit,
+                                     @RequestParam(required = false) String search,
+                                     @RequestParam(required = false) Boolean active) {
+        Object result = userService.findAll(page, limit, search, active);
+        return ResponseEntity.ok(result);
     }
     
-    /**
-     * Obtener usuario por ID
-     */
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<?> findOne(@PathVariable Long id) {
@@ -86,24 +83,15 @@ public class UserController {
         userService.remove(id);
         return ResponseEntity.ok().build();
     }
-    
+
     /**
-     * Activar usuario
+     * Cambiar estado de usuario
      */
-    @PatchMapping("/{id}/activate")
+    @PatchMapping("/{id}/estado")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
-    public ResponseEntity<?> activate(@PathVariable Long id) {
-        UserResponseDto user = userService.activate(id);
-        return ResponseEntity.ok(user);
-    }
-    
-    /**
-     * Desactivar usuario
-     */
-    @PatchMapping("/{id}/deactivate")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
-    public ResponseEntity<?> deactivate(@PathVariable Long id) {
-        UserResponseDto user = userService.deactivate(id);
+    public ResponseEntity<?> cambiarEstado(@PathVariable Long id, 
+                                           @Valid @RequestBody CambiarEstadoDto cambiarEstadoDto) {
+        UserResponseDto user = userService.cambiarEstado(id, cambiarEstadoDto.getActivo());
         return ResponseEntity.ok(user);
     }
 }

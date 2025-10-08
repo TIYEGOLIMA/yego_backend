@@ -64,7 +64,16 @@ public class UserServiceImpl implements UserService {
 
     
     @Override
-    public UserPageDto findAll(Integer page, Integer limit, String search, Boolean active) {
+    public Object findAll(Integer page, Integer limit, String search, Boolean active) {
+        if (page != null && limit != null) {
+            return findAllConPaginacion(page, limit, search, active);
+        } else {
+            return findAllSinPaginacion(active);
+        }
+    }
+    
+    private UserPageDto findAllConPaginacion(Integer page, Integer limit, String search, Boolean active) {
+        log.info("Filtrando usuarios - page: {}, limit: {}, search: {}, active: {}", page, limit, search, active);
         Pageable pageable = PageRequest.of(page - 1, limit);
         
         Page<User> userPage;
@@ -87,7 +96,7 @@ public class UserServiceImpl implements UserService {
                 .map(this::mapToUserResponseCompleteDto)
                 .collect(Collectors.toList());
         
-        log.info("📋 Usuarios YEGO Principal obtenidos: {} de {} total", users.size(), userPage.getTotalElements());
+        log.info("Usuarios YEGO Principal obtenidos: {} de {} total", users.size(), userPage.getTotalElements());
         
         return UserPageDto.builder()
                 .users(users)
@@ -97,6 +106,21 @@ public class UserServiceImpl implements UserService {
                 .search(search)
                 .active(active)
                 .build();
+    }
+    
+    private List<UserResponseDto> findAllSinPaginacion(Boolean active) {
+        log.info("Obteniendo todos los usuarios sin paginación");
+        List<User> users;
+        
+        if (active != null) {
+            users = userRepository.findByActive(active);
+        } else {
+            users = userRepository.findAll();
+        }
+        
+        return users.stream()
+                .map(this::mapToResponseDto)
+                .collect(Collectors.toList());
     }
     
     @Override
@@ -182,28 +206,14 @@ public class UserServiceImpl implements UserService {
     
     @Override
     @Transactional
-    public UserResponseDto activate(Long id) {
+    public UserResponseDto cambiarEstado(Long id, Boolean activo) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
         
-        user.setActive(true);
+        user.setActive(activo);
         User savedUser = userRepository.save(user);
         
-        log.info("✅ Usuario YEGO Principal activado: {}", savedUser.getUsername());
-        
-        return mapToResponseDto(savedUser);
-    }
-    
-    @Override
-    @Transactional
-    public UserResponseDto deactivate(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
-        
-        user.setActive(false);
-        User savedUser = userRepository.save(user);
-        
-        log.info("❌ Usuario YEGO Principal desactivado: {}", savedUser.getUsername());
+        log.info("{} Usuario YEGO Principal: {}", activo ? "Activado" : "Desactivado", savedUser.getUsername());
         
         return mapToResponseDto(savedUser);
     }
@@ -270,14 +280,5 @@ public class UserServiceImpl implements UserService {
                 .build();
     }
     
-    @Override
-    @Transactional(readOnly = true)
-    public List<UserResponseDto> findAllUsers() {
-        log.info("Obteniendo todos los usuarios sin paginación");
-        List<User> users = userRepository.findAll();
-        return users.stream()
-                .map(this::mapToResponseDto)
-                .collect(Collectors.toList());
-    }
 }
 

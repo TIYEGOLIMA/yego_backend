@@ -17,12 +17,14 @@ import javax.crypto.SecretKey;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -63,24 +65,29 @@ public class AuthServiceImpl implements AuthService {
     
     @Override
     public UserResponseDto validateUser(String username, String password, HttpServletRequest request) {
-        // Buscar usuario por username o email
         Optional<User> userOpt = userRepository.findByUsernameOrEmail(username, username);
         
         if (userOpt.isPresent()) {
             User user = userOpt.get();
             
             if (passwordEncoder.matches(password, user.getPassword())) {
+                if (!user.getActive()) {
+                    log.warn("Usuario inactivo intentó iniciar sesión: {}", user.getUsername());
+                    String clientIp = getClientIpAddress(request);
+                    String userAgent = request.getHeader("User-Agent");
+                    auditService.logFailedLogin(username, clientIp, userAgent);
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Usuario inactivo. Contacte al administrador del sistema");
+                }
+                
                 return mapToUserResponseDto(user);
             } else {
-                // Registrar intento fallido de login - contraseña incorrecta
-                log.info("🔐 Contraseña incorrecta para usuario: {}", username);
+                log.info("Contraseña incorrecta para usuario: {}", username);
                 String clientIp = getClientIpAddress(request);
                 String userAgent = request.getHeader("User-Agent");
                 auditService.logFailedLogin(username, clientIp, userAgent);
             }
         } else {
-            // Registrar intento fallido de login - usuario no existe
-            log.info("👤 Usuario no encontrado: {}", username);
+            log.info("Usuario no encontrado: {}", username);
             String clientIp = getClientIpAddress(request);
             String userAgent = request.getHeader("User-Agent");
             auditService.logFailedLogin(username, clientIp, userAgent);
@@ -95,10 +102,9 @@ public class AuthServiceImpl implements AuthService {
         UserResponseDto user = validateUser(loginDto.getUsername(), loginDto.getPassword(), request);
         
         if (user == null) {
-            throw new RuntimeException("Credenciales inválidas");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
         }
         
-        // Actualizar last_login
         userRepository.updateLastLogin(user.getId(), LocalDateTime.now());
         
         // Generar JWT token
@@ -280,22 +286,13 @@ public class AuthServiceImpl implements AuthService {
                 log.warn(" Usuario {} no encontrado para logout", userId);
             }
             
-            // Liberar módulo usando el servicio de ticketera
-            if (user != null) {
+            if (user != null && "SAC".equalsIgnoreCase(user.getRole())) {
                 try {
-                    log.info("🔄 [AuthService] Liberando módulo asignado del usuario...");
+                    log.info("🔄 [AuthService] Usuario SAC - Liberando módulo asignado...");
                     queueAgentService.liberarModuloDelUsuario(user.getId());
-                    log.info("✅ [AuthService] Módulo liberado exitosamente para usuario: {}", user.getId());
+                    log.info("✅ [AuthService] Módulo liberado exitosamente para usuario SAC: {}", user.getId());
                 } catch (Exception moduleError) {
-                    log.warn("⚠️ [AuthService] No se pudo liberar módulo del usuario {}: {}", user.getId(), moduleError.getMessage());
-                }
-            } else if (userId != null) {
-                try {
-                    log.info("🔄 [AuthService] Liberando módulo asignado del usuario usando userId...");
-                    queueAgentService.liberarModuloDelUsuario(userId);
-                    log.info("✅ [AuthService] Módulo liberado exitosamente para usuario: {}", userId);
-                } catch (Exception moduleError) {
-                    log.warn("⚠️ [AuthService] No se pudo liberar módulo del usuario {}: {}", userId, moduleError.getMessage());
+                    log.warn("⚠️ [AuthService] No se pudo liberar módulo del usuario SAC {}: {}", user.getId(), moduleError.getMessage());
                 }
             }
             

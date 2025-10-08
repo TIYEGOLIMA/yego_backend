@@ -16,15 +16,7 @@ public interface UserService {
      */
     UserResponseDto create(CreateUserDto createUserDto);
     
-    /**
-     * Obtener todos los usuarios con paginación
-     */
-    UserPageDto findAll(Integer page, Integer limit, String search, Boolean active);
-    
-    /**
-     * Obtener todos los usuarios (sin paginación)
-     */
-    List<UserResponseDto> findAllUsers();
+    Object findAll(Integer page, Integer limit, String search, Boolean active);
     
     /**
      * Obtener usuario por ID
@@ -45,16 +37,11 @@ public interface UserService {
      * Eliminar usuario (soft delete)
      */
     void remove(Long id);
-    
+
     /**
-     * Activar usuario
+     * Cambiar estado de usuario
      */
-    UserResponseDto activate(Long id);
-    
-    /**
-     * Desactivar usuario
-     */
-    UserResponseDto deactivate(Long id);
+    UserResponseDto cambiarEstado(Long id, Boolean activo);
     
     /**
      * Cambiar contraseña de usuario
