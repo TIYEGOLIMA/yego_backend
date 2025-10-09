@@ -11,7 +11,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
-import java.util.List;
 
 /**
  * Controlador REST para usuarios del sistema YEGO Principal
@@ -37,7 +36,7 @@ public class UserController {
     }
     
     @GetMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
     public ResponseEntity<?> findAll(@RequestParam(required = false) Integer page,
                                      @RequestParam(required = false) Integer limit,
                                      @RequestParam(required = false) String search,
@@ -57,7 +56,7 @@ public class UserController {
      * Crear nuevo usuario
      */
     @PostMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
     public ResponseEntity<?> create(@Valid @RequestBody CreateUserDto createUserDto) {
         UserResponseDto user = userService.create(createUserDto);
         return ResponseEntity.status(201).body(user);
@@ -67,7 +66,7 @@ public class UserController {
      * Actualizar usuario
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
     public ResponseEntity<?> update(@PathVariable Long id, 
                                    @Valid @RequestBody UpdateUserDto updateUserDto) {
         UserResponseDto user = userService.update(id, updateUserDto);
@@ -88,7 +87,7 @@ public class UserController {
      * Cambiar estado de usuario
      */
     @PatchMapping("/{id}/estado")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
     public ResponseEntity<?> cambiarEstado(@PathVariable Long id, 
                                            @Valid @RequestBody CambiarEstadoDto cambiarEstadoDto) {
         UserResponseDto user = userService.cambiarEstado(id, cambiarEstadoDto.getActivo());

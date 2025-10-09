@@ -1,6 +1,5 @@
 package com.yego.backend.entity.yego_principal.api.response;
 
-import com.yego.backend.entity.yego_principal.api.response.UserResponseCompleteDto;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -20,6 +19,7 @@ public class UserPageDto {
     private Long total;
     private Integer page;
     private Integer limit;
+    private Integer totalPages;
     private String search;
     private Boolean active;
 }

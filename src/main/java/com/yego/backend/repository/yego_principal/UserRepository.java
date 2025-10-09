@@ -49,11 +49,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE u.username LIKE %:search% OR u.email LIKE %:search% OR u.name LIKE %:search%")
     Page<User> findBySearch(@Param("search") String search, Pageable pageable);
     
+    @Query("SELECT u FROM User u WHERE u.username LIKE %:search% OR u.email LIKE %:search% OR u.name LIKE %:search%")
+    List<User> findBySearch(@Param("search") String search);
+    
     /**
      * Buscar usuarios por término de búsqueda y estado activo
      */
     @Query("SELECT u FROM User u WHERE (u.username LIKE %:search% OR u.email LIKE %:search% OR u.name LIKE %:search%) AND u.active = :active")
     Page<User> findBySearchAndActive(@Param("search") String search, @Param("active") Boolean active, Pageable pageable);
+    
+    @Query("SELECT u FROM User u WHERE (u.username LIKE %:search% OR u.email LIKE %:search% OR u.name LIKE %:search%) AND u.active = :active")
+    List<User> findBySearchAndActive(@Param("search") String search, @Param("active") Boolean active);
     
     /**
      * Contar usuarios activos

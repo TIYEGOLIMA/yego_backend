@@ -16,6 +16,10 @@ public interface UserService {
      */
     UserResponseDto create(CreateUserDto createUserDto);
     
+
+    /**
+     * Obtener todos los usuarios con paginación
+     */
     Object findAll(Integer page, Integer limit, String search, Boolean active);
     
     /**

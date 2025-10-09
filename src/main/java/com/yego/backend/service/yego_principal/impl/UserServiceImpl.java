@@ -5,24 +5,21 @@ import com.yego.backend.entity.yego_principal.api.response.*;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_principal.UserService;
+import com.yego.backend.service.WebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityNotFoundException;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Implementación del servicio de usuarios del sistema YEGO Principal
- * Equivalente a UsersService de NestJS
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -30,6 +27,7 @@ public class UserServiceImpl implements UserService {
     
     private final UserRepository userRepository;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final WebSocketService webSocketService;
     
     @Override
     @Transactional
@@ -57,6 +55,9 @@ public class UserServiceImpl implements UserService {
         
         User savedUser = userRepository.save(user);
         
+        // Enviar notificación WebSocket para refrescar tabla
+        webSocketService.enviarActualizacionUsuarios("USER_CREATED", savedUser.getId(), savedUser.getUsername());
+        
         log.info("✅ Usuario YEGO Principal creado: {}", savedUser.getUsername());
         
         return mapToResponseDto(savedUser);
@@ -74,35 +75,57 @@ public class UserServiceImpl implements UserService {
     
     private UserPageDto findAllConPaginacion(Integer page, Integer limit, String search, Boolean active) {
         log.info("Filtrando usuarios - page: {}, limit: {}, search: {}, active: {}", page, limit, search, active);
-        Pageable pageable = PageRequest.of(page - 1, limit);
         
-        Page<User> userPage;
+        // Obtener el rol del usuario autenticado
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userRole = authentication.getAuthorities().stream()
+                .findFirst()
+                .map(authority -> authority.getAuthority().replace("ROLE_", ""))
+                .orElse("");
+        
+        log.info("Usuario autenticado con rol: {}", userRole);
+        
+        // Primero obtener TODOS los usuarios sin paginación
+        List<User> allUsers;
         
         if (search != null && !search.trim().isEmpty()) {
             if (active != null) {
-                userPage = userRepository.findBySearchAndActive(search, active, pageable);
+                allUsers = userRepository.findBySearchAndActive(search, active);
             } else {
-                userPage = userRepository.findBySearch(search, pageable);
+                allUsers = userRepository.findBySearch(search);
             }
         } else {
             if (active != null) {
-                userPage = userRepository.findByActive(active, pageable);
+                allUsers = userRepository.findByActive(active);
             } else {
-                userPage = userRepository.findAll(pageable);
+                allUsers = userRepository.findAll();
             }
         }
         
-        List<UserResponseCompleteDto> users = userPage.getContent().stream()
+        // Filtrar usuarios según el rol ANTES de paginar
+        List<User> filteredUsers = filtrarUsuariosPorRol(allUsers, userRole);
+        
+        // Calcular paginación manual
+        int totalElements = filteredUsers.size();
+        int totalPages = (int) Math.ceil((double) totalElements / limit);
+        int startIndex = (page - 1) * limit;
+        int endIndex = Math.min(startIndex + limit, totalElements);
+        
+        // Obtener solo los usuarios de la página actual
+        List<User> pagedUsers = filteredUsers.subList(startIndex, endIndex);
+        
+        List<UserResponseCompleteDto> users = pagedUsers.stream()
                 .map(this::mapToUserResponseCompleteDto)
                 .collect(Collectors.toList());
         
-        log.info("Usuarios YEGO Principal obtenidos: {} de {} total", users.size(), userPage.getTotalElements());
+        log.info("Usuarios YEGO Principal obtenidos: {} de {} total", users.size(), totalElements);
         
         return UserPageDto.builder()
                 .users(users)
-                .total(userPage.getTotalElements())
+                .total((long) totalElements)
                 .page(page)
                 .limit(limit)
+                .totalPages(totalPages)
                 .search(search)
                 .active(active)
                 .build();
@@ -110,6 +133,16 @@ public class UserServiceImpl implements UserService {
     
     private List<UserResponseDto> findAllSinPaginacion(Boolean active) {
         log.info("Obteniendo todos los usuarios sin paginación");
+        
+        // Obtener el rol del usuario autenticado
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userRole = authentication.getAuthorities().stream()
+                .findFirst()
+                .map(authority -> authority.getAuthority().replace("ROLE_", ""))
+                .orElse("");
+        
+        log.info("Usuario autenticado con rol: {}", userRole);
+        
         List<User> users;
         
         if (active != null) {
@@ -118,9 +151,43 @@ public class UserServiceImpl implements UserService {
             users = userRepository.findAll();
         }
         
-        return users.stream()
+        // Filtrar usuarios según el rol
+        List<User> filteredUsers = filtrarUsuariosPorRol(users, userRole);
+        
+        return filteredUsers.stream()
                 .map(this::mapToResponseDto)
                 .collect(Collectors.toList());
+    }
+    
+    /**
+     * Filtra usuarios según el rol del usuario autenticado
+     */
+    private List<User> filtrarUsuariosPorRol(List<User> users, String userRole) {
+        switch (userRole) {
+            case "SUPERADMIN":
+                // SUPERADMIN ve todos los usuarios
+                log.info("SUPERADMIN: mostrando todos los usuarios");
+                return users;
+                
+            case "ADMIN":
+                // ADMIN ve todos menos SUPERADMIN
+                log.info("ADMIN: mostrando todos menos SUPERADMIN");
+                return users.stream()
+                        .filter(user -> !"SUPERADMIN".equals(user.getRole()))
+                        .collect(Collectors.toList());
+                
+            case "OPERADOR":
+                // OPERADOR solo ve OPERADOR y SAC
+                log.info("OPERADOR: mostrando solo OPERADOR y SAC");
+                return users.stream()
+                        .filter(user -> "OPERADOR".equals(user.getRole()) || "SAC".equals(user.getRole()))
+                        .collect(Collectors.toList());
+                
+            default:
+                // Cualquier otro rol no ve usuarios
+                log.warn("Rol {} no tiene permisos para ver usuarios", userRole);
+                return List.of();
+        }
     }
     
     @Override
@@ -186,6 +253,12 @@ public class UserServiceImpl implements UserService {
         
         User savedUser = userRepository.save(user);
         
+        // Verificar si el usuario actualizado está logueado y enviar notificación
+        verificarYEnviarLogoutForzado(savedUser);
+        
+        // Enviar notificación WebSocket para refrescar tabla
+        webSocketService.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
+        
         log.info("✅ Usuario YEGO Principal actualizado: {}", savedUser.getUsername());
         
         return mapToResponseDto(savedUser);
@@ -201,6 +274,9 @@ public class UserServiceImpl implements UserService {
         user.setActive(false);
         userRepository.save(user);
         
+        // Enviar notificación WebSocket para refrescar tabla
+        webSocketService.enviarActualizacionUsuarios("USER_DELETED", user.getId(), user.getUsername());
+        
         log.info("🗑️ Usuario YEGO Principal eliminado (soft delete): {}", user.getUsername());
     }
     
@@ -212,6 +288,14 @@ public class UserServiceImpl implements UserService {
         
         user.setActive(activo);
         User savedUser = userRepository.save(user);
+        
+        // Si se desactiva el usuario, forzar logout con mensaje de bloqueo
+        if (!activo) {
+            enviarNotificacionBloqueo(savedUser);
+        }
+        
+        // Enviar notificación WebSocket para refrescar tabla
+        webSocketService.enviarActualizacionUsuarios("USER_STATUS_CHANGED", savedUser.getId(), savedUser.getUsername());
         
         log.info("{} Usuario YEGO Principal: {}", activo ? "Activado" : "Desactivado", savedUser.getUsername());
         
@@ -230,6 +314,9 @@ public class UserServiceImpl implements UserService {
         
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
+        
+        // Enviar notificación WebSocket para refrescar tabla
+        webSocketService.enviarActualizacionUsuarios("USER_PASSWORD_CHANGED", user.getId(), user.getUsername());
         
         log.info("🔑 Contraseña cambiada para usuario YEGO Principal: {}", user.getUsername());
     }
@@ -278,6 +365,45 @@ public class UserServiceImpl implements UserService {
                 .lastLogin(user.getLastLogin())
                 .moduleId(user.getModuleId())
                 .build();
+    }
+    
+    /**
+     * Verifica si el usuario está logueado y envía notificación de logout forzado
+     */
+    private void verificarYEnviarLogoutForzado(User user) {
+        try {
+            // Verificar si el usuario está logueado (podemos usar lastLogin como indicador)
+            // Si el lastLogin es reciente (menos de 24 horas), asumimos que está logueado
+            if (user.getLastLogin() != null && 
+                user.getLastLogin().isAfter(LocalDateTime.now().minusHours(24))) {
+                
+                log.info("🚨 Usuario {} está logueado, enviando notificación de logout forzado", user.getUsername());
+                
+                // Enviar notificación WebSocket
+                webSocketService.enviarLogoutForzado(user.getId(), user.getUsername());
+            }
+        } catch (Exception e) {
+            log.error("❌ Error enviando logout forzado para usuario {}: {}", user.getUsername(), e.getMessage());
+        }
+    }
+    
+    /**
+     * Envía notificación de bloqueo de cuenta con logout automático
+     */
+    private void enviarNotificacionBloqueo(User user) {
+        try {
+            // Verificar si el usuario está logueado
+            if (user.getLastLogin() != null && 
+                user.getLastLogin().isAfter(LocalDateTime.now().minusHours(24))) {
+                
+                log.info("🚨 Usuario {} está logueado, enviando notificación de bloqueo", user.getUsername());
+                
+                // Enviar notificación WebSocket de bloqueo
+                webSocketService.enviarBloqueoCuenta(user.getId(), user.getUsername());
+            }
+        } catch (Exception e) {
+            log.error("❌ Error enviando notificación de bloqueo para usuario {}: {}", user.getUsername(), e.getMessage());
+        }
     }
     
 }

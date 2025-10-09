@@ -238,4 +238,92 @@ public class WebSocketService {
         }
     }
     
+    /**
+     * Enviar notificación de logout forzado
+     */
+    public void enviarLogoutForzado(Long userId, String username) {
+        log.info("🚨 Enviando logout forzado para usuario: {} (ID: {})", username, userId);
+        
+        Map<String, Object> notification = Map.of(
+            "type", "FORCED_LOGOUT",
+            "message", "Tu cuenta ha sido actualizada por un administrador. Debes iniciar sesión nuevamente para continuar.",
+            "userId", userId,
+            "username", username,
+            "timestamp", LocalDateTime.now().toString()
+        );
+        
+        // Enviar al topic del sistema para que todos los usuarios conectados lo reciban
+        messagingTemplate.convertAndSend("/topic/system", notification);
+        
+        // También enviar a un topic específico del usuario (si está implementado)
+        messagingTemplate.convertAndSend("/topic/user/" + userId, notification);
+        
+        log.info("✅ Notificación de logout forzado enviada para usuario: {}", username);
+    }
+    
+    /**
+     * Enviar notificación de bloqueo de cuenta con logout automático
+     */
+    public void enviarBloqueoCuenta(Long userId, String username) {
+        log.info("🚨 Enviando notificación de bloqueo para usuario: {} (ID: {})", username, userId);
+        
+        Map<String, Object> notification = Map.of(
+            "type", "ACCOUNT_BLOCKED",
+            "message", "Tu cuenta ha sido bloqueada por un administrador.",
+            "userId", userId,
+            "username", username,
+            "autoLogoutDelay", 5000, // 5 segundos en milisegundos
+            "timestamp", LocalDateTime.now().toString()
+        );
+        
+        // Enviar al topic del sistema
+        messagingTemplate.convertAndSend("/topic/system", notification);
+        
+        // También enviar a un topic específico del usuario
+        messagingTemplate.convertAndSend("/topic/user/" + userId, notification);
+        
+        log.info("✅ Notificación de bloqueo enviada para usuario: {}", username);
+    }
+    
+    /**
+     * Enviar notificación de actualización de usuarios para refrescar tabla
+     */
+    public void enviarActualizacionUsuarios(String action, Long userId, String username) {
+        log.info("🔄 Enviando notificación de actualización de usuarios: {} - Usuario: {} (ID: {})", action, username, userId);
+        
+        Map<String, Object> notification = Map.of(
+            "type", "USER_TABLE_UPDATE",
+            "action", action,
+            "userId", userId,
+            "username", username,
+            "message", getActionMessage(action, username),
+            "timestamp", LocalDateTime.now().toString()
+        );
+        
+        // Enviar al topic del sistema para que todas las sesiones refresquen
+        messagingTemplate.convertAndSend("/topic/system", notification);
+        
+        log.info("✅ Notificación de actualización de usuarios enviada: {}", action);
+    }
+    
+    /**
+     * Obtener mensaje descriptivo para la acción
+     */
+    private String getActionMessage(String action, String username) {
+        switch (action) {
+            case "USER_CREATED":
+                return "Se ha creado un nuevo usuario: " + username;
+            case "USER_UPDATED":
+                return "Se ha actualizado el usuario: " + username;
+            case "USER_DELETED":
+                return "Se ha eliminado el usuario: " + username;
+            case "USER_STATUS_CHANGED":
+                return "Se ha cambiado el estado del usuario: " + username;
+            case "USER_PASSWORD_CHANGED":
+                return "Se ha cambiado la contraseña del usuario: " + username;
+            default:
+                return "Se ha modificado el usuario: " + username;
+        }
+    }
+    
 }
