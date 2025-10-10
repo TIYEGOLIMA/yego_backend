@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * Entidad Option del sistema YEGO Ticketerera
@@ -52,7 +53,8 @@ public class Option {
     
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        // Usar zona horaria de Perú (America/Lima)
+        createdAt = LocalDateTime.now(ZoneId.of("America/Lima"));
         if (active == null) {
             active = true;
         }
@@ -63,6 +65,7 @@ public class Option {
     
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        // Usar zona horaria de Perú (America/Lima)
+        updatedAt = LocalDateTime.now(ZoneId.of("America/Lima"));
     }
 }

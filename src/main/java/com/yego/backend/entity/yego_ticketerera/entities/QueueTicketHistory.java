@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * Entidad QueueTicketHistory del sistema YEGO Ticketerera
@@ -44,6 +45,7 @@ public class QueueTicketHistory {
     
     @PrePersist
     protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
+        // Usar zona horaria de Perú (America/Lima)
+        this.createdAt = LocalDateTime.now(ZoneId.of("America/Lima"));
     }
 }

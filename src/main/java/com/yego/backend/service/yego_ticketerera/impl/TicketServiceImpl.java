@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.Arrays;
@@ -56,7 +57,7 @@ public class TicketServiceImpl implements TicketService {
                 .moduleId(null)
                 .status(TicketStatus.WAITING)
                 .priority(1)
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now(ZoneId.of("America/Lima")))
                 .build();
         
         String ticketNumber = generarNumeroTicket(ticket.getOptionId());
@@ -102,7 +103,7 @@ public class TicketServiceImpl implements TicketService {
         ticket.setStatus(TicketStatus.CALLED);
         ticket.setUserId(userId); // Asignar userId al ticket
         ticket.setModuleId(moduleId); // Asignar módulo al llamar
-        ticket.setCalledAt(LocalDateTime.now());
+        ticket.setCalledAt(LocalDateTime.now(ZoneId.of("America/Lima")));
         
         Ticket updatedTicket = ticketRepository.save(ticket);
         log.info("Ticket llamado: {} por usuario: {} (agentId: {}) para módulo: {}", updatedTicket.getTicketNumber(), userId, agentId, moduleId);
@@ -142,7 +143,7 @@ public class TicketServiceImpl implements TicketService {
         TicketStatus estadoAnterior = ticket.getStatus();
         
         ticket.setStatus(TicketStatus.COMPLETED);
-        ticket.setCompletedAt(LocalDateTime.now());
+        ticket.setCompletedAt(LocalDateTime.now(ZoneId.of("America/Lima")));
         
         Ticket ticketGuardado = ticketRepository.save(ticket);
         log.info("Ticket {} completado exitosamente", ticketId);
@@ -291,7 +292,7 @@ public class TicketServiceImpl implements TicketService {
             // 3. Asignar el ticket al agente
             ticket.setAgentId(agentId);
             ticket.setStatus(Ticket.TicketStatus.WAITING);
-            ticket.setCalledAt(LocalDateTime.now());
+            ticket.setCalledAt(LocalDateTime.now(ZoneId.of("America/Lima")));
             
             Ticket ticketAsignado = ticketRepository.save(ticket);
             
@@ -393,8 +394,8 @@ public class TicketServiceImpl implements TicketService {
             // Obtener el siguiente número consecutivo para este módulo (máximo 9)
             long consecutivo = (ticketRepository.countByModuleId(moduleId) % 9) + 1;
             
-            // Obtener la hora actual (hora, minutos, segundos)
-            LocalDateTime now = LocalDateTime.now();
+            // Obtener la hora actual (hora, minutos, segundos) - Zona horaria de Perú
+            LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Lima"));
             int hora = now.getHour();
             int minutos = now.getMinute();
             int segundos = now.getSecond();

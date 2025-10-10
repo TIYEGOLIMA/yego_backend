@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 
@@ -54,8 +55,8 @@ public class QueueRatingServiceImpl implements QueueRatingService {
         Long agentId = completadoOpt.get().getAgentId();
         log.info("🔍 [QueueRatingService] Agente encontrado: {} para ticket: {}", agentId, request.getTicketId());
         
-        // Usar el timestamp del frontend si viene, si no usar la hora actualc
-        LocalDateTime createdAt = request.getTimestamp() != null ? request.getTimestamp() : LocalDateTime.now();
+        // Usar el timestamp del frontend si viene, si no usar la hora actual (zona horaria de Perú)
+        LocalDateTime createdAt = request.getTimestamp() != null ? request.getTimestamp() : LocalDateTime.now(ZoneId.of("America/Lima"));
         log.info("⏰ [QueueRatingService] Timestamp del rating: {}", createdAt);
         
         QueueRating rating = QueueRating.builder()

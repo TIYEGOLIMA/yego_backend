@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * Entidad QueueAgent del sistema YEGO Ticketerera
@@ -46,7 +47,8 @@ public class QueueAgent {
     
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        // Usar zona horaria de Perú (America/Lima)
+        createdAt = LocalDateTime.now(ZoneId.of("America/Lima"));
         if (isActive == null) {
             isActive = true;
         }
@@ -57,6 +59,7 @@ public class QueueAgent {
     
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        // Usar zona horaria de Perú (America/Lima)
+        updatedAt = LocalDateTime.now(ZoneId.of("America/Lima"));
     }
 }

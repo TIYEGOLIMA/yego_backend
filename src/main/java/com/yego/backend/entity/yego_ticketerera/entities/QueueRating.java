@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * Entidad QueueRating del sistema YEGO Ticketerera
@@ -43,4 +44,12 @@ public class QueueRating {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ticket_id", insertable = false, updatable = false)
     private Ticket ticket;
+    
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) {
+            // Usar zona horaria de Perú (America/Lima)
+            this.createdAt = LocalDateTime.now(ZoneId.of("America/Lima"));
+        }
+    }
 }
