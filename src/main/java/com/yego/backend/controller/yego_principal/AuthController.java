@@ -62,10 +62,15 @@ public class AuthController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordDto changePasswordDto,
                                            Authentication authentication) {
-        Long userId = Long.parseLong(authentication.getName());
-        authService.changePassword(userId, changePasswordDto.getCurrentPassword(), 
-                changePasswordDto.getNewPassword());
-        return ResponseEntity.ok().build();
+        try {
+            Long userId = Long.parseLong(authentication.getName());
+            authService.changePassword(userId, changePasswordDto.getCurrentPassword(), 
+                    changePasswordDto.getNewPassword());
+            return ResponseEntity.ok().body("Contraseña cambiada exitosamente");
+        } catch (Exception e) {
+            log.error("Error al cambiar contraseña: {}", e.getMessage());
+            throw e; // Re-lanzar para que Spring maneje la ResponseStatusException
+        }
     }
     
     /**
@@ -73,8 +78,13 @@ public class AuthController {
      */
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@Valid @RequestBody ChangePasswordDto changePasswordDto) {
-        authService.resetPassword(changePasswordDto);
-        return ResponseEntity.ok().build();
+        try {
+            authService.resetPassword(changePasswordDto);
+            return ResponseEntity.ok().body("Contraseña cambiada exitosamente");
+        } catch (Exception e) {
+            log.error("Error al cambiar contraseña inicial: {}", e.getMessage());
+            throw e; // Re-lanzar para que Spring maneje la ResponseStatusException
+        }
     }
     
     /**

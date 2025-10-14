@@ -148,7 +148,7 @@ public class AuthServiceImpl implements AuthService {
     public UserResponseDto register(RegisterDto registerDto) {
         // Verificar si el usuario ya existe
         if (userRepository.existsByUsernameOrEmail(registerDto.getUsername(), registerDto.getEmail())) {
-            throw new RuntimeException("El usuario o email ya existe");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El usuario o email ya existe");
         }
         
         // Hash de la contraseña
@@ -175,21 +175,21 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public void changePassword(Long userId, String currentPassword, String newPassword) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
         
         // Verificar contraseña actual
         if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
-            throw new RuntimeException("Contraseña actual incorrecta");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña actual es incorrecta");
         }
         
         // Validar nueva contraseña
         if (!validatePassword(newPassword)) {
-            throw new RuntimeException("La nueva contraseña no cumple con los requisitos de seguridad");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La nueva contraseña no cumple con los requisitos de seguridad");
         }
         
         // Verificar que la nueva contraseña no sea igual a la actual
         if (passwordEncoder.matches(newPassword, user.getPassword())) {
-            throw new RuntimeException("La nueva contraseña no puede ser igual a la actual");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La nueva contraseña no puede ser igual a la actual");
         }
         
         // Hash nueva contraseña y actualizar
@@ -206,16 +206,16 @@ public class AuthServiceImpl implements AuthService {
                 changePasswordDto.getCurrentPassword(), null);
         
         if (user == null) {
-            throw new RuntimeException("Credenciales inválidas");
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
         }
         
         // Verificar que el usuario requiera cambio de contraseña
         User userEntity = userRepository.findById(user.getId())
-                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
         
         // Por ahora, permitir cambio de contraseña sin verificar flag
         // if (!userEntity.getRequiereCambioPassword()) {
-        //     throw new RuntimeException("Este usuario no requiere cambio de contraseña");
+        //     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Este usuario no requiere cambio de contraseña");
         // }
         
         changePassword(user.getId(), changePasswordDto.getCurrentPassword(), 
