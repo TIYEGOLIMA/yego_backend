@@ -17,6 +17,7 @@ import jakarta.validation.Valid;
  * Controlador REST para autenticación del sistema YEGO Principal
  * Equivalente a AuthController de NestJS
  */
+
 @Slf4j
 @RestController
 @RequestMapping("/api/auth")
