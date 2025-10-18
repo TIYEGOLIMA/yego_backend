@@ -158,10 +158,10 @@ public class SistemaExternoServiceImpl implements SistemaExternoService {
             log.info("✅ Sistema {} está ACTIVO", sistema.getYegoSisExtNombre());
             
         } catch (Exception e) {
-            sistema.setYegoSisExtEstado(SistemaExterno.EstadoSistema.ERROR);
+            sistema.setYegoSisExtEstado(SistemaExterno.EstadoSistema.INACTIVO);
             exitoso = false;
             mensaje = "Sistema no responde: " + e.getMessage();
-            log.warn("⚠️ Sistema {} está en ERROR: {}", sistema.getYegoSisExtNombre(), e.getMessage());
+            log.warn("⚠️ Sistema {} está INACTIVO (no responde): {}", sistema.getYegoSisExtNombre(), e.getMessage());
         }
         
         sistema.setYegoSisExtUltimoCheck(LocalDateTime.now());
@@ -202,64 +202,72 @@ public class SistemaExternoServiceImpl implements SistemaExternoService {
         SistemaExterno sistema = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Sistema externo no encontrado"));
 
-        Boolean estadoAnterior = sistema.getYegoSisExtActivo();
         sistema.setYegoSisExtActivo(activo);
         sistema.setYegoSisExtUltimoCheck(LocalDateTime.now());
+        
+        // 🚨 CAMBIAR TAMBIÉN EL ESTADO DEL SISTEMA
+        if (!activo) {
+            // Si se desactiva, cambiar estado a INACTIVO
+            sistema.setYegoSisExtEstado(SistemaExterno.EstadoSistema.INACTIVO);
+            log.info("🔄 Estado del sistema cambiado a INACTIVO por desactivación");
+        } else {
+            // Si se activa, cambiar estado a ACTIVO
+            sistema.setYegoSisExtEstado(SistemaExterno.EstadoSistema.ACTIVO);
+            log.info("🔄 Estado del sistema cambiado a ACTIVO por activación");
+        }
 
         SistemaExterno updated = repository.save(sistema);
-        log.info("✅ Estado activo cambiado para sistema {}: {} -> {}", 
-                updated.getYegoSisExtNombre(), estadoAnterior, activo);
+        log.info("✅ Estado activo cambiado para sistema {}: {} (Estado: {})", 
+                updated.getYegoSisExtNombre(), activo, updated.getYegoSisExtEstado());
 
-        // Si se está desactivando, enviar WebSocket al sistema externo
-        if (!activo && estadoAnterior) {
-            enviarNotificacionDesactivacion(updated);
-        }
+        // Enviar notificación de cambio de estado (activado o desactivado)
+        enviarNotificacionCambioEstado(updated, activo);
 
         return mapToResponse(updated);
     }
 
     /**
-     * Envía notificación WebSocket al sistema externo cuando se desactiva
+     * Envía notificación de cambio de estado (activado/desactivado) al sistema externo
      */
-    private void enviarNotificacionDesactivacion(SistemaExterno sistema) {
+    private void enviarNotificacionCambioEstado(SistemaExterno sistema, Boolean activo) {
         try {
-            // Construir el mensaje de desactivación
+            String accion = activo ? "ACTIVO" : "INACTIVO";
+            log.info("📡 Sistema {} {}, enviando notificaciones WebSocket...", sistema.getYegoSisExtNombre(), accion);
+            
+            // Construir el mensaje según el estado
             Map<String, Object> webSocketMessage = new HashMap<>();
-            webSocketMessage.put("type", "SYSTEM_DEACTIVATED");
-            webSocketMessage.put("message", "Este sistema ha sido desactivado. Deja de procesar solicitudes.");
+            
+            if (activo) {
+                webSocketMessage.put("type", "SYSTEM_ACTIVATED");
+                webSocketMessage.put("message", "El sistema ha sido activado. Puedes procesar solicitudes normalmente.");
+                webSocketMessage.put("action", "ENABLE_SCREEN");
+            } else {
+                webSocketMessage.put("type", "SYSTEM_DEACTIVATED");
+                webSocketMessage.put("message", "Este sistema ha sido desactivado. Deja de procesar solicitudes.");
+                webSocketMessage.put("action", "BLOCK_SCREEN");
+            }
+            
             webSocketMessage.put("timestamp", LocalDateTime.now().toString());
             webSocketMessage.put("sistemaId", sistema.getYegoSisExtId());
             webSocketMessage.put("sistemaNombre", sistema.getYegoSisExtNombre());
+            webSocketMessage.put("sistemaUrl", sistema.getYegoSisExtUrl());
+            webSocketMessage.put("activo", activo);
 
-            // Convertir URL HTTP a WebSocket
-            String wsUrl = convertirUrlAWebSocket(sistema.getYegoSisExtUrl());
+            // Enviar WebSocket al Frontend
+            messagingTemplate.convertAndSend("/topic/sistemas-externos", webSocketMessage);
+            messagingTemplate.convertAndSend("/topic/system", webSocketMessage);
             
-            // Enviar WebSocket usando RestTemplate (simulando envío)
-            // En un caso real, usarías un cliente WebSocket específico
-            log.info("📡 Enviando notificación de desactivación a: {}", wsUrl);
-            log.info("📡 Mensaje: {}", webSocketMessage);
+            // ✅ Solo WebSocket - El Frontend se conecta y recibe la notificación
             
-            // TODO: Implementar envío real de WebSocket
-            // Por ahora solo loggeamos la intención
+            log.info("✅ Notificaciones WebSocket de {} enviadas para sistema: {}", accion, sistema.getYegoSisExtNombre());
             
         } catch (Exception e) {
-            log.error("❌ Error enviando notificación de desactivación a sistema {}: {}", 
+            log.error("❌ Error enviando notificación WebSocket de cambio de estado a sistema {}: {}", 
                     sistema.getYegoSisExtNombre(), e.getMessage());
-            // No fallar la operación principal si el WebSocket falla
         }
     }
+    
 
-    /**
-     * Convierte una URL HTTP a WebSocket
-     */
-    private String convertirUrlAWebSocket(String httpUrl) {
-        if (httpUrl.startsWith("http://")) {
-            return httpUrl.replace("http://", "ws://");
-        } else if (httpUrl.startsWith("https://")) {
-            return httpUrl.replace("https://", "wss://");
-        }
-        return httpUrl; // Si no es HTTP, devolver tal como está
-    }
     
     private SistemaExternoResponse mapToResponse(SistemaExterno sistema) {
         return SistemaExternoResponse.builder()

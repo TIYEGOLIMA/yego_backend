@@ -1,0 +1,78 @@
+package com.yego.backend.controller.yego_garantizado;
+
+import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoListResponse;
+import com.yego.backend.service.yego_garantizado.YegoGarantizadoRegistroService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/garantizado")
+@RequiredArgsConstructor
+@Slf4j
+public class YegoGarantizadoController {
+
+    private final YegoGarantizadoRegistroService yegoGarantizadoRegistroService;
+
+    @GetMapping("/procesar-semana-actual")
+    public ResponseEntity<GarantizadoListResponse> procesarSemanaActual() {
+        log.info("⚙️ [YegoGarantizadoController] Recibida solicitud para procesar semana actual");
+        
+        try {
+            GarantizadoListResponse response = yegoGarantizadoRegistroService.procesarYDevolverSemanaActual();
+            log.info("✅ [YegoGarantizadoController] Procesados {} conductores de la semana actual", response.getConductores().size());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoController] Error procesando semana actual: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping("/flota/{flotaId}")
+    public ResponseEntity<GarantizadoListResponse> obtenerGarantizadosPorFlota(@PathVariable String flotaId) {
+        log.info("⚙️ [YegoGarantizadoController] Recibida solicitud para obtener garantizados por flota: {}", flotaId);
+        
+        try {
+            GarantizadoListResponse response = yegoGarantizadoRegistroService.obtenerGarantizadosPorFlota(flotaId);
+            log.info("✅ [YegoGarantizadoController] Encontrados {} garantizados para flota {}", response.getConductores().size(), flotaId);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoController] Error obteniendo garantizados por flota {}: {}", flotaId, e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping("/export/excel")
+    public ResponseEntity<byte[]> exportarExcel(
+            @RequestParam(required = false) String flotaId,
+            @RequestParam(required = false) String estado,
+            @RequestParam String semana) {
+        
+        log.info("⚙️ [YegoGarantizadoController] Recibida solicitud para exportar Excel");
+        log.info("📊 Parámetros: flotaId={}, estado={}, semana={}", flotaId, estado, semana);
+
+        try {
+            // Delegar toda la lógica al servicio
+            byte[] excelBytes = yegoGarantizadoRegistroService.exportarExcel(flotaId, estado, semana);
+
+            // Configurar headers para descarga
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            headers.setContentDispositionFormData("attachment", "garantizado_" + semana + ".xlsx");
+            headers.setContentLength(excelBytes.length);
+
+            log.info("✅ [YegoGarantizadoController] Excel generado exitosamente");
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(excelBytes);
+
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoController] Error generando Excel: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+}

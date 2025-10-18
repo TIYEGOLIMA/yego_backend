@@ -5,29 +5,31 @@ import com.yego.backend.service.yego_garantizado.FlotaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-/**
- * Controlador REST para flotas del sistema YEGO Garantizado
- */
-@Slf4j
 @RestController
-@RequestMapping("/api/garantizado/flotas")
+@RequestMapping("/api/flota")
 @RequiredArgsConstructor
+@Slf4j
 public class FlotaController {
-    
+
     private final FlotaService flotaService;
-    
-    /**
-     * Obtener todas las flotas de Yego
-     */
-    @GetMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
-    public ResponseEntity<List<FlotaResponse>> obtenerFlotas() {
-        List<FlotaResponse> flotas = flotaService.obtenerFlotas();
-        return ResponseEntity.ok(flotas);
+
+    @GetMapping("/todas")
+    public ResponseEntity<List<FlotaResponse>> obtenerTodasLasFlotas() {
+        log.info("⚙️ [FlotaController] Recibida solicitud para obtener todas las flotas");
+        
+        try {
+            List<FlotaResponse> flotas = flotaService.obtenerFlotas();
+            log.info("✅ [FlotaController] Encontradas {} flotas", flotas.size());
+            return ResponseEntity.ok(flotas);
+        } catch (Exception e) {
+            log.error("❌ [FlotaController] Error obteniendo flotas: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }

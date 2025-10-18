@@ -55,7 +55,7 @@ public class UserController {
     /**
      * Crear nuevo usuario
      */
-    @PostMapping
+    @PostMapping("/create")
     @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
     public ResponseEntity<?> create(@Valid @RequestBody CreateUserDto createUserDto) {
         UserResponseDto user = userService.create(createUserDto);

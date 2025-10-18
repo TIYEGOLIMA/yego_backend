@@ -59,8 +59,6 @@ public class SistemaExterno {
      */
     public enum EstadoSistema {
         ACTIVO,
-        MANTENIMIENTO,
-        ERROR,
         INACTIVO
     }
 }

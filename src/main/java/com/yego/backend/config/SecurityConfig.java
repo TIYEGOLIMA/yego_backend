@@ -87,6 +87,9 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh").permitAll()
                 .requestMatchers("/api/ticketera/auth/refresh").permitAll() // Alias ticketera auth
+                .requestMatchers("/api/recaudo/**").permitAll() // Recaudo endpoints
+                .requestMatchers("/api/garantizado/**").permitAll() // Garantizado endpoints
+           .requestMatchers("/api/conductor-registro/**").permitAll() // Conductor registro endpoints
                 .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                 .requestMatchers("/actuator/**").permitAll() // Actuator endpoints
                 .requestMatchers("/error").permitAll() // Error endpoint

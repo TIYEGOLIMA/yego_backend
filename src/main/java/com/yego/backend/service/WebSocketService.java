@@ -3,14 +3,21 @@ package com.yego.backend.service;
 import com.yego.backend.entity.yego_ticketerera.entities.Ticket;
 import com.yego.backend.entity.yego_ticketerera.api.response.TicketWithCategoryResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.TicketWebSocketResponse;
+import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoResponse;
 import com.yego.backend.repository.yego_ticketerera.OptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -285,6 +292,30 @@ public class WebSocketService {
         log.info("✅ Notificación de bloqueo enviada para usuario: {}", username);
     }
     
+
+    /**
+     * Enviar datos completos de garantizado para actualizar la tabla
+     */
+    public void enviarDatosCompletosGarantizado(List<GarantizadoResponse> conductores, String semanaActual) {
+        log.info("📊 Enviando datos completos de garantizado - {} conductores para semana {}", conductores.size(), semanaActual);
+
+        Map<String, Object> data = Map.of(
+            "type", "GARANTIZADO_TABLE_UPDATE",
+            "semanaActual", semanaActual,
+            "conductores", conductores,
+            "totalConductores", conductores.size(),
+            "timestamp", LocalDateTime.now().toString()
+        );
+
+        // Enviar al topic del sistema
+        messagingTemplate.convertAndSend("/topic/system", data);
+
+        // Enviar a topic específico de garantizado
+        messagingTemplate.convertAndSend("/topic/garantizado", data);
+
+        log.info("✅ Datos completos de garantizado enviados - {} conductores", conductores.size());
+    }
+
     /**
      * Enviar notificación de actualización de usuarios para refrescar tabla
      */
