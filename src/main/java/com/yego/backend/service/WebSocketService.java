@@ -259,10 +259,7 @@ public class WebSocketService {
             "timestamp", LocalDateTime.now().toString()
         );
         
-        // Enviar al topic del sistema para que todos los usuarios conectados lo reciban
-        messagingTemplate.convertAndSend("/topic/system", notification);
-        
-        // También enviar a un topic específico del usuario (si está implementado)
+        // Enviar SOLO al usuario específico afectado
         messagingTemplate.convertAndSend("/topic/user/" + userId, notification);
         
         log.info("✅ Notificación de logout forzado enviada para usuario: {}", username);
@@ -283,10 +280,7 @@ public class WebSocketService {
             "timestamp", LocalDateTime.now().toString()
         );
         
-        // Enviar al topic del sistema
-        messagingTemplate.convertAndSend("/topic/system", notification);
-        
-        // También enviar a un topic específico del usuario
+        // Enviar SOLO al usuario específico afectado
         messagingTemplate.convertAndSend("/topic/user/" + userId, notification);
         
         log.info("✅ Notificación de bloqueo enviada para usuario: {}", username);
