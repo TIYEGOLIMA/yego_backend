@@ -17,5 +17,7 @@ public interface YegoGarantizadoRegistroService {
 
     GarantizadoListResponse procesarYDevolverSemanaActual();
 
+    GarantizadoListResponse procesarYDevolverSemanaAnterior();
+
     byte[] exportarExcel(String flotaId, String estado, String semana);
 }

@@ -149,6 +149,50 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
         return response;
     }
 
+    @Override
+    public GarantizadoListResponse procesarYDevolverSemanaAnterior() {
+        log.info("🌐 [YegoGarantizadoRegistroService] Procesando y devolviendo semana anterior");
+        
+        try {
+            // Obtener la semana anterior
+            String semanaAnterior = obtenerSemanaAnterior();
+            
+            // Procesar los conductores de la semana anterior
+            procesarConductoresPorSemana(semanaAnterior);
+
+            // Luego obtener todos los garantizados procesados
+            List<YegoGarantizado> garantizados = yegoGarantizadoRepository.findByActivoTrue();
+            List<GarantizadoResponse> conductores = garantizados.stream()
+                    .map(this::convertirAGarantizadoResponse)
+                    .collect(Collectors.toList());
+            
+            GarantizadoListResponse response = GarantizadoListResponse.builder()
+                    .semanaActual(semanaAnterior)
+                    .conductores(conductores)
+                    .build();
+            
+            log.info("✅ [YegoGarantizadoRegistroService] Procesados y devueltos {} conductores de la semana anterior", conductores.size());
+            return response;
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoRegistroService] Error procesando semana anterior: {}", e.getMessage());
+            return GarantizadoListResponse.builder()
+                    .semanaActual("SEMANA0")
+                    .conductores(new ArrayList<>())
+                    .build();
+        }
+    }
+
+    /**
+     * Calcula la semana anterior del año
+     */
+    private String obtenerSemanaAnterior() {
+        LocalDateTime ahora = LocalDateTime.now();
+        int diaDelAnio = ahora.getDayOfYear();
+        int semana = (diaDelAnio / 7) + 1;
+        int semanaAnterior = semana - 1;
+        return "SEMANA" + semanaAnterior;
+    }
+
     /**
      * Calcula la semana actual del año
      */
