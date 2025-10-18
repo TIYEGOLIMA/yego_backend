@@ -6,10 +6,6 @@
 server:
   port: ${PORT:3030}
 
-# Configuración de URLs base para sistemas externos
-app:
-  base-url: ${APP_BASE_URL:https://integral.yego.pro}
-
 spring:
   # Configuración de base de datos PostgreSQL - PRODUCCIÓN
   datasource:
@@ -45,6 +41,7 @@ jwt:
 
 # Configuración de la aplicación para producción
 app:
+  base-url: ${APP_BASE_URL:https://integral.yego.pro}
   frontend:
     url: ${FRONTEND_URL:https://integral.yego.pro}
     cors:
