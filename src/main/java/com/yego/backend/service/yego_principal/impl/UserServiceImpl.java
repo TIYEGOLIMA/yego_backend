@@ -392,15 +392,11 @@ public class UserServiceImpl implements UserService {
      */
     private void enviarNotificacionBloqueo(User user) {
         try {
-            // Verificar si el usuario está logueado
-            if (user.getLastLogin() != null && 
-                user.getLastLogin().isAfter(LocalDateTime.now().minusHours(24))) {
-                
-                log.info("🚨 Usuario {} está logueado, enviando notificación de bloqueo", user.getUsername());
-                
-                // Enviar notificación WebSocket de bloqueo
-                webSocketService.enviarBloqueoCuenta(user.getId(), user.getUsername());
-            }
+            // Siempre enviar notificación de bloqueo, independientemente del último login
+            log.info("🚨 Usuario {} desactivado, enviando notificación de bloqueo", user.getUsername());
+            
+            // Enviar notificación WebSocket de bloqueo
+            webSocketService.enviarBloqueoCuenta(user.getId(), user.getUsername());
         } catch (Exception e) {
             log.error("❌ Error enviando notificación de bloqueo para usuario {}: {}", user.getUsername(), e.getMessage());
         }
