@@ -53,9 +53,6 @@ app:
       origin: ${CORS_ORIGIN:*}
       origin-dev: ${CORS_ORIGIN_DEV:*}
       origin-prod: ${CORS_ORIGIN_PROD:https://roaring-naiad-334278.netlify.app}
-  backend:
-    external:
-      url: ${EXTERNAL_BACKEND_URL:https://api-tick.yego.pro/api}
   
   # API Externa para DNI
   factiliza:

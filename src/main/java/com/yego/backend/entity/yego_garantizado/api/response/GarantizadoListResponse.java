@@ -16,6 +16,7 @@ import java.util.List;
 @AllArgsConstructor
 public class GarantizadoListResponse {
     
-    private String semanaActual; 
+    private String semanaAnterior; 
+    private String semanaActual;
     private List<GarantizadoResponse> conductores;
 }

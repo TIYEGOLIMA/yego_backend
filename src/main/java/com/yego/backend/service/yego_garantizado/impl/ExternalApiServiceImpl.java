@@ -6,14 +6,14 @@ import com.yego.backend.repository.yego_garantizado.YegoGarantizadoRepository;
 import com.yego.backend.service.yego_garantizado.ExternalApiService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -30,15 +30,14 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     private static final String EXTERNAL_API_URL = "http://5.161.229.77:8087/procesar-conductor";
 
     @Override
-    public YegoGarantizado procesarConductor(String licencia, String parkId, String flotaId) {
+    public YegoGarantizado procesarConductor(String licencia, String parkId, String semana) {
         try {
             log.info("🌐 [ExternalApiService] Consumiendo API externa para licencia: {} con parkId: {}", licencia, parkId);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             
-            // Crear un objeto JSON con la licencia, parkId (flota) y semana actual
-            String semana = obtenerSemanaActual();
+            // Crear un objeto JSON con la licencia, parkId (flota) y semana anterior
             String jsonRequest = "{\"licencia\":\"" + licencia + "\",\"parkId\":\"" + parkId + "\",\"semana\":\"" + semana + "\"}";
             HttpEntity<String> request = new HttpEntity<>(jsonRequest, headers);
             
@@ -53,7 +52,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
                 GarantizadoRequest apiResponse = response.getBody();
                 log.info("✅ [ExternalApiService] Datos recibidos de API externa: {}", apiResponse);
                 
-                return procesarDatosApi(apiResponse, parkId, flotaId);
+                return procesarDatosApi(apiResponse, parkId, semana);
             } else {
                 log.warn("⚠️ [ExternalApiService] Respuesta vacía de API externa");
                 return null;
@@ -65,7 +64,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         }
     }
     
-    private YegoGarantizado procesarDatosApi(GarantizadoRequest apiResponse, String parkId, String flotaId) {
+    private YegoGarantizado procesarDatosApi(GarantizadoRequest apiResponse, String parkId, String semana) {
         // Convertir centavos a pesos
         BigDecimal efectivo = convertirCentavosAPesos(apiResponse.getTarifas());
         BigDecimal pagoSinEfectivo = convertirCentavosAPesos(apiResponse.getPagoSinEfectivo());
@@ -74,27 +73,24 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         BigDecimal boSemAnt = convertirCentavosAPesos(apiResponse.getBoSemAnt());
         BigDecimal boSemAct = convertirCentavosAPesos(apiResponse.getBoSemAct());
 
-        // Calcular total
-        BigDecimal total = efectivo.add(pagoSinEfectivo).add(comYango).add(comYego).add(boSemAnt).add(boSemAct);
+        // Calcular total según Google Sheets: efectivo + pagoSinEfectivo + comYango + comYego - boSemAnt + boSemAct
+        BigDecimal total = efectivo.add(pagoSinEfectivo).add(comYango).add(comYego).subtract(boSemAnt).add(boSemAct);
         
         // Calcular garantizado basado en rangos de boSemAct
-        BigDecimal garantizado = calcularGarantizadoSegunBoSemAct(boSemAct, flotaId);
+        BigDecimal garantizado = calcularGarantizadoSegunBoSemAct(boSemAct, parkId);
         
-        // Calcular diferencia
-        BigDecimal diferencia = total.subtract(garantizado);
+        // Calcular diferencia (garantizado - total)
+        BigDecimal diferencia = garantizado.subtract(total);
         
         // Determinar valor de garantizado
         String garantizadoValor = diferencia.compareTo(BigDecimal.ZERO) >= 0 ? "Garantizado" : "No Garantizado";
-        
-        // Obtener semana actual
-        String semana = obtenerSemanaActual();
         
         // Obtener datos del conductor desde la tabla drivers
         String[] datosConductor = obtenerDatosConductor(apiResponse.getLicencia());
         String nombreCompleto = datosConductor[0];
         String telefono = datosConductor[1];
         
-        // Guardar en la tabla yego_garantizado_dev
+        // Guardar en la tabla yego_garantizado
         YegoGarantizado yegoGarantizado = new YegoGarantizado();
         yegoGarantizado.setNombreCompleto(nombreCompleto);
         yegoGarantizado.setNumeroLicencia(apiResponse.getLicencia());
@@ -111,7 +107,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         yegoGarantizado.setDiferencia(diferencia);
         yegoGarantizado.setSemana(semana);
         yegoGarantizado.setViajesActuales(apiResponse.getViajes());
-        yegoGarantizado.setFlotaId(flotaId);
+        yegoGarantizado.setFlotaId(parkId);
         yegoGarantizado.setGarantizadoValor(garantizadoValor);
         yegoGarantizado.setActivo(true);
         
@@ -125,17 +121,17 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         return new BigDecimal(centavos).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
     }
     
-    private BigDecimal calcularGarantizadoSegunBoSemAct(BigDecimal boSemAct, String flotaId) {
+    private BigDecimal calcularGarantizadoSegunBoSemAct(BigDecimal boSemAct, String parkId) {
         try {
             // Convertir BigDecimal a int para determinar el rango
             int boSemActValue = boSemAct.intValue();
             
-            log.info("🔢 [ExternalApiService] boSemAct: {}, Valor calculado: {}, FlotaId: {}", boSemAct, boSemActValue, flotaId);
+            log.info("🔢 [ExternalApiService] boSemAct: {}, Valor calculado: {}, FlotaId: {}", boSemAct, boSemActValue, parkId);
             
             // Determinar si es Perú o extranjero basándose en los comentarios de FlotaServiceImpl
-            boolean esPeruano = esFlotaPeruana(flotaId);
+            boolean esPeruano = esFlotaPeruana(parkId);
             String moneda = esPeruano ? "Soles Peruanos" : "Pesos Colombianos";
-            log.info("💰 [ExternalApiService] Moneda detectada: {} (Flota: {})", moneda, flotaId);
+            log.info("💰 [ExternalApiService] Moneda detectada: {} (Flota: {})", moneda, parkId);
             
             // Aplicar la lógica de rangos según el Google Sheets
             BigDecimal garantizadoSoles;
@@ -155,8 +151,8 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             
             // Si es extranjero (Colombia), convertir de soles a pesos colombianos
             if (!esPeruano) {
-                // Tasa de cambio aproximada: 1 sol = 4,200 pesos colombianos
-                BigDecimal tasaCambio = new BigDecimal("4200.00");
+                // Tasa de cambio: 1 sol = 1 sol (usar valores peruanos por ahora)
+                BigDecimal tasaCambio = new BigDecimal("1.00");
                 BigDecimal garantizadoPesos = garantizadoSoles.multiply(tasaCambio);
                 log.info("🔄 [ExternalApiService] Conversión: {} soles → {} pesos colombianos", garantizadoSoles, garantizadoPesos);
                 return garantizadoPesos;
@@ -171,16 +167,16 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         }
     }
     
-    private boolean esFlotaPeruana(String flotaId) {
+    private boolean esFlotaPeruana(String parkId) {
         // Flotas peruanas según los comentarios en FlotaServiceImpl
-        return "56e4607dfc354e0a9cde4f0aa7973003".equals(flotaId) || // Yego Arequipa
-               "c054c8b5dfe14e75b882943b2a252706".equals(flotaId) || // Yego Black
-               "c58110bc70244430a70a8126fc69f22c".equals(flotaId) || // Yego Líderes
-               "5921e55cc5d042d28747dd722608955a".equals(flotaId) || // Yego Prime
-               "ff424287c4bd4cbba6066962951a121f".equals(flotaId) || // Yego Promi
-               "851e30755bba4d298e2e837f571b4ab8".equals(flotaId) || // Yego Trujillo
-               "ae57aaedeacd41eb9fdbe1ff7a89a3f2".equals(flotaId) || // Yego,
-               "2e39f6699c854bc49cc75197431fe25c".equals(flotaId);   // Yego.
+        return "56e4607dfc354e0a9cde4f0aa7973003".equals(parkId) || // Yego Arequipa
+               "c054c8b5dfe14e75b882943b2a252706".equals(parkId) || // Yego Black
+               "c58110bc70244430a70a8126fc69f22c".equals(parkId) || // Yego Líderes
+               "5921e55cc5d042d28747dd722608955a".equals(parkId) || // Yego Prime
+               "ff424287c4bd4cbba6066962951a121f".equals(parkId) || // Yego Promi
+               "851e30755bba4d298e2e837f571b4ab8".equals(parkId) || // Yego Trujillo
+               "ae57aaedeacd41eb9fdbe1ff7a89a3f2".equals(parkId) || // Yego,
+               "2e39f6699c854bc49cc75197431fe25c".equals(parkId);   // Yego.
     }
 
     /**
@@ -218,15 +214,8 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             return new String[]{nombreCompleto, telefono};
             
         } catch (Exception e) {
-            log.error(" [ExternalApiService] Error consultando datos del conductor {}: {}", numeroLicencia, e.getMessage());
+            log.error("❌ [ExternalApiService] Error consultando datos del conductor {}: {}", numeroLicencia, e.getMessage());
             return new String[]{"Conductor " + numeroLicencia, "N/A"};
         }
-    }
-
-    /**
-     * Calcula la semana actual del año
-     */
-    private String obtenerSemanaActual() {
-        return "SEMANA" + (LocalDateTime.now().getDayOfYear() / 7 + 1);
     }
 }

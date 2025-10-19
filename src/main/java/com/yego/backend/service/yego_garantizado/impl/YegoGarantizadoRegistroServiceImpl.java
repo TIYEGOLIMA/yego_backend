@@ -54,7 +54,7 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                     String flotaId = conductor.getFlota();
 
                     // Consumir API externa para cada conductor
-                    YegoGarantizado response = externalApiService.procesarConductor(conductor.getLicenciaNumero(), conductor.getFlota(), flotaId);
+                    YegoGarantizado response = externalApiService.procesarConductor(conductor.getLicenciaNumero(), conductor.getFlota(), semana);
 
                     if (response != null) {
                         // Guardar el resultado procesado en la base de datos
@@ -84,60 +84,36 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
         log.info("📋 [YegoGarantizadoRegistroService] Obteniendo garantizados por flota: {}", flotaId);
         
         try {
-            List<YegoGarantizado> garantizados = yegoGarantizadoRepository.findByFlotaIdAndActivoTrue(flotaId);
+            // Obtener la semana anterior
+            String semanaAnterior = obtenerSemanaAnterior();
+            
+            // Filtrar por flota Y semana anterior
+            List<YegoGarantizado> garantizados = yegoGarantizadoRepository.findByFlotaIdAndSemanaAndActivoTrue(flotaId, semanaAnterior);
             List<GarantizadoResponse> conductores = garantizados.stream()
                     .map(this::convertirAGarantizadoResponse)
                     .collect(Collectors.toList());
             
+            // Obtener también la semana actual
             String semanaActual = obtenerSemanaActual();
             
             GarantizadoListResponse response = GarantizadoListResponse.builder()
+                    .semanaAnterior(semanaAnterior)
                     .semanaActual(semanaActual)
                     .conductores(conductores)
                     .build();
             
-            log.info("✅ [YegoGarantizadoRegistroService] Encontrados {} garantizados para flota {}", conductores.size(), flotaId);
+            log.info("✅ [YegoGarantizadoRegistroService] Encontrados {} garantizados para flota {} de la semana {}", conductores.size(), flotaId, semanaAnterior);
             return response;
         } catch (Exception e) {
             log.error("❌ [YegoGarantizadoRegistroService] Error obteniendo garantizados por flota {}: {}", flotaId, e.getMessage());
             return GarantizadoListResponse.builder()
+                    .semanaAnterior("SEMANA0")
                     .semanaActual("SEMANA0")
                     .conductores(new ArrayList<>())
                     .build();
         }
     }
 
-    @Override
-    public GarantizadoListResponse procesarYDevolverSemanaActual() {
-        log.info("🌐 [YegoGarantizadoRegistroService] Procesando y devolviendo semana actual");
-        
-        try {
-            // Primero procesar los conductores de la semana actual
-            procesarSemanaActual();
-
-            // Luego obtener todos los garantizados procesados
-            List<YegoGarantizado> garantizados = yegoGarantizadoRepository.findByActivoTrue();
-            List<GarantizadoResponse> conductores = garantizados.stream()
-                    .map(this::convertirAGarantizadoResponse)
-                    .collect(Collectors.toList());
-            
-            String semanaActual = obtenerSemanaActual();
-            
-            GarantizadoListResponse response = GarantizadoListResponse.builder()
-                    .semanaActual(semanaActual)
-                    .conductores(conductores)
-                    .build();
-            
-            log.info("✅ [YegoGarantizadoRegistroService] Procesados y devueltos {} conductores", conductores.size());
-            return response;
-        } catch (Exception e) {
-            log.error("❌ [YegoGarantizadoRegistroService] Error procesando semana actual: {}", e.getMessage());
-            return GarantizadoListResponse.builder()
-                    .semanaActual("SEMANA0")
-                    .conductores(new ArrayList<>())
-                    .build();
-        }
-    }
 
 
     /**
@@ -160,14 +136,18 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
             // Procesar los conductores de la semana anterior
             procesarConductoresPorSemana(semanaAnterior);
 
-            // Luego obtener todos los garantizados procesados
-            List<YegoGarantizado> garantizados = yegoGarantizadoRepository.findByActivoTrue();
+            // Luego obtener solo los garantizados de la semana anterior
+            List<YegoGarantizado> garantizados = yegoGarantizadoRepository.findBySemanaAndActivoTrue(semanaAnterior);
             List<GarantizadoResponse> conductores = garantizados.stream()
                     .map(this::convertirAGarantizadoResponse)
                     .collect(Collectors.toList());
             
+            // Obtener también la semana actual
+            String semanaActual = obtenerSemanaActual();
+            
             GarantizadoListResponse response = GarantizadoListResponse.builder()
-                    .semanaActual(semanaAnterior)
+                    .semanaAnterior(semanaAnterior)
+                    .semanaActual(semanaActual)
                     .conductores(conductores)
                     .build();
             
@@ -176,6 +156,43 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
         } catch (Exception e) {
             log.error("❌ [YegoGarantizadoRegistroService] Error procesando semana anterior: {}", e.getMessage());
             return GarantizadoListResponse.builder()
+                    .semanaAnterior("SEMANA0")
+                    .semanaActual("SEMANA0")
+                    .conductores(new ArrayList<>())
+                    .build();
+        }
+    }
+
+
+    @Override
+    public GarantizadoListResponse listarGarantizadosSemanaAnterior() {
+        log.info("📋 [YegoGarantizadoRegistroService] Listando garantizados de la semana anterior");
+        
+        try {
+            // Obtener la semana anterior
+            String semanaAnterior = obtenerSemanaAnterior();
+            
+            // Solo obtener los garantizados de la semana anterior (SIN procesar)
+            List<YegoGarantizado> garantizados = yegoGarantizadoRepository.findBySemanaAndActivoTrue(semanaAnterior);
+            List<GarantizadoResponse> conductores = garantizados.stream()
+                    .map(this::convertirAGarantizadoResponse)
+                    .collect(Collectors.toList());
+            
+            // Obtener también la semana actual
+            String semanaActual = obtenerSemanaActual();
+            
+            GarantizadoListResponse response = GarantizadoListResponse.builder()
+                    .semanaAnterior(semanaAnterior)
+                    .semanaActual(semanaActual)
+                    .conductores(conductores)
+                    .build();
+            
+            log.info("✅ [YegoGarantizadoRegistroService] Listados {} conductores de la semana anterior", conductores.size());
+            return response;
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoRegistroService] Error listando garantizados de la semana anterior: {}", e.getMessage());
+            return GarantizadoListResponse.builder()
+                    .semanaAnterior("SEMANA0")
                     .semanaActual("SEMANA0")
                     .conductores(new ArrayList<>())
                     .build();
@@ -192,21 +209,15 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
         int semanaAnterior = semana - 1;
         return "SEMANA" + semanaAnterior;
     }
-
-    /**
-     * Calcula la semana actual del año
-     */
+    
     private String obtenerSemanaActual() {
-        return "Semana " + (java.time.LocalDateTime.now().getDayOfYear() / 7 + 1);
+        LocalDateTime ahora = LocalDateTime.now();
+        int diaDelAnio = ahora.getDayOfYear();
+        int semana = (diaDelAnio / 7) + 1;
+        return "SEMANA" + semana;
     }
 
-    /**
-     * Procesa los conductores de la semana actual
-     */
-    @Override
-    public List<YegoGarantizado> procesarSemanaActual() {
-        return procesarConductoresPorSemana(obtenerSemanaActual());
-    }
+
 
     @Override
     public byte[] exportarExcel(String flotaId, String estado, String semana) {
@@ -220,8 +231,19 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                 // Filtrar por flota específica
                 response = obtenerGarantizadosPorFlota(flotaId);
             } else {
-                // Obtener todos los datos de la semana actual
-                response = procesarYDevolverSemanaActual();
+                // Obtener todos los datos de la semana anterior directamente de queue_garantizado
+               
+                List<YegoGarantizado> garantizados = yegoGarantizadoRepository.findBySemanaAndActivoTrue(semana);
+                List<GarantizadoResponse> conductores = garantizados.stream()
+                        .map(this::convertirAGarantizadoResponse)
+                        .collect(Collectors.toList());
+                
+                String semanaActual = obtenerSemanaActual();
+                response = GarantizadoListResponse.builder()
+                        .semanaAnterior(semana)
+                        .semanaActual(semanaActual)
+                        .conductores(conductores)
+                        .build();
             }
 
             // Aplicar filtro por estado si se proporciona
@@ -231,6 +253,7 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                         .collect(Collectors.toList());
                 
                 response = GarantizadoListResponse.builder()
+                        .semanaAnterior(response.getSemanaAnterior())
                         .semanaActual(response.getSemanaActual())
                         .conductores(conductoresFiltrados)
                         .build();

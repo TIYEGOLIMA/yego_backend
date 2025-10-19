@@ -11,13 +11,11 @@ public interface YegoGarantizadoRegistroService {
 
     List<YegoGarantizado> procesarConductoresPorSemana(String semana);
 
-    List<YegoGarantizado> procesarSemanaActual();
-
     GarantizadoListResponse obtenerGarantizadosPorFlota(String flotaId);
 
-    GarantizadoListResponse procesarYDevolverSemanaActual();
-
     GarantizadoListResponse procesarYDevolverSemanaAnterior();
+    
+    GarantizadoListResponse listarGarantizadosSemanaAnterior();
 
     byte[] exportarExcel(String flotaId, String estado, String semana);
 }

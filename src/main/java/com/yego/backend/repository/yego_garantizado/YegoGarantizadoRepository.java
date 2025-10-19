@@ -9,9 +9,7 @@ import java.util.List;
 @Repository
 public interface YegoGarantizadoRepository extends JpaRepository<YegoGarantizado, Long> {
     
-    List<YegoGarantizado> findByFlotaId(String flotaId);
-
-    List<YegoGarantizado> findByFlotaIdAndActivoTrue(String flotaId);
+    List<YegoGarantizado> findBySemanaAndActivoTrue(String semana);
     
-    List<YegoGarantizado> findByActivoTrue();
+    List<YegoGarantizado> findByFlotaIdAndSemanaAndActivoTrue(String flotaId, String semana);
 }

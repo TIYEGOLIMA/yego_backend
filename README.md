@@ -80,8 +80,6 @@ JWT_EXPIRES_IN=3600
 FRONTEND_URL=http://localhost:3000
 FRONTEND_DEV_URL=http://localhost:5173
 
-# Backend externo
-EXTERNAL_BACKEND_URL=https://api-tick.yego.pro/api
 ```
 
 ### 2. Base de Datos

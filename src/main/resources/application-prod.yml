@@ -25,6 +25,7 @@ spring:
     hibernate:
       ddl-auto: ${TYPEORM_SYNCHRONIZE:validate}  # false en .env = validate en Spring
     show-sql: ${TYPEORM_LOGGING:false}           # false en .env
+    open-in-view: false  # Deshabilitar para mejor rendimiento
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -77,6 +78,8 @@ logging:
     org.springframework.security: WARN
     org.springframework.web.socket: WARN
     org.hibernate.SQL: WARN
+    # Suprimir warnings específicos de Spring Security
+    org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer: ERROR
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"
   file:

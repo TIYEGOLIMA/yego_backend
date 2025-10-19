@@ -6,8 +6,6 @@
 server:
   port: ${PORT:3030}
 
-# Configuración de URLs base para sistemas externos
-
 spring:
   # Permitir referencias circulares (temporal para resolver dependencias)
   main:
@@ -31,6 +29,7 @@ spring:
     hibernate:
       ddl-auto: ${TYPEORM_SYNCHRONIZE:validate}  
     show-sql: ${TYPEORM_LOGGING:true}           
+    open-in-view: false  # Deshabilitar para mejor rendimiento
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -49,9 +48,6 @@ app:
     cors:
       origin: ${CORS_ORIGIN_DEV:*}  # Permitir todo en desarrollo
   
-  backend:
-    external:
-      url: ${EXTERNAL_BACKEND_URL:https://api-tick.yego.pro/api}
   
   # API Externa para DNI (desarrollo)
   factiliza:
@@ -76,6 +72,8 @@ logging:
     org.springframework.security: DEBUG
     org.springframework.web.socket: DEBUG
     org.springframework.web: DEBUG
+    # Suprimir warnings específicos de Spring Security
+    org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer: ERROR
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
   file:

@@ -17,19 +17,21 @@ public class YegoGarantizadoController {
 
     private final YegoGarantizadoRegistroService yegoGarantizadoRegistroService;
 
-    @GetMapping("/procesar-semana-actual")
-    public ResponseEntity<GarantizadoListResponse> procesarSemanaActual() {
-        log.info("⚙️ [YegoGarantizadoController] Recibida solicitud para procesar semana actual");
+    @GetMapping("/procesar-semana-anterior")
+    public ResponseEntity<GarantizadoListResponse> procesarSemanaAnterior() {
+        log.info("📋 [YegoGarantizadoController] Recibida solicitud para consultar semana anterior");
         
         try {
-            GarantizadoListResponse response = yegoGarantizadoRegistroService.procesarYDevolverSemanaActual();
-            log.info("✅ [YegoGarantizadoController] Procesados {} conductores de la semana actual", response.getConductores().size());
+            // Solo consultar datos ya procesados por el scheduler
+            GarantizadoListResponse response = yegoGarantizadoRegistroService.listarGarantizadosSemanaAnterior();
+            log.info("✅ [YegoGarantizadoController] Consultados {} conductores de la semana anterior", response.getConductores().size());
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("❌ [YegoGarantizadoController] Error procesando semana actual: {}", e.getMessage());
+            log.error("❌ [YegoGarantizadoController] Error consultando semana anterior: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
+
 
     @GetMapping("/flota/{flotaId}")
     public ResponseEntity<GarantizadoListResponse> obtenerGarantizadosPorFlota(@PathVariable String flotaId) {

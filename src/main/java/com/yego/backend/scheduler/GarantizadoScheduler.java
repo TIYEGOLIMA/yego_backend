@@ -41,7 +41,7 @@ public class GarantizadoScheduler {
             // Enviar datos completos para actualizar la tabla
             webSocketService.enviarDatosCompletosGarantizado(
                 datosCompletos.getConductores(),
-                datosCompletos.getSemanaActual()
+                datosCompletos.getSemanaAnterior()
             );
             
         } catch (Exception e) {
@@ -61,14 +61,5 @@ public class GarantizadoScheduler {
         int semanaAnterior = semana - 1;
         return "SEMANA" + semanaAnterior;
     }
-    
-    /**
-     * Obtiene la semana actual en formato SEMANAXX
-     */
-    private String obtenerSemanaActual() {
-        LocalDateTime ahora = LocalDateTime.now();
-        int diaDelAnio = ahora.getDayOfYear();
-        int semana = (diaDelAnio / 7) + 1;
-        return "SEMANA" + semana;
-    }
+
 }
