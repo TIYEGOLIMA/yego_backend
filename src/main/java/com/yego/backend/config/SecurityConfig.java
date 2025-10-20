@@ -91,6 +91,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/garantizado/**").permitAll() // Garantizado endpoints
                 .requestMatchers("/api/flota/**").permitAll() // Flota endpoints
                 .requestMatchers("/api/conductor-registro/**").permitAll() // Conductor registro endpoints
+                .requestMatchers("/api/modules/**").permitAll() // Módulos endpoints
                 .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                 .requestMatchers("/actuator/**").permitAll() // Actuator endpoints
                 .requestMatchers("/error").permitAll() // Error endpoint

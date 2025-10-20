@@ -1,19 +1,17 @@
 package com.yego.backend.entity.yego_principal.entities;
 
+import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
-import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
-/**
- * Entidad Module para JPA
- * Equivalente a ModuleEntity de TypeORM en NestJS
- */
 @Entity
-@Table(name = "modules")
+@Table(name = "queue_modulos")
 @Data
 @Builder
 @NoArgsConstructor
@@ -22,33 +20,33 @@ public class Module {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "yeg_sis_ext_id")
     private Long id;
     
-    @Column(nullable = false, unique = true, length = 100)
-    private String name;
+    @Column(name = "yeg_sis_ext_nombre", nullable = false, length = 100)
+    private String nombre;
     
-    @Column(columnDefinition = "TEXT")
-    private String description;
+    @Column(name = "yeg_sis_ext_descripcion", length = 500)
+    private String descripcion;
     
-    @Column(nullable = false)
-    @Builder.Default
-    private Boolean active = true;
+    @Column(name = "yeg_sis_ext_url", nullable = false, length = 500)
+    private String url;
     
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    @Column(name = "yeg_sis_ext_estado", length = 50, nullable = false)
+    private String estado;
     
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt;
+    @Column(name = "yeg_sis_ext_ultimo_check")
+    private LocalDateTime ultimoCheck;
     
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
+    @Column(name = "yeg_sis_ext_activo", nullable = false)
+    private Boolean activo = true;
     
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
+    @CreationTimestamp
+    @Column(name = "yeg_sis_ext_created_at", nullable = false, updatable = false)
+    private LocalDateTime fechaCreacion;
+    
+    @UpdateTimestamp
+    @Column(name = "yeg_sis_ext_updated_at", nullable = false)
+    private LocalDateTime fechaActualizacion;
+    
 }
-
