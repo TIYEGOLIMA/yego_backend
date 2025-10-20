@@ -48,42 +48,35 @@ public class DriverServiceImpl implements DriverService {
     @Override
     public Optional<DriverInfo> validarYObtenerLicencia(String licenseNumber) {
         log.info("Validando y obteniendo datos de licencia: {}", licenseNumber);
-        
-        Optional<Driver> driver = driverRepository.findByLicenseNumber(licenseNumber);
-        
-        if (driver.isPresent()) {
-            DriverInfo driverInfo = convertirADriverInfo(driver.get());
+        List<Driver> registros = driverRepository.findAllByLicenseNumber(licenseNumber);
+        if (!registros.isEmpty()) {
+            DriverInfo driverInfo = convertirADriverInfo(registros.get(0));
             log.info("Licencia {} encontrada - Conductor: {}", licenseNumber, driverInfo.getFullName());
             return Optional.of(driverInfo);
-        } else {
-            log.warn("Licencia {} no encontrada en la base de datos", licenseNumber);
-            return Optional.empty();
         }
+        log.warn("Licencia {} no encontrada en la base de datos", licenseNumber);
+        return Optional.empty();
     }
 
     @Override
     public DriverValidationResponse validarLicencia(String licenseNumber) {
         log.info("Validando licencia: {}", licenseNumber);
-        
-        Optional<DriverInfo> driverInfo = validarYObtenerLicencia(licenseNumber);
-        
-        if (driverInfo.isPresent()) {
-            log.info("Licencia {} existe - Conductor: {}", licenseNumber, driverInfo.get().getFullName());
-            return DriverValidationResponse.builder()
-                    .licenseNumber(licenseNumber)
-                    .existe(true)
-                    .mensaje("Licencia válida")
-                    .driver(driverInfo.get())
-                    .build();
+        List<Driver> registros = driverRepository.findAllByLicenseNumber(licenseNumber);
+        List<DriverInfo> lista = registros.stream()
+                .map(this::convertirADriverInfo)
+                .collect(Collectors.toList());
+        boolean existe = !lista.isEmpty();
+        if (existe) {
+            log.info("Licencia {} existe con {} coincidencias", licenseNumber, lista.size());
         } else {
             log.warn("Licencia {} no existe", licenseNumber);
-            return DriverValidationResponse.builder()
-                    .licenseNumber(licenseNumber)
-                    .existe(false)
-                    .mensaje("Licencia no encontrada")
-                    .driver(null)
-                    .build();
         }
+        return DriverValidationResponse.builder()
+                .licenseNumber(licenseNumber)
+                .existe(existe)
+                .mensaje(existe ? "Coincidencias encontradas" : "Licencia no encontrada")
+                .drivers(lista)
+                .build();
     }
     
     @Override
@@ -150,3 +143,4 @@ public class DriverServiceImpl implements DriverService {
         return info;
     }
 }
+

@@ -19,5 +19,6 @@ public class DriverValidationResponse {
     private String licenseNumber;
     private boolean existe;
     private String mensaje;
-    private DriverInfo driver;
+    private java.util.List<DriverInfo> drivers;
 }
+

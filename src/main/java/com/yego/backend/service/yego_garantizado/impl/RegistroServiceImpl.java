@@ -80,3 +80,4 @@ public class RegistroServiceImpl implements RegistroService {
         return "SEMANA" + (java.time.LocalDateTime.now().getDayOfYear() / 7 + 1);
     }
 }
+

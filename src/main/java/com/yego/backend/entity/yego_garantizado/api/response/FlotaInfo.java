@@ -21,3 +21,4 @@ public class FlotaInfo {
     private String city;
     private Boolean activo;
 }
+

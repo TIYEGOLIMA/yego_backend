@@ -30,3 +30,4 @@ public interface RegistroRepository extends JpaRepository<Registro, Long> {
      */
     boolean existsByYegLicenciaNumero(String yegLicenciaNumero);
 }
+

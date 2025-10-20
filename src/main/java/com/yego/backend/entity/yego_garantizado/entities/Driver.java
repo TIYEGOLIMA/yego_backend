@@ -40,3 +40,4 @@ public class Driver {
     @Column(name = "license_number")
     private String licenseNumber;
 }
+

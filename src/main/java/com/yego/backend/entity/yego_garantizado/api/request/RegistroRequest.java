@@ -26,3 +26,4 @@ public class RegistroRequest {
     @NotNull(message = "Debe aceptar los términos y condiciones")
     private Boolean yegTerminosAceptados;
 }
+

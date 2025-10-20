@@ -25,3 +25,4 @@ public class RegistroResponse {
     private LocalDateTime yegFechaModificacion;
     private String mensaje;
 }
+

@@ -21,3 +21,4 @@ public class DriverInfo {
     private Double rating;
     private String licenseNumber;
 }
+

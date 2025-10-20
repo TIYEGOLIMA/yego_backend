@@ -23,3 +23,4 @@ public class FlotaDisponibleResponse {
     private List<FlotaInfo> flotasDisponibles;
     private String mensaje;
 }
+

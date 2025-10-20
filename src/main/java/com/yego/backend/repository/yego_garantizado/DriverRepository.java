@@ -39,3 +39,4 @@ public interface DriverRepository extends JpaRepository<Driver, String> {
      */
     boolean existsByLicenseNumber(String licenseNumber);
 }
+

@@ -19,3 +19,4 @@ public interface RegistroService {
      */
     RegistroResponse crearRegistro(RegistroRequest request);
 }
+

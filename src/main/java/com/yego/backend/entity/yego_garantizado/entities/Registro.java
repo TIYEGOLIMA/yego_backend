@@ -55,3 +55,4 @@ public class Registro {
         yegFechaModificacion = LocalDateTime.now();
     }
 }
+
