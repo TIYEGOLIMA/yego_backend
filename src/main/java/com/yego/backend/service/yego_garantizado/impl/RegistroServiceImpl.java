@@ -11,6 +11,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+
 /**
  * Implementación del servicio para operaciones relacionadas con registros de garantizado
  * Maneja la creación y gestión de registros de conductores
@@ -57,6 +59,17 @@ public class RegistroServiceImpl implements RegistroService {
 
         log.info("Licencia {} validada correctamente - Conductor: {}", licencia, driverInfo.get().getFullName());
 
+        // Validar que el conductor no esté ya registrado en la semana actual
+        String semanaActual = obtenerSemanaActual();
+        boolean yaRegistrado = registroRepository.existsByYegLicenciaNumeroAndYegSemana(licencia, semanaActual);
+        
+        if (yaRegistrado) {
+            log.warn("Tu licencia {} ya está registrada en la semana {}", licencia, semanaActual);
+            throw new IllegalStateException("Tu licencia " + licencia + " ya está registrada en la semana " + semanaActual);
+        }
+
+        log.info("Conductor {} validado - No está registrado en la semana {}", driverInfo.get().getFullName(), semanaActual);
+
         Registro registro = new Registro();
         registro.setYegLicenciaNumero(request.getYegLicenciaNumero());
         registro.setYegFlota(request.getYegFlota());
@@ -77,7 +90,9 @@ public class RegistroServiceImpl implements RegistroService {
     }
 
     private String obtenerSemanaActual() {
-        return "SEMANA" + (java.time.LocalDateTime.now().getDayOfYear() / 7 + 1);
+        LocalDateTime ahora = LocalDateTime.now();
+        int semanaActual = ahora.get(java.time.temporal.WeekFields.ISO.weekOfYear());
+        return "SEMANA" + semanaActual;
     }
 }
 

@@ -9,7 +9,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 @Component
 @RequiredArgsConstructor
@@ -21,15 +20,15 @@ public class GarantizadoScheduler {
 
     /**
      * Procesa automáticamente todos los conductores de la semana anterior
-     * cada lunes a las 2:27 AM
+     * todos los lunes a las 9:00 AM
      */
-    @Scheduled(cron = "0 27 2 * * MON")
+    @Scheduled(cron = "0 0 9 * * MON")
     public void procesarConductoresSemanaAnterior() {
         try {
             // Obtener la semana anterior (la que se completó el domingo)
             String semanaAnterior = obtenerSemanaAnterior();
             
-            log.info("[GarantizadoScheduler] Iniciando procesamiento automático - Lunes 2:27 AM");
+            log.info("[GarantizadoScheduler] Iniciando procesamiento automático - Lunes 9:00 AM");
             log.info("[GarantizadoScheduler] Procesando semana anterior: {}", semanaAnterior);
             
             // Procesar todos los conductores de la semana anterior y obtener datos completos
@@ -55,10 +54,14 @@ public class GarantizadoScheduler {
      */
     private String obtenerSemanaAnterior() {
         LocalDateTime ahora = LocalDateTime.now();
-        int diaDelAnio = ahora.getDayOfYear();
-        int semana = (diaDelAnio / 7) + 1;
-        // Restar 1 para obtener la semana anterior
-        int semanaAnterior = semana - 1;
+        int semanaActual = ahora.get(java.time.temporal.WeekFields.ISO.weekOfYear());
+        int semanaAnterior = semanaActual - 1;
+        
+        // Si estamos en la semana 1, la semana anterior es la última semana del año anterior
+        if (semanaAnterior <= 0) {
+            semanaAnterior = 52; // Asumimos que el año anterior tenía 52 semanas
+        }
+        
         return "SEMANA" + semanaAnterior;
     }
 

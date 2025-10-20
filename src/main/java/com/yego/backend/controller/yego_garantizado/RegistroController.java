@@ -39,6 +39,11 @@ public class RegistroController {
             RegistroResponse errorResponse = new RegistroResponse();
             errorResponse.setMensaje(e.getMessage());
             return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+        } catch (IllegalStateException e) {
+            // Manejo específico para cuando el conductor ya está registrado en la semana
+            RegistroResponse errorResponse = new RegistroResponse();
+            errorResponse.setMensaje(e.getMessage());
+            return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
         } catch (Exception e) {
             RegistroResponse errorResponse = new RegistroResponse();
             errorResponse.setMensaje("Error al crear el registro: " + e.getMessage());

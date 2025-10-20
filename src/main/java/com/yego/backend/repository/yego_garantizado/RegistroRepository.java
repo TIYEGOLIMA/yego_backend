@@ -29,5 +29,13 @@ public interface RegistroRepository extends JpaRepository<Registro, Long> {
      * @return true si existe, false si no
      */
     boolean existsByYegLicenciaNumero(String yegLicenciaNumero);
+    
+    /**
+     * Verifica si existe un registro con el número de licencia y semana dados
+     * @param yegLicenciaNumero número de licencia a verificar
+     * @param yegSemana semana a verificar
+     * @return true si existe, false si no
+     */
+    boolean existsByYegLicenciaNumeroAndYegSemana(String yegLicenciaNumero, String yegSemana);
 }
 
