@@ -83,14 +83,20 @@ public class SchedulerConfig {
         DayOfWeek dayOfWeek = now.getDayOfWeek();
         LocalTime currentTime = now.toLocalTime();
 
-        boolean shouldBeActive = true;
+        boolean shouldBeActive = false;
 
-        // Verificar si está fuera del horario laboral (lunes 6:00 AM - viernes 23:59)
-        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
-            shouldBeActive = false;
-        } else if (dayOfWeek == DayOfWeek.FRIDAY && currentTime.isAfter(LocalTime.of(23, 59))) {
-            shouldBeActive = false;
-        } else if (dayOfWeek == DayOfWeek.MONDAY && currentTime.isBefore(LocalTime.of(6, 0))) {
+        // Verificar si está en horario laboral (lunes 6:00 AM - viernes 23:59)
+        if (dayOfWeek == DayOfWeek.TUESDAY || dayOfWeek == DayOfWeek.WEDNESDAY || 
+            dayOfWeek == DayOfWeek.THURSDAY) {
+            shouldBeActive = true;
+        } else if (dayOfWeek == DayOfWeek.MONDAY) {
+            // Lunes: activo solo después de las 6:00 AM
+            shouldBeActive = currentTime.isAfter(LocalTime.of(6, 0));
+        } else if (dayOfWeek == DayOfWeek.FRIDAY) {
+            // Viernes: activo hasta las 23:59
+            shouldBeActive = currentTime.isBefore(LocalTime.of(23, 59));
+        } else if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
+            // Fin de semana: inactivo
             shouldBeActive = false;
         }
 
