@@ -25,7 +25,7 @@ public class FlotaServiceImpl implements FlotaService {
     // IDs de las flotas de Yego que queremos filtrar
     private static final List<String> YEGO_FLOTA_IDS = Arrays.asList(
         "05b1c831e66f41a9a87f5f3fa0a186ae", // Yego Cali
-        "08e20910d81d42658d4334d3f6d10ac0", // Yego Caracas
+        "08e20910d81d42658d4334d3f6d10ac0", // Yego Lima
         "56e4607dfc354e0a9cde4f0aa7973003", // Yego Arequipa
         "ef21f793358144f589aabcbeb8bd7d50", // Yego Barranquilla
         "c054c8b5dfe14e75b882943b2a252706", // Yego Black

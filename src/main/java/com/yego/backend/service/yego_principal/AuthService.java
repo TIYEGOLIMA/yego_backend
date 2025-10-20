@@ -24,6 +24,11 @@ public interface AuthService extends UserDetailsService {
     LoginResponseDto login(LoginDto loginDto, HttpServletRequest request);
     
     /**
+     * Renovar token JWT
+     */
+    LoginResponseDto refreshToken(String token, HttpServletRequest request);
+    
+    /**
      * Registrar nuevo usuario
      */
     UserResponseDto register(RegisterDto registerDto);

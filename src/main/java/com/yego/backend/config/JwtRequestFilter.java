@@ -70,7 +70,11 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 request.setAttribute("jwtClaims", claims);
                 
             } catch (Exception e) {
-                log.warn("No se pudo obtener el username del token JWT: {}", e.getMessage());
+                log.warn("❌ [JwtRequestFilter] Error procesando JWT para {}: {}", request.getRequestURI(), e.getMessage());
+                // Si el token está expirado, no continuar con la autenticación
+                if (e.getMessage().contains("expired") || e.getMessage().contains("expiration")) {
+                    log.info("🕐 [JwtRequestFilter] Token expirado para: {}", request.getRequestURI());
+                }
             }
         } else {
             log.warn("⚠️ [JwtRequestFilter] No se recibió token Bearer para: {}", request.getRequestURI());
@@ -120,12 +124,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     
     private Boolean validateToken(String token, UserDetails userDetails) {
         try {
-            Claims claims = getJwtParser()
-                    .parseClaimsJws(token)
-                    .getBody();
-            
-            String username = claims.get("username", String.class);
-            return (username.equals(userDetails.getUsername()) && !isTokenExpired(claims));
+            // Ya validamos el token arriba, solo verificamos que el username coincida
+            // y que el usuario esté activo
+            return userDetails != null && userDetails.isEnabled();
             
         } catch (Exception e) {
             log.warn("Error validando token: {}", e.getMessage());

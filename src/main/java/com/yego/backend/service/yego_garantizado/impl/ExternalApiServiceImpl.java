@@ -17,7 +17,6 @@ import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -170,6 +169,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     private boolean esFlotaPeruana(String parkId) {
         // Flotas peruanas según los comentarios en FlotaServiceImpl
         return "56e4607dfc354e0a9cde4f0aa7973003".equals(parkId) || // Yego Arequipa
+                "08e20910d81d42658d4334d3f6d10ac0".equals(parkId) || // Yego 
                "c054c8b5dfe14e75b882943b2a252706".equals(parkId) || // Yego Black
                "c58110bc70244430a70a8126fc69f22c".equals(parkId) || // Yego Líderes
                "5921e55cc5d042d28747dd722608955a".equals(parkId) || // Yego Prime
@@ -178,6 +178,51 @@ public class ExternalApiServiceImpl implements ExternalApiService {
                "ae57aaedeacd41eb9fdbe1ff7a89a3f2".equals(parkId) || // Yego,
                "2e39f6699c854bc49cc75197431fe25c".equals(parkId);   // Yego.
     }
+
+    /**
+     * Obtiene el nombre de la flota desde mapeo local (más confiable que API externa)
+     */
+    public String obtenerNombreFlota(String flotaId) {
+        log.info("🌐 [ExternalApiService] Consultando nombre de flota para ID: {}", flotaId);
+        
+        // Usar mapeo local de flotas conocidas (más confiable)
+        String nombreFlota = obtenerNombreFlotaLocal(flotaId);
+        log.info("✅ [ExternalApiService] Nombre de flota: {}", nombreFlota);
+        return nombreFlota;
+    }
+    
+    /**
+     * Mapeo local de flotas conocidas (basado en FlotaServiceImpl)
+     */
+    private String obtenerNombreFlotaLocal(String flotaId) {
+        switch (flotaId) {
+            case "05b1c831e66f41a9a87f5f3fa0a186ae":
+                return "Yego Cali";
+            case "08e20910d81d42658d4334d3f6d10ac0":
+                return "Yego";
+            case "56e4607dfc354e0a9cde4f0aa7973003":
+                return "Yego Arequipa";
+            case "ef21f793358144f589aabcbeb8bd7d50":
+                return "Yego Barranquilla";
+            case "c054c8b5dfe14e75b882943b2a252706":
+                return "Yego Black";
+            case "c58110bc70244430a70a8126fc69f22c":
+                return "Yego Líderes";
+            case "5921e55cc5d042d28747dd722608955a":
+                return "Yego Prime";
+            case "ff424287c4bd4cbba6066962951a121f":
+                return "Yego Promi";
+            case "851e30755bba4d298e2e837f571b4ab8":
+                return "Yego Trujillo";
+            case "ae57aaedeacd41eb9fdbe1ff7a89a3f2":
+                return "Yego,";
+            case "2e39f6699c854bc49cc75197431fe25c":
+                return "Yego.";
+            default:
+                return "Flota " + flotaId;
+        }
+    }
+    
 
     /**
      * Obtiene los datos del conductor (nombre y teléfono) desde la tabla drivers en una sola consulta

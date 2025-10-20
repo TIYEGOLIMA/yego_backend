@@ -4,4 +4,5 @@ import com.yego.backend.entity.yego_garantizado.entities.YegoGarantizado;
 
 public interface ExternalApiService {
     YegoGarantizado procesarConductor(String licencia, String parkId, String semana);
+    String obtenerNombreFlota(String flotaId);
 }

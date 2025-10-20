@@ -1,6 +1,7 @@
 package com.yego.backend.controller.yego_garantizado;
 
 import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoListResponse;
+import com.yego.backend.entity.yego_garantizado.api.response.RegistroCompletoResponse;
 import com.yego.backend.service.yego_garantizado.YegoGarantizadoRegistroService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -8,6 +9,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/garantizado")
@@ -28,6 +31,20 @@ public class YegoGarantizadoController {
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("❌ [YegoGarantizadoController] Error consultando semana anterior: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping("/registros/semana-actual")
+    public ResponseEntity<List<RegistroCompletoResponse>> obtenerRegistrosSemanaActual() {
+        log.info("📋 [YegoGarantizadoController] Recibida solicitud para obtener registros de la semana actual");
+        
+        try {
+            List<RegistroCompletoResponse> registros = yegoGarantizadoRegistroService.obtenerRegistrosSemanaActualCompletos();
+            log.info("✅ [YegoGarantizadoController] Encontrados {} registros de la semana actual", registros.size());
+            return ResponseEntity.ok(registros);
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoController] Error obteniendo registros de la semana actual: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }

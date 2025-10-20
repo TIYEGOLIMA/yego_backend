@@ -2,8 +2,11 @@ package com.yego.backend.service.yego_garantizado.impl;
 
 import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoListResponse;
 import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoResponse;
+import com.yego.backend.entity.yego_garantizado.api.response.RegistroCompletoResponse;
+import com.yego.backend.entity.yego_garantizado.entities.Driver;
 import com.yego.backend.entity.yego_garantizado.entities.YegoGarantizado;
 import com.yego.backend.entity.yego_garantizado.entities.Registro;
+import com.yego.backend.repository.yego_garantizado.DriverRepository;
 import com.yego.backend.repository.yego_garantizado.YegoGarantizadoRegistroRepository;
 import com.yego.backend.repository.yego_garantizado.YegoGarantizadoRepository;
 import com.yego.backend.service.yego_garantizado.ExternalApiService;
@@ -13,13 +16,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.BeanUtils;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +37,8 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
     private final YegoGarantizadoRegistroRepository yegoGarantizadoRegistroRepository;
     private final YegoGarantizadoRepository yegoGarantizadoRepository;
     private final ExternalApiService externalApiService;
+    private final DriverRepository driverRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     @Override
     @Transactional
@@ -47,8 +56,6 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                 try {
                     log.info("🔄 [YegoGarantizadoRegistroService] Procesando conductor: {} de la semana {}", conductor.getYegLicenciaNumero(), semana);
 
-                    // Usar flota directamente como String
-                    String flotaId = conductor.getYegFlota();
 
                     // Consumir API externa para cada conductor
                     YegoGarantizado response = externalApiService.procesarConductor(conductor.getYegLicenciaNumero(), conductor.getYegFlota(), semana);
@@ -317,6 +324,83 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
         } catch (Exception e) {
             log.error("❌ [YegoGarantizadoRegistroService] Error generando Excel: {}", e.getMessage());
             return new byte[0];
+        }
+    }
+
+    @Override
+    public List<Registro> obtenerRegistrosSemanaActual() {
+        log.info("📋 [YegoGarantizadoRegistroService] Obteniendo registros de la semana actual");
+        
+        try {
+            // Usar el método existente para calcular la semana actual
+            String semanaActualStr = obtenerSemanaActual();
+            
+            log.info("📅 [YegoGarantizadoRegistroService] Semana actual calculada: {}", semanaActualStr);
+            
+            // DEBUG: Verificar qué semanas existen en la BD
+            List<Registro> todosRegistros = yegoGarantizadoRegistroRepository.findAll();
+            log.info("🔍 [DEBUG] Total registros en BD: {}", todosRegistros.size());
+            if (!todosRegistros.isEmpty()) {
+                log.info("🔍 [DEBUG] Últimos 3 registros:");
+                todosRegistros.stream()
+                    .sorted((r1, r2) -> r2.getYegFechaRegistro().compareTo(r1.getYegFechaRegistro()))
+                    .limit(3)
+                    .forEach(r -> log.info("  - Semana: {}, Licencia: {}", r.getYegSemana(), r.getYegLicenciaNumero()));
+            }
+            
+            List<Registro> registros = yegoGarantizadoRegistroRepository.findByYegSemana(semanaActualStr);
+            log.info("✅ [YegoGarantizadoRegistroService] Encontrados {} registros para la semana actual", registros.size());
+            
+            return registros;
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoRegistroService] Error obteniendo registros de la semana actual: {}", e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public List<RegistroCompletoResponse> obtenerRegistrosSemanaActualCompletos() {
+        log.info("📋 [YegoGarantizadoRegistroService] Obteniendo registros completos de la semana actual");
+        
+        try {
+            // Calcular la semana actual
+            String semanaActualStr = obtenerSemanaActual();
+            log.info("📅 [YegoGarantizadoRegistroService] Semana actual: {}", semanaActualStr);
+            
+            // Usar consulta SQL nativa optimizada del repositorio
+            List<Object[]> resultados = yegoGarantizadoRegistroRepository.findRegistrosCompletosBySemana(semanaActualStr);
+            log.info("🔍 [YegoGarantizadoRegistroService] Encontrados {} registros completos", resultados.size());
+            
+            if (resultados.isEmpty()) {
+                log.info("ℹ️ [YegoGarantizadoRegistroService] No hay registros para la semana actual");
+                return new ArrayList<>();
+            }
+            
+            List<RegistroCompletoResponse> registrosCompletos = new ArrayList<>();
+            
+            for (Object[] fila : resultados) {
+                String flotaId = fila[2].toString();
+                String nombreFlota = externalApiService.obtenerNombreFlota(flotaId);
+                
+                RegistroCompletoResponse registroCompleto = RegistroCompletoResponse.builder()
+                        .yegLicenciaNumero(fila[0].toString())  // Licencia (índice 0)
+                        .yegFechaRegistro(((java.sql.Timestamp) fila[1]).toLocalDateTime())  // Hora de registro (índice 1)
+                        .yegFlota(flotaId)  // yegoFlota (índice 2)
+                        .flotaNombre(nombreFlota)  // Nombre real de la flota desde API
+                        .yegSemana(fila[3].toString())  // Semana (índice 3)
+                        .build();
+                
+                registrosCompletos.add(registroCompleto);
+            }
+            
+            log.info("✅ [YegoGarantizadoRegistroService] Encontrados {} registros completos para la semana {}", 
+                    registrosCompletos.size(), semanaActualStr);
+            
+            return registrosCompletos;
+            
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoRegistroService] Error obteniendo registros completos: {}", e.getMessage());
+            return new ArrayList<>();
         }
     }
 }

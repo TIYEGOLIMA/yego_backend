@@ -37,6 +37,21 @@ public class AuthController {
     }
     
     /**
+     * Renovar token JWT
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<?> refreshToken(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.status(401).body("Token de autorización requerido");
+        }
+        
+        String token = authHeader.substring(7);
+        LoginResponseDto response = authService.refreshToken(token, request);
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
      * Registrar nuevo usuario
      */
     @PostMapping("/register")

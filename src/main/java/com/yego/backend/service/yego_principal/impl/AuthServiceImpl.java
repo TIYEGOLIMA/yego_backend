@@ -52,7 +52,7 @@ public class AuthServiceImpl implements AuthService {
     @Value("${jwt.secret}")
     private String jwtSecret;
     
-    @Value("${jwt.expiration:86400}")
+    @Value("${jwt.expiration:28800}")
     private Long jwtExpiration;
     
     private SecretKey getSigningKey() {
@@ -97,6 +97,66 @@ public class AuthServiceImpl implements AuthService {
     }
     
     @Override
+    public LoginResponseDto refreshToken(String token, HttpServletRequest request) {
+        try {
+            // Decodificar el token para obtener información del usuario
+            Claims claims = getJwtParser()
+                    .parseClaimsJws(token)
+                    .getBody();
+            
+            String username = claims.get("username", String.class);
+            Long userId = claims.get("userId", Long.class);
+            
+            if (username == null || userId == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token inválido");
+            }
+            
+            // Buscar el usuario
+            Optional<User> userOpt = userRepository.findById(userId);
+            if (userOpt.isEmpty() || !userOpt.get().getActive()) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado o inactivo");
+            }
+            
+            User user = userOpt.get();
+            UserResponseDto userDto = mapToUserResponseDto(user);
+            
+            // Generar nuevo JWT token
+            String newAccessToken = generateToken(userDto);
+            
+            // Actualizar sesión
+            CreateSessionDto sessionDto = CreateSessionDto.builder()
+                    .userId(userId)
+                    .tokenHash(passwordEncoder.encode(newAccessToken))
+                    .userAgent(request.getHeader("User-Agent"))
+                    .expiresAt(LocalDateTime.now().plusHours(8))
+                    .build();
+            
+            sessionService.create(sessionDto, userId, request);
+            
+            // Construir respuesta
+            LoginResponseDto.LoginUserDto loginUser = LoginResponseDto.LoginUserDto.builder()
+                    .id(userDto.getId())
+                    .username(userDto.getUsername())
+                    .email(userDto.getEmail())
+                    .name(userDto.getName())
+                    .role(userDto.getRole())
+                    .moduleId(userDto.getModuleId() != null ? userDto.getModuleId().toString() : null)
+                    .active(userDto.getActive())
+                    .lastLogin(LocalDateTime.now())
+                    .build();
+            
+            return LoginResponseDto.builder()
+                    .accessToken(newAccessToken)
+                    .user(loginUser)
+                    .build();
+                    
+        } catch (Exception e) {
+            log.warn("Error renovando token: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token inválido o expirado");
+        }
+    }
+    
+    @Override
     @Transactional
     public LoginResponseDto login(LoginDto loginDto, HttpServletRequest request) {
         UserResponseDto user = validateUser(loginDto.getUsername(), loginDto.getPassword(), request);
@@ -110,12 +170,12 @@ public class AuthServiceImpl implements AuthService {
         // Generar JWT token
         String accessToken = generateToken(user);
         
-        // Crear sesión con geolocalización
+        // Crear sesión con geolocalización (8 horas de expiración)
         CreateSessionDto sessionDto = CreateSessionDto.builder()
                 .userId(user.getId())
                 .tokenHash(passwordEncoder.encode(accessToken))
                 .userAgent(request.getHeader("User-Agent"))
-                .expiresAt(LocalDateTime.now().plusDays(1))
+                .expiresAt(LocalDateTime.now().plusHours(8))
                 .build();
         
         sessionService.create(sessionDto, user.getId(), request);
