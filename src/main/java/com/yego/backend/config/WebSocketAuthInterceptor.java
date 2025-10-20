@@ -70,17 +70,17 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                         log.info("🔐 [WebSocket] Usuario autenticado: {} con rol: {}", username, role);
                         
                     } else {
-                        log.warn("⚠️ [WebSocket] Token JWT inválido");
-                        throw new RuntimeException("Token JWT inválido");
+                        log.warn("⚠️ [WebSocket] Token JWT inválido, permitiendo conexión anónima");
+                        // Permitir conexión anónima en lugar de fallar
                     }
                     
                 } catch (Exception e) {
-                    log.error("❌ [WebSocket] Error validando token: {}", e.getMessage());
-                    throw new RuntimeException("Error de autenticación WebSocket");
+                    log.warn("⚠️ [WebSocket] Error validando token: {}, permitiendo conexión anónima", e.getMessage());
+                    // Permitir conexión anónima en lugar de fallar
                 }
             } else {
-                log.warn("⚠️ [WebSocket] No se encontró token de autorización");
-                throw new RuntimeException("Token de autorización requerido");
+                log.info("ℹ️ [WebSocket] Conexión anónima permitida");
+                // Permitir conexión anónima
             }
         }
         

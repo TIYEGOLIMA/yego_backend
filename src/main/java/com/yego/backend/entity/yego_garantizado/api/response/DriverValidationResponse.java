@@ -1,13 +1,12 @@
 package com.yego.backend.entity.yego_garantizado.api.response;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-
 /**
- * Respuesta de información de flota desde API externa
+ * Respuesta de validación de licencia de conductor
  * 
  * @author Sistema Yego
  * @version 1.0
@@ -15,10 +14,10 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class FlotaResponse {
-
-    private String id;
-    private String name;
-    private String city;
-    private List<String> specifications;
+@Builder
+public class DriverValidationResponse {
+    private String licenseNumber;
+    private boolean existe;
+    private String mensaje;
+    private DriverInfo driver;
 }

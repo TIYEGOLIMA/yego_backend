@@ -64,8 +64,10 @@ public class SecurityConfig {
         // Permitir localhost para desarrollo
         configuration.setAllowedOrigins(Arrays.asList(
             "http://localhost:5173",
+            "http://localhost:5174",
             "https://integral.yego.pro",
-            "https://api-int.yego.pro"
+            "https://api-int.yego.pro",
+            "https://neto.yego.pro"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
@@ -91,7 +93,10 @@ public class SecurityConfig {
                 .requestMatchers("/api/garantizado/**").permitAll() // Garantizado endpoints
                 .requestMatchers("/api/flota/**").permitAll() // Flota endpoints
                 .requestMatchers("/api/conductor-registro/**").permitAll() // Conductor registro endpoints
+                .requestMatchers("/api/drivers/**").permitAll() // Drivers endpoints
+                .requestMatchers("/api/registros/**").permitAll() // Registros endpoints
                 .requestMatchers("/api/modules/**").permitAll() // Módulos endpoints
+                .requestMatchers("/api/system/**").permitAll() // Sistema endpoints
                 .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                 .requestMatchers("/actuator/**").permitAll() // Actuator endpoints
                 .requestMatchers("/error").permitAll() // Error endpoint

@@ -54,14 +54,13 @@ public class FlotaServiceImpl implements FlotaService {
                     
                     // Filtrar solo las flotas de Yego
                     if (YEGO_FLOTA_IDS.contains(id)) {
-                        FlotaResponse flota = FlotaResponse.builder()
-                            .flotaId(id)
-                            .flotaName(item.get("name").toString())
-                            .flotaCity(item.get("city") != null ? item.get("city").toString() : null)
-                            .flotaSpecifications((List<String>) item.get("specifications"))
-                            .build();
+                        FlotaResponse flota = new FlotaResponse();
+                        flota.setId(id);
+                        flota.setName(item.get("name").toString());
+                        flota.setCity(item.get("city") != null ? item.get("city").toString() : null);
+                        flota.setSpecifications((List<String>) item.get("specifications"));
                         flotas.add(flota);
-                        log.info("✅ Flota agregada: {} - {}", id, flota.getFlotaName());
+                        log.info("✅ Flota agregada: {} - {}", id, flota.getName());
                     }
                 }
             }

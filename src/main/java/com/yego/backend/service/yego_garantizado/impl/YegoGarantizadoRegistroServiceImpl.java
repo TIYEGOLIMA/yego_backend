@@ -3,7 +3,7 @@ package com.yego.backend.service.yego_garantizado.impl;
 import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoListResponse;
 import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoResponse;
 import com.yego.backend.entity.yego_garantizado.entities.YegoGarantizado;
-import com.yego.backend.entity.yego_garantizado.entities.YegoGarantizadoRegistro;
+import com.yego.backend.entity.yego_garantizado.entities.Registro;
 import com.yego.backend.repository.yego_garantizado.YegoGarantizadoRegistroRepository;
 import com.yego.backend.repository.yego_garantizado.YegoGarantizadoRepository;
 import com.yego.backend.service.yego_garantizado.ExternalApiService;
@@ -17,8 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +24,6 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 @Slf4j
 public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegistroService {
 
@@ -34,45 +31,44 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
     private final YegoGarantizadoRepository yegoGarantizadoRepository;
     private final ExternalApiService externalApiService;
 
-
     @Override
+    @Transactional
     public List<YegoGarantizado> procesarConductoresPorSemana(String semana) {
         log.info("🌐 [YegoGarantizadoRegistroService] Procesando conductores de la semana: {}", semana);
 
         try {
             // Obtener todos los conductores de la semana específica
-            List<YegoGarantizadoRegistro> conductores = yegoGarantizadoRegistroRepository.findBySemana(semana);
+            List<Registro> conductores = yegoGarantizadoRegistroRepository.findByYegSemana(semana);
             List<YegoGarantizado> resultados = new ArrayList<>();
 
             log.info("📋 [YegoGarantizadoRegistroService] Encontrados {} conductores para la semana {}", conductores.size(), semana);
 
-            for (YegoGarantizadoRegistro conductor : conductores) {
+            for (Registro conductor : conductores) {
                 try {
-                    log.info("🔄 [YegoGarantizadoRegistroService] Procesando conductor: {} de la semana {}", conductor.getLicenciaNumero(), semana);
+                    log.info("🔄 [YegoGarantizadoRegistroService] Procesando conductor: {} de la semana {}", conductor.getYegLicenciaNumero(), semana);
 
                     // Usar flota directamente como String
-                    String flotaId = conductor.getFlota();
+                    String flotaId = conductor.getYegFlota();
 
                     // Consumir API externa para cada conductor
-                    YegoGarantizado response = externalApiService.procesarConductor(conductor.getLicenciaNumero(), conductor.getFlota(), semana);
+                    YegoGarantizado response = externalApiService.procesarConductor(conductor.getYegLicenciaNumero(), conductor.getYegFlota(), semana);
 
                     if (response != null) {
                         // Guardar el resultado procesado en la base de datos
                         YegoGarantizado guardado = yegoGarantizadoRepository.save(response);
                         resultados.add(guardado);
-                        log.info("✅ [YegoGarantizadoRegistroService] Conductor {} de la semana {} procesado y guardado exitosamente", conductor.getLicenciaNumero(), semana);
+                        log.info("✅ [YegoGarantizadoRegistroService] Conductor {} de la semana {} procesado y guardado exitosamente", conductor.getYegLicenciaNumero(), semana);
                     } else {
-                        log.warn("⚠️ [YegoGarantizadoRegistroService] No se pudo procesar conductor: {} de la semana {}", conductor.getLicenciaNumero(), semana);
+                        log.warn("⚠️ [YegoGarantizadoRegistroService] No se pudo procesar conductor: {} de la semana {}", conductor.getYegLicenciaNumero(), semana);
                     }
 
                 } catch (Exception e) {
-                    log.error("❌ [YegoGarantizadoRegistroService] Error procesando conductor {} de la semana {}: {}", conductor.getLicenciaNumero(), semana, e.getMessage());
+                    log.error("❌ [YegoGarantizadoRegistroService] Error procesando conductor {} de la semana {}: {}", conductor.getYegLicenciaNumero(), semana, e.getMessage());
                 }
             }
 
             log.info("🎉 [YegoGarantizadoRegistroService] Procesamiento de semana {} completado. {} conductores procesados exitosamente", semana, resultados.size());
             return resultados;
-
         } catch (Exception e) {
             log.error("❌ [YegoGarantizadoRegistroService] Error procesando conductores de la semana {}: {}", semana, e.getMessage());
             return new ArrayList<>();
@@ -113,8 +109,6 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                     .build();
         }
     }
-
-
 
     /**
      * Convierte YegoGarantizado a GarantizadoResponse usando BeanUtils
@@ -163,7 +157,6 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
         }
     }
 
-
     @Override
     public GarantizadoListResponse listarGarantizadosSemanaAnterior() {
         log.info("📋 [YegoGarantizadoRegistroService] Listando garantizados de la semana anterior");
@@ -204,40 +197,43 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
      */
     private String obtenerSemanaAnterior() {
         LocalDateTime ahora = LocalDateTime.now();
-        int diaDelAnio = ahora.getDayOfYear();
-        int semana = (diaDelAnio / 7) + 1;
-        int semanaAnterior = semana - 1;
+        int semanaActual = ahora.get(java.time.temporal.WeekFields.ISO.weekOfYear());
+        int semanaAnterior = semanaActual - 1;
+        
+        // Si estamos en la semana 1, la semana anterior es la última semana del año anterior
+        if (semanaAnterior <= 0) {
+            semanaAnterior = 52; // Asumimos que el año anterior tenía 52 semanas
+        }
+        
         return "SEMANA" + semanaAnterior;
     }
-    
+
+    /**
+     * Calcula la semana actual del año
+     */
     private String obtenerSemanaActual() {
         LocalDateTime ahora = LocalDateTime.now();
-        int diaDelAnio = ahora.getDayOfYear();
-        int semana = (diaDelAnio / 7) + 1;
-        return "SEMANA" + semana;
+        int semanaActual = ahora.get(java.time.temporal.WeekFields.ISO.weekOfYear());
+        return "SEMANA" + semanaActual;
     }
-
-
 
     @Override
     public byte[] exportarExcel(String flotaId, String estado, String semana) {
         log.info("📊 [YegoGarantizadoRegistroService] Exportando Excel - flotaId: {}, estado: {}, semana: {}", flotaId, estado, semana);
-
+        
         try {
-            // Obtener datos según los filtros
             GarantizadoListResponse response;
             
-            if (flotaId != null && !flotaId.trim().isEmpty()) {
+            if (flotaId != null && !flotaId.isEmpty()) {
                 // Filtrar por flota específica
                 response = obtenerGarantizadosPorFlota(flotaId);
             } else {
                 // Obtener todos los datos de la semana anterior directamente de queue_garantizado
-               
                 List<YegoGarantizado> garantizados = yegoGarantizadoRepository.findBySemanaAndActivoTrue(semana);
                 List<GarantizadoResponse> conductores = garantizados.stream()
                         .map(this::convertirAGarantizadoResponse)
                         .collect(Collectors.toList());
-                
+
                 String semanaActual = obtenerSemanaActual();
                 response = GarantizadoListResponse.builder()
                         .semanaAnterior(semana)
@@ -245,49 +241,35 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                         .conductores(conductores)
                         .build();
             }
-
-            // Aplicar filtro por estado si se proporciona
-            if (estado != null && !estado.trim().isEmpty() && !estado.equals("TODOS")) {
-                List<GarantizadoResponse> conductoresFiltrados = response.getConductores().stream()
-                        .filter(conductor -> conductor.getGarantizadoValor().equals(estado))
-                        .collect(Collectors.toList());
-                
-                response = GarantizadoListResponse.builder()
-                        .semanaAnterior(response.getSemanaAnterior())
-                        .semanaActual(response.getSemanaActual())
-                        .conductores(conductoresFiltrados)
-                        .build();
-            }
-
-            // Generar Excel
-            return generarExcel(response, semana);
-
+            
+            return generarExcel(response);
         } catch (Exception e) {
             log.error("❌ [YegoGarantizadoRegistroService] Error exportando Excel: {}", e.getMessage());
-            throw new RuntimeException("Error generando Excel", e);
+            return new byte[0];
         }
     }
 
-    private byte[] generarExcel(GarantizadoListResponse response, String semana) {
+    private byte[] generarExcel(GarantizadoListResponse response) {
         log.info("📊 [YegoGarantizadoRegistroService] Generando Excel para {} conductores", response.getConductores().size());
         
         try (Workbook workbook = new XSSFWorkbook()) {
-            Sheet sheet = workbook.createSheet("Garantizado " + semana);
+            Sheet sheet = workbook.createSheet("Garantizados");
             
-            // Crear estilos
-            CellStyle headerStyle = createHeaderStyle(workbook);
-            CellStyle dataStyle = createDataStyle(workbook);
-            CellStyle currencyStyle = createCurrencyStyle(workbook);
-            CellStyle dateStyle = createDateStyle(workbook);
+            // Crear estilo para el encabezado
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
             
-            // Crear fila de encabezados
+            // Crear fila de encabezado
             Row headerRow = sheet.createRow(0);
             String[] headers = {
                 "ID", "Nombre Completo", "Número de Licencia", "Teléfono", "Viajes",
-                "Efectivo", "Pago Sin Efectivo", "Com. Yango", "Com. Yego",
-                "Bono Sem. Ant.", "Bono Sem. Act.", "Total", "Garantizado",
-                "Diferencia", "Semana", "Viajes Actuales", "Flota ID",
-                "Estado Garantizado", "Fecha Creación", "Fecha Actualización"
+                "Efectivo", "Pago Sin Efectivo", "Comisión Yango", "Comisión Yego",
+                "Bono Semana Anterior", "Bono Semana Actual", "Total", "Garantizado",
+                "Diferencia", "Semana", "Viajes Actuales", "Flota ID", "Garantizado Valor"
             };
             
             for (int i = 0; i < headers.length; i++) {
@@ -301,146 +283,40 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
             for (GarantizadoResponse conductor : response.getConductores()) {
                 Row row = sheet.createRow(rowNum++);
                 
-                // ID
-                createCell(row, 0, conductor.getId(), dataStyle);
-                
-                // Nombre Completo
-                createCell(row, 1, conductor.getNombreCompleto(), dataStyle);
-                
-                // Número de Licencia
-                createCell(row, 2, conductor.getNumeroLicencia(), dataStyle);
-                
-                // Teléfono
-                createCell(row, 3, conductor.getTelefono(), dataStyle);
-                
-                // Viajes
-                createCell(row, 4, conductor.getViajes(), dataStyle);
-                
-                // Efectivo
-                createCell(row, 5, conductor.getEfectivo(), currencyStyle);
-                
-                // Pago Sin Efectivo
-                createCell(row, 6, conductor.getPagoSinEfectivo(), currencyStyle);
-                
-                // Com. Yango
-                createCell(row, 7, conductor.getComYango(), currencyStyle);
-                
-                // Com. Yego
-                createCell(row, 8, conductor.getComYego(), currencyStyle);
-                
-                // Bono Sem. Ant.
-                createCell(row, 9, conductor.getBoSemAnt(), currencyStyle);
-                
-                // Bono Sem. Act.
-                createCell(row, 10, conductor.getBoSemAct(), currencyStyle);
-                
-                // Total
-                createCell(row, 11, conductor.getTotal(), currencyStyle);
-                
-                // Garantizado
-                createCell(row, 12, conductor.getGarantizado(), currencyStyle);
-                
-                // Diferencia
-                createCell(row, 13, conductor.getDiferencia(), currencyStyle);
-                
-                // Semana
-                createCell(row, 14, conductor.getSemana(), dataStyle);
-                
-                // Viajes Actuales
-                createCell(row, 15, conductor.getViajesActuales(), dataStyle);
-                
-                // Flota ID
-                createCell(row, 16, conductor.getFlotaId(), dataStyle);
-                
-                // Estado Garantizado
-                createCell(row, 17, conductor.getGarantizadoValor(), dataStyle);
-                
-                // Fecha Creación
-                createCell(row, 18, conductor.getFechaCreacion(), dateStyle);
-                
-                // Fecha Actualización
-                createCell(row, 19, conductor.getFechaActualizacion(), dateStyle);
+                row.createCell(0).setCellValue(conductor.getId() != null ? conductor.getId().toString() : "");
+                row.createCell(1).setCellValue(conductor.getNombreCompleto() != null ? conductor.getNombreCompleto() : "");
+                row.createCell(2).setCellValue(conductor.getNumeroLicencia() != null ? conductor.getNumeroLicencia() : "");
+                row.createCell(3).setCellValue(conductor.getTelefono() != null ? conductor.getTelefono() : "");
+                row.createCell(4).setCellValue(conductor.getViajes() != null ? conductor.getViajes().toString() : "");
+                row.createCell(5).setCellValue(conductor.getEfectivo() != null ? conductor.getEfectivo().toString() : "");
+                row.createCell(6).setCellValue(conductor.getPagoSinEfectivo() != null ? conductor.getPagoSinEfectivo().toString() : "");
+                row.createCell(7).setCellValue(conductor.getComYango() != null ? conductor.getComYango().toString() : "");
+                row.createCell(8).setCellValue(conductor.getComYego() != null ? conductor.getComYego().toString() : "");
+                row.createCell(9).setCellValue(conductor.getBoSemAnt() != null ? conductor.getBoSemAnt().toString() : "");
+                row.createCell(10).setCellValue(conductor.getBoSemAct() != null ? conductor.getBoSemAct().toString() : "");
+                row.createCell(11).setCellValue(conductor.getTotal() != null ? conductor.getTotal().toString() : "");
+                row.createCell(12).setCellValue(conductor.getGarantizado() != null ? conductor.getGarantizado().toString() : "");
+                row.createCell(13).setCellValue(conductor.getDiferencia() != null ? conductor.getDiferencia().toString() : "");
+                row.createCell(14).setCellValue(conductor.getSemana() != null ? conductor.getSemana() : "");
+                row.createCell(15).setCellValue(conductor.getViajesActuales() != null ? conductor.getViajesActuales().toString() : "");
+                row.createCell(16).setCellValue(conductor.getFlotaId() != null ? conductor.getFlotaId() : "");
+                row.createCell(17).setCellValue(conductor.getGarantizadoValor() != null ? conductor.getGarantizadoValor() : "");
             }
             
-            // Autoajustar columnas
+            // Ajustar ancho de columnas
             for (int i = 0; i < headers.length; i++) {
                 sheet.autoSizeColumn(i);
             }
             
-            // Convertir a bytes
+            // Convertir a byte array
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);
-            
             log.info("✅ [YegoGarantizadoRegistroService] Excel generado exitosamente");
             return outputStream.toByteArray();
             
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("❌ [YegoGarantizadoRegistroService] Error generando Excel: {}", e.getMessage());
-            throw new RuntimeException("Error generando Excel", e);
-        }
-    }
-    
-    private CellStyle createHeaderStyle(Workbook workbook) {
-        CellStyle style = workbook.createCellStyle();
-        Font font = workbook.createFont();
-        font.setBold(true);
-        font.setColor(IndexedColors.WHITE.getIndex());
-        style.setFont(font);
-        style.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
-        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-        style.setBorderBottom(BorderStyle.THIN);
-        style.setBorderTop(BorderStyle.THIN);
-        style.setBorderRight(BorderStyle.THIN);
-        style.setBorderLeft(BorderStyle.THIN);
-        style.setAlignment(HorizontalAlignment.CENTER);
-        style.setVerticalAlignment(VerticalAlignment.CENTER);
-        return style;
-    }
-    
-    private CellStyle createDataStyle(Workbook workbook) {
-        CellStyle style = workbook.createCellStyle();
-        style.setBorderBottom(BorderStyle.THIN);
-        style.setBorderTop(BorderStyle.THIN);
-        style.setBorderRight(BorderStyle.THIN);
-        style.setBorderLeft(BorderStyle.THIN);
-        style.setVerticalAlignment(VerticalAlignment.CENTER);
-        return style;
-    }
-    
-    private CellStyle createCurrencyStyle(Workbook workbook) {
-        CellStyle style = createDataStyle(workbook);
-        DataFormat format = workbook.createDataFormat();
-        style.setDataFormat(format.getFormat("#,##0.00"));
-        return style;
-    }
-    
-    private CellStyle createDateStyle(Workbook workbook) {
-        CellStyle style = createDataStyle(workbook);
-        DataFormat format = workbook.createDataFormat();
-        style.setDataFormat(format.getFormat("dd/mm/yyyy hh:mm"));
-        return style;
-    }
-    
-    private void createCell(Row row, int column, Object value, CellStyle style) {
-        Cell cell = row.createCell(column);
-        cell.setCellStyle(style);
-        
-        if (value == null) {
-            cell.setCellValue("");
-        } else if (value instanceof String) {
-            cell.setCellValue((String) value);
-        } else if (value instanceof Integer) {
-            cell.setCellValue((Integer) value);
-        } else if (value instanceof Long) {
-            cell.setCellValue((Long) value);
-        } else if (value instanceof BigDecimal) {
-            cell.setCellValue(((BigDecimal) value).doubleValue());
-        } else if (value instanceof Boolean) {
-            cell.setCellValue((Boolean) value);
-        } else if (value instanceof LocalDateTime) {
-            cell.setCellValue((LocalDateTime) value);
-        } else {
-            cell.setCellValue(value.toString());
+            return new byte[0];
         }
     }
 }
