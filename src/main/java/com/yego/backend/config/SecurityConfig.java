@@ -67,7 +67,8 @@ public class SecurityConfig {
             "http://localhost:5174",
             "https://integral.yego.pro",
             "https://api-int.yego.pro",
-            "https://neto.yego.pro"
+            "https://neto.yego.pro",
+            "https://siscoca.yego.pro"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
