@@ -4,6 +4,7 @@ import com.yego.backend.entity.yego_garantizado.api.response.DriverInfo;
 import com.yego.backend.entity.yego_garantizado.api.response.DriverValidationResponse;
 import com.yego.backend.entity.yego_garantizado.api.response.FlotaDisponibleResponse;
 import com.yego.backend.entity.yego_garantizado.api.response.FlotaInfo;
+import com.yego.backend.entity.yego_garantizado.api.response.FlotaResponse;
 import com.yego.backend.entity.yego_garantizado.entities.Driver;
 import com.yego.backend.repository.yego_garantizado.DriverRepository;
 import com.yego.backend.service.yego_garantizado.DriverService;
@@ -103,7 +104,7 @@ public class DriverServiceImpl implements DriverService {
                 todosLosRegistros.size(), parkIdsDelConductor.size());
         
         // 4. Obtener información de flotas desde la API
-        List<com.yego.backend.entity.yego_garantizado.api.response.FlotaResponse> todasLasFlotas = flotaService.obtenerFlotas();
+        List<FlotaResponse> todasLasFlotas = flotaService.obtenerFlotas();
         
         // 5. Filtrar solo las flotas del conductor
         List<FlotaInfo> flotasDisponibles = todasLasFlotas.stream()

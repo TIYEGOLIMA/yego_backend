@@ -85,7 +85,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         String garantizadoValor = diferencia.compareTo(BigDecimal.ZERO) >= 0 ? "Garantizado" : "No Garantizado";
         
         // Obtener datos del conductor desde la tabla drivers
-        String[] datosConductor = obtenerDatosConductor(apiResponse.getLicencia());
+        String[] datosConductor = obtenerDatosConductor(apiResponse.getLicencia(), parkId);
         String nombreCompleto = datosConductor[0];
         String telefono = datosConductor[1];
         
@@ -223,16 +223,16 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     /**
      * Obtiene los datos del conductor (nombre y teléfono) desde la tabla drivers en una sola consulta
      */
-    private String[] obtenerDatosConductor(String numeroLicencia) {
+    private String[] obtenerDatosConductor(String numeroLicencia, String parkId) {
         try {
             log.info("🔍 [ExternalApiService] Consultando datos del conductor para licencia: {}", numeroLicencia);
             
-            String sql = "SELECT full_name, phone FROM drivers WHERE license_number = ?";
+            String sql = "SELECT full_name, phone FROM drivers WHERE license_number = ? AND park_id = ?";
             Object[] resultado = jdbcTemplate.queryForObject(sql, (rs, rowNum) -> {
                 String nombre = rs.getString("full_name");
                 String telefono = rs.getString("phone");
                 return new Object[]{nombre, telefono};
-            }, numeroLicencia);
+            }, numeroLicencia, parkId);
             
             String nombreCompleto = (String) resultado[0];
             String telefono = (String) resultado[1];
