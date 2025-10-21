@@ -46,9 +46,11 @@ public class UserServiceImpl implements UserService {
         User user = User.builder()
                 .username(createUserDto.getUsername())
                 .email(createUserDto.getEmail())
-                .name(createUserDto.getName() != null ? createUserDto.getName() : createUserDto.getUsername())
+                .name(createUserDto.getName())
+                .lastName(createUserDto.getLastName())
                 .password(passwordEncoder.encode(createUserDto.getPassword()))
                 .role(createUserDto.getRole() != null ? createUserDto.getRole() : "usuario")
+                .dni(createUserDto.getDni())
                 .moduleId(createUserDto.getModuleId())
                 .active(true)
                 .build();
@@ -62,6 +64,8 @@ public class UserServiceImpl implements UserService {
         
         return mapToResponseDto(savedUser);
     }
+
+
 
     
     @Override
@@ -239,8 +243,9 @@ public class UserServiceImpl implements UserService {
         if (updateUserDto.getRole() != null) {
             user.setRole(updateUserDto.getRole());
         }
-        if (updateUserDto.getModuleId() != null) {
-            user.setModuleId(updateUserDto.getModuleId());
+
+        if (updateUserDto.getLastName() != null) {
+            user.setLastName(updateUserDto.getLastName());
         }
         
         // Hash password si se proporciona
@@ -359,11 +364,12 @@ public class UserServiceImpl implements UserService {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .name(user.getName())
+                .lastName(user.getLastName())
                 .role(user.getRole())
+                .dni(user.getDni())
                 .active(user.getActive())
                 .createdAt(user.getCreatedAt())
                 .lastLogin(user.getLastLogin())
-                .moduleId(user.getModuleId())
                 .build();
     }
     

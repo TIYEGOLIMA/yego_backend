@@ -3,8 +3,6 @@ package com.yego.backend.service.yego_principal;
 import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
 
-import java.util.List;
-
 /**
  * Interfaz del servicio de usuarios del sistema YEGO Principal
  * Equivalente a UsersService de NestJS

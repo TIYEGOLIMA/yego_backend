@@ -29,12 +29,20 @@ public class CreateUserDto {
     @Size(max = 255, message = "El nombre no puede exceder 255 caracteres")
     private String name;
 
+    @NotBlank(message = "El apellido es obligatorio")
+    @Size(max = 255, message = "El apellido no puede exceder 255 caracteres")
+    private String lastName;
+
     @NotBlank(message = "El rol es obligatorio")
     @Size(max = 255, message = "El rol no puede exceder 255 caracteres")
     private String role;
 
     @Builder.Default
     private Boolean active = true;
+
+    @NotBlank(message = "El DNI es obligatorio")
+    @Size(min = 8, max = 8, message = "El DNI debe tener 8 caracteres")
+    private String dni;
     
     private Long moduleId;
 }

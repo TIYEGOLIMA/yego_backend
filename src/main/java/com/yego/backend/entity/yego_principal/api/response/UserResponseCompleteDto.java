@@ -19,12 +19,11 @@ public class UserResponseCompleteDto {
     private String username;
     private String email;
     private String name;
+    private String lastName;
     private String role;
     private Boolean active;
+    private String dni;
     private LocalDateTime createdAt;
     private LocalDateTime lastLogin;
-    private Long moduleId;
-    private LocalDateTime updatedAt;
-    private Boolean requiereCambioPassword;
 }
 

@@ -27,7 +27,12 @@ public class UpdateUserDto {
     @Size(max = 255, message = "El rol no puede exceder 255 caracteres")
     private String role;
 
+    @Size(max = 255, message = "El apellido no puede exceder 255 caracteres")
+    private String lastName;
+
+    @Size(min = 8, max = 8, message = "El DNI debe tener 8 caracteres")
+    private String dni;
+
     private Boolean active;
-    private Long moduleId;
 }
 

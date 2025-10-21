@@ -39,6 +39,9 @@ public class User {
     
     @Column(name = "name", nullable = false, length = 255)
     private String name;
+
+    @Column(name = "last_name", nullable = false, length = 255)
+    private String lastName;
     
     @Column(name = "password", nullable = false, length = 255)
     private String password;
@@ -51,6 +54,9 @@ public class User {
     
     @Column(name = "module_id")
     private Long moduleId;
+
+    @Column(name = "dni", length = 8, nullable = false, unique = true)
+    private String dni;
     
     @PrePersist
     protected void onCreate() {
