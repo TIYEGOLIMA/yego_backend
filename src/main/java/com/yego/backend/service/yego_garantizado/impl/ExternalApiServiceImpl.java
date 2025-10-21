@@ -64,13 +64,13 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     }
     
     private YegoGarantizado procesarDatosApi(GarantizadoRequest apiResponse, String parkId, String semana) {
-        // Convertir centavos a pesos
-        BigDecimal efectivo = convertirCentavosAPesos(apiResponse.getTarifas());
-        BigDecimal pagoSinEfectivo = convertirCentavosAPesos(apiResponse.getPagoSinEfectivo());
-        BigDecimal comYango = convertirCentavosAPesos(apiResponse.getComYango());
-        BigDecimal comYego = convertirCentavosAPesos(apiResponse.getComYego());
-        BigDecimal boSemAnt = convertirCentavosAPesos(apiResponse.getBoSemAnt());
-        BigDecimal boSemAct = convertirCentavosAPesos(apiResponse.getBoSemAct());
+        // Los valores ya vienen en pesos, no necesitan conversión
+        BigDecimal efectivo = new BigDecimal(apiResponse.getTarifas());
+        BigDecimal pagoSinEfectivo = new BigDecimal(apiResponse.getPagoSinEfectivo());
+        BigDecimal comYango = new BigDecimal(apiResponse.getComYango());
+        BigDecimal comYego = new BigDecimal(apiResponse.getComYego());
+        BigDecimal boSemAnt = new BigDecimal(apiResponse.getBoSemAnt());
+        BigDecimal boSemAct = new BigDecimal(apiResponse.getBoSemAct());
 
         // Calcular total según Google Sheets: efectivo + pagoSinEfectivo + comYango + comYego - boSemAnt + boSemAct
         BigDecimal total = efectivo.add(pagoSinEfectivo).add(comYango).add(comYego).subtract(boSemAnt).add(boSemAct);
@@ -114,10 +114,6 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         log.info("✅ [ExternalApiService] Datos guardados en yego_garantizado_dev con ID: {}", savedGarantizado.getId());
         
         return savedGarantizado;
-    }
-    
-    private BigDecimal convertirCentavosAPesos(int centavos) {
-        return new BigDecimal(centavos).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
     }
     
     private BigDecimal calcularGarantizadoSegunBoSemAct(BigDecimal boSemAct, String parkId) {
