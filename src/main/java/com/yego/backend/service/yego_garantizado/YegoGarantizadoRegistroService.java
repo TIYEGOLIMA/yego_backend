@@ -2,7 +2,6 @@ package com.yego.backend.service.yego_garantizado;
 
 import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoListResponse;
 import com.yego.backend.entity.yego_garantizado.api.response.RegistroCompletoResponse;
-import com.yego.backend.entity.yego_garantizado.entities.Registro;
 import com.yego.backend.entity.yego_garantizado.entities.YegoGarantizado;
 
 import java.util.List;
@@ -13,7 +12,6 @@ public interface YegoGarantizadoRegistroService {
     GarantizadoListResponse obtenerGarantizadosPorFlota(String flotaId);
     GarantizadoListResponse procesarYDevolverSemanaAnterior();
     GarantizadoListResponse listarGarantizadosSemanaAnterior();
-    List<Registro> obtenerRegistrosSemanaActual();
     List<RegistroCompletoResponse> obtenerRegistrosSemanaActualCompletos();
     byte[] exportarExcel(String flotaId, String estado, String semana);
 }

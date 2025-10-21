@@ -20,15 +20,15 @@ public class GarantizadoScheduler {
 
     /**
      * Procesa automáticamente todos los conductores de la semana anterior
-     * todos los lunes a las 9:00 AM
+     * todos los martes a las 9:40 AM
      */
-    @Scheduled(cron = "0 0 9 * * MON")
+    @Scheduled(cron = "0 40 9 * * TUE")
     public void procesarConductoresSemanaAnterior() {
         try {
             // Obtener la semana anterior (la que se completó el domingo)
             String semanaAnterior = obtenerSemanaAnterior();
             
-            log.info("[GarantizadoScheduler] Iniciando procesamiento automático - Lunes 9:00 AM");
+            log.info("[GarantizadoScheduler] Iniciando procesamiento automático - Martes 9:40 AM");
             log.info("[GarantizadoScheduler] Procesando semana anterior: {}", semanaAnterior);
             
             // Procesar todos los conductores de la semana anterior y obtener datos completos

@@ -22,29 +22,29 @@ public class YegoGarantizadoController {
 
     @GetMapping("/procesar-semana-anterior")
     public ResponseEntity<GarantizadoListResponse> procesarSemanaAnterior() {
-        log.info("📋 [YegoGarantizadoController] Recibida solicitud para consultar semana anterior");
+        log.info(" [YegoGarantizadoController] Recibida solicitud para consultar semana anterior");
         
         try {
             // Solo consultar datos ya procesados por el scheduler
             GarantizadoListResponse response = yegoGarantizadoRegistroService.listarGarantizadosSemanaAnterior();
-            log.info("✅ [YegoGarantizadoController] Consultados {} conductores de la semana anterior", response.getConductores().size());
+            log.info(" [YegoGarantizadoController] Consultados {} conductores de la semana anterior", response.getConductores().size());
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("❌ [YegoGarantizadoController] Error consultando semana anterior: {}", e.getMessage());
+            log.error(" [YegoGarantizadoController] Error consultando semana anterior: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
 
     @GetMapping("/registros/semana-actual")
     public ResponseEntity<List<RegistroCompletoResponse>> obtenerRegistrosSemanaActual() {
-        log.info("📋 [YegoGarantizadoController] Recibida solicitud para obtener registros de la semana actual");
+        log.info(" [YegoGarantizadoController] Recibida solicitud para obtener registros de la semana actual");
         
         try {
             List<RegistroCompletoResponse> registros = yegoGarantizadoRegistroService.obtenerRegistrosSemanaActualCompletos();
-            log.info("✅ [YegoGarantizadoController] Encontrados {} registros de la semana actual", registros.size());
+            log.info(" [YegoGarantizadoController] Encontrados {} registros de la semana actual", registros.size());
             return ResponseEntity.ok(registros);
         } catch (Exception e) {
-            log.error("❌ [YegoGarantizadoController] Error obteniendo registros de la semana actual: {}", e.getMessage());
+            log.error(" [YegoGarantizadoController] Error obteniendo registros de la semana actual: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -52,14 +52,14 @@ public class YegoGarantizadoController {
 
     @GetMapping("/flota/{flotaId}")
     public ResponseEntity<GarantizadoListResponse> obtenerGarantizadosPorFlota(@PathVariable String flotaId) {
-        log.info("⚙️ [YegoGarantizadoController] Recibida solicitud para obtener garantizados por flota: {}", flotaId);
+        log.info(" [YegoGarantizadoController] Recibida solicitud para obtener garantizados por flota: {}", flotaId);
         
         try {
             GarantizadoListResponse response = yegoGarantizadoRegistroService.obtenerGarantizadosPorFlota(flotaId);
-            log.info("✅ [YegoGarantizadoController] Encontrados {} garantizados para flota {}", response.getConductores().size(), flotaId);
+            log.info(" [YegoGarantizadoController] Encontrados {} garantizados para flota {}", response.getConductores().size(), flotaId);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("❌ [YegoGarantizadoController] Error obteniendo garantizados por flota {}: {}", flotaId, e.getMessage());
+            log.error(" [YegoGarantizadoController] Error obteniendo garantizados por flota {}: {}", flotaId, e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }

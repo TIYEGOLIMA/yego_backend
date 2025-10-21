@@ -14,13 +14,6 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.stream.Collectors;
 
-/**
- * Implementación del servicio para operaciones relacionadas con conductores
- * Maneja validación de licencias y obtención de flotas
- * 
- * @author Sistema Yego
- * @version 1.0
- */
 @Service
 @Slf4j
 public class DriverServiceImpl implements DriverService {
@@ -96,7 +89,7 @@ public class DriverServiceImpl implements DriverService {
                     .build();
         }
         
-        // 2. Obtener info del conductor (del primer registro)
+        // 2 Obtener info del conductor (del primer registro)
         Driver primerRegistro = todosLosRegistros.get(0);
         DriverInfo conductorInfo = convertirADriverInfo(primerRegistro);
         

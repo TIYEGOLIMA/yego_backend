@@ -166,6 +166,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         }
     }
     
+    
     private boolean esFlotaPeruana(String parkId) {
         // Flotas peruanas según los comentarios en FlotaServiceImpl
         return "56e4607dfc354e0a9cde4f0aa7973003".equals(parkId) || // Yego Arequipa
@@ -223,7 +224,6 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         }
     }
     
-
     /**
      * Obtiene los datos del conductor (nombre y teléfono) desde la tabla drivers en una sola consulta
      */

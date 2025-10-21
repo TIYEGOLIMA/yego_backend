@@ -17,10 +17,9 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class RegistroCompletoResponse {
     
-    // Solo los campos solicitados
-    private String yegLicenciaNumero;        // Licencia
-    private LocalDateTime yegFechaRegistro;  // Hora de registro
-    private String yegFlota;                 // yegoFlota
-    private String flotaNombre;              // Nombre de la flota
-    private String yegSemana;                // Semana
+    private String yegLicenciaNumero;       
+    private LocalDateTime yegFechaRegistro;  
+    private String yegFlota;                 
+    private String flotaNombre;              
+    private String yegSemana;               
 }
