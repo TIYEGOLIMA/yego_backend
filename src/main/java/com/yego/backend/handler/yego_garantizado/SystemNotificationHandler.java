@@ -25,7 +25,6 @@ import java.util.Map;
 public class SystemNotificationHandler {
 
     private final SimpMessagingTemplate messagingTemplate;
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * Envía notificación de estado del sistema a todos los clientes conectados

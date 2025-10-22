@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -208,7 +209,7 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                 
                 RegistroCompletoResponse registroCompleto = RegistroCompletoResponse.builder()
                         .yegLicenciaNumero(fila[0].toString())  // Licencia (índice 0)
-                        .yegFechaRegistro(((java.sql.Timestamp) fila[1]).toLocalDateTime())  // Hora de registro (índice 1)
+                        .yegFechaRegistro(((Timestamp) fila[1]).toLocalDateTime())  // Hora de registro (índice 1)
                         .yegFlota(flotaId)  // yegoFlota (índice 2)
                         .flotaNombre(nombreFlota)  // Nombre real de la flota desde API
                         .yegSemana(fila[3].toString())  // Semana (índice 3)

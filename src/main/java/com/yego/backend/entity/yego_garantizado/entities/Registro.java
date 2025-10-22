@@ -46,13 +46,13 @@ public class Registro {
 
     @PrePersist
     protected void onCreate() {
-        yegFechaRegistro = LocalDateTime.now();
-        yegFechaModificacion = LocalDateTime.now();
+        yegFechaRegistro = LocalDateTime.now(java.time.ZoneId.of("America/Lima"));
+        yegFechaModificacion = LocalDateTime.now(java.time.ZoneId.of("America/Lima"));
     }
 
     @PreUpdate
     protected void onUpdate() {
-        yegFechaModificacion = LocalDateTime.now();
+        yegFechaModificacion = LocalDateTime.now(java.time.ZoneId.of("America/Lima"));
     }
 }
 

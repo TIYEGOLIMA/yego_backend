@@ -90,7 +90,7 @@ public class RegistroServiceImpl implements RegistroService {
     }
 
     private String obtenerSemanaActual() {
-        LocalDateTime ahora = LocalDateTime.now();
+        LocalDateTime ahora = LocalDateTime.now(java.time.ZoneId.of("America/Lima"));
         int semanaActual = ahora.get(java.time.temporal.WeekFields.ISO.weekOfYear());
         return "SEMANA" + semanaActual;
     }
