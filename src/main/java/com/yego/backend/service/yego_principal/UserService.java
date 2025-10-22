@@ -2,6 +2,7 @@ package com.yego.backend.service.yego_principal;
 
 import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
+import org.springframework.http.ResponseEntity;
 
 /**
  * Interfaz del servicio de usuarios del sistema YEGO Principal
@@ -54,5 +55,10 @@ public interface UserService {
      * Validar fortaleza de contraseña
      */
     boolean validatePassword(String password);
+    
+    /**
+     * Consultar DNI
+     */
+    ResponseEntity<DniResponseDto> consultarDni(String dni);
 }
 

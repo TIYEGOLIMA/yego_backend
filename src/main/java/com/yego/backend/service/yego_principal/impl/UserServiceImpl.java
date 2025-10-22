@@ -8,6 +8,7 @@ import com.yego.backend.service.yego_principal.UserService;
 import com.yego.backend.service.WebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -15,9 +16,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityNotFoundException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -405,6 +413,96 @@ public class UserServiceImpl implements UserService {
             webSocketService.enviarBloqueoCuenta(user.getId(), user.getUsername());
         } catch (Exception e) {
             log.error("❌ Error enviando notificación de bloqueo para usuario {}: {}", user.getUsername(), e.getMessage());
+        }
+    }
+    
+    @Override
+    public ResponseEntity<DniResponseDto> consultarDni(String dni) {
+        log.info("🆔 [UserService] Consultando DNI: {}", dni);
+        
+        try {
+            // Validar formato de DNI
+            if (!dni.matches("^\\d{8}$")) {
+                return ResponseEntity.badRequest().body(DniResponseDto.builder()
+                    .success(false)
+                    .dni(dni)
+                    .error("DNI debe tener 8 dígitos")
+                    .build());
+            }
+            
+            // Consultar API externa
+            String apiUrl = "http://167.235.28.114:5000/api/v2/dni/" + dni;
+            log.info("🌐 [UserService] Consultando API: {}", apiUrl);
+            
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(apiUrl))
+                    .header("Authorization", "Basic c3lzdGVtM3c6NkVpWmpwaWp4a1hUZUFDbw==")
+                    .header("Content-Type", "application/json")
+                    .GET()
+                    .build();
+            
+            HttpResponse<String> response = client.send(request, 
+                    HttpResponse.BodyHandlers.ofString());
+            
+            log.info("📡 [UserService] Respuesta API status: {}", response.statusCode());
+            
+            if (response.statusCode() == 200) {
+                String responseBody = response.body();
+                log.info("📋 [UserService] Respuesta API: {}", responseBody);
+                
+                // Extraer datos del JSON
+                String nombres = extraerCampoJson(responseBody, "nombres");
+                String apellidoPaterno = extraerCampoJson(responseBody, "apellido_paterno");
+                String apellidoMaterno = extraerCampoJson(responseBody, "apellido_materno");
+                
+                String nombreCompleto = nombres + " " + apellidoPaterno + 
+                    (apellidoMaterno != null && !apellidoMaterno.isEmpty() ? " " + apellidoMaterno : "");
+                
+                return ResponseEntity.ok(DniResponseDto.builder()
+                    .success(true)
+                    .dni(dni)
+                    .nombres(nombres)
+                    .apellidoPaterno(apellidoPaterno)
+                    .apellidoMaterno(apellidoMaterno)
+                    .nombreCompleto(nombreCompleto.trim())
+                    .build());
+                
+            } else {
+                log.error("❌ [UserService] Error en API DNI: status {}", response.statusCode());
+                return ResponseEntity.status(response.statusCode()).body(DniResponseDto.builder()
+                    .success(false)
+                    .dni(dni)
+                    .error("Error consultando DNI: status " + response.statusCode())
+                    .build());
+            }
+            
+        } catch (Exception e) {
+            log.error("💥 [UserService] Error consultando DNI {}: {}", dni, e.getMessage());
+            return ResponseEntity.internalServerError().body(DniResponseDto.builder()
+                .success(false)
+                .dni(dni)
+                .error("Error interno: " + e.getMessage())
+                .build());
+        }
+    }
+    
+    /**
+     * Extrae un campo del JSON de respuesta de forma simple
+     */
+    private String extraerCampoJson(String json, String campo) {
+        try {
+            String patron = "\"" + campo + "\"\\s*:\\s*\"([^\"]+)\"";
+            Pattern pattern = Pattern.compile(patron);
+            Matcher matcher = pattern.matcher(json);
+            
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+            return "";
+        } catch (Exception e) {
+            log.warn("⚠️ [UserService] Error extrayendo campo {}: {}", campo, e.getMessage());
+            return "";
         }
     }
     

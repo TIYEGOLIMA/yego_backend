@@ -93,4 +93,12 @@ public class UserController {
         UserResponseDto user = userService.cambiarEstado(id, cambiarEstadoDto.getActivo());
         return ResponseEntity.ok(user);
     }
+    
+    /**
+     * Consultar DNI
+     */
+    @GetMapping("/dni/{dni}")
+    public ResponseEntity<DniResponseDto> consultarDni(@PathVariable String dni) {
+        return userService.consultarDni(dni);
+    }
 }
