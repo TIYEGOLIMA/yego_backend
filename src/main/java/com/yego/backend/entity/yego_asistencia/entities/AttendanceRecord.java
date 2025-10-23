@@ -29,10 +29,10 @@ public class AttendanceRecord {
     @Column(name = "recorded_at", nullable = false)
     private LocalDateTime recordedAt;
     
-    @Column(name = "public_ip")
+    @Column(name = "public_ip", columnDefinition = "inet")
     private String publicIp;
     
-    @Column(name = "local_ip")
+    @Column(name = "local_ip", columnDefinition = "inet")
     private String localIp;
     
     @Column(name = "computer_name")
