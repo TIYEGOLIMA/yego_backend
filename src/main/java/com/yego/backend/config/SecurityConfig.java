@@ -99,6 +99,11 @@ public class SecurityConfig {
                 .requestMatchers("/api/registros/**").permitAll() // Registros endpoints
                 .requestMatchers("/api/modules/**").permitAll() // Módulos endpoints
                 .requestMatchers("/api/system/**").permitAll() // Sistema endpoints
+                .requestMatchers("/api/marcacion/**").permitAll() // Asistencia endpoints
+                .requestMatchers("/api/empleado/**").permitAll() // Asistencia empleado endpoints
+                .requestMatchers("/api/mensaje/**").permitAll() // Asistencia mensaje endpoints
+                .requestMatchers("/api/verificar-ip").permitAll() // Asistencia IP verification
+                .requestMatchers("/api/health").permitAll() // Health check
                 .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                 .requestMatchers("/actuator/**").permitAll() // Actuator endpoints
                 .requestMatchers("/error").permitAll() // Error endpoint

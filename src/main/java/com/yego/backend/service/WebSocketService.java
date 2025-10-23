@@ -10,11 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -349,6 +344,25 @@ public class WebSocketService {
             default:
                 return "Se ha modificado el usuario: " + username;
         }
+    }
+    
+    /**
+     * Enviar actualización de registros de hoy
+     */
+    public void enviarActualizacionRegistrosHoy(Long userId, List<Map<String, Object>> registrosHoy) {
+        log.info("📤 [WebSocket] Enviando actualización de registros de hoy - Usuario: {}, Registros: {}", userId, registrosHoy.size());
+        
+        Map<String, Object> evento = Map.of(
+            "type", "TODAY_RECORDS_UPDATE",
+            "userId", userId,
+            "registrosHoy", registrosHoy,
+            "total", registrosHoy.size(),
+            "timestamp", LocalDateTime.now().toString()
+        );
+        
+        // Enviar al usuario específico
+        messagingTemplate.convertAndSend("/topic/user/" + userId, evento);
+        log.info("✅ [WebSocket] Actualización de registros de hoy enviada - Usuario: {}, Total: {}", userId, registrosHoy.size());
     }
     
 }

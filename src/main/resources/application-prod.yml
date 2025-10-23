@@ -7,9 +7,14 @@ server:
   port: ${PORT:3030}
 
 spring:
+  # Configuración de zona horaria
+  jackson:
+    time-zone: America/Lima
+    date-format: yyyy-MM-dd HH:mm:ss
+  
   # Configuración de base de datos PostgreSQL - PRODUCCIÓN
   datasource:
-    url: jdbc:postgresql://${DB_HOST:168.119.226.236}:${DB_PORT:5432}/${DB_NAME:yego_integral}
+    url: jdbc:postgresql://${DB_HOST:168.119.226.236}:${DB_PORT:5432}/${DB_NAME:yego_integral_dev}
     username: ${DB_USER:yego_user}
     password: ${DB_PASSWORD:37>MNA&-35+}
     driver-class-name: org.postgresql.Driver
