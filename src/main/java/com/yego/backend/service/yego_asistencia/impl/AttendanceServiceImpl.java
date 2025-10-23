@@ -693,9 +693,21 @@ public class AttendanceServiceImpl implements AttendanceService {
                 createdAt = recordedAt; // Usar recordedAt como fallback
             }
             
-            String browserName = recordData[12] != null ? (String) recordData[12] : "Unknown";
-            String operatingSystem = recordData[14] != null ? (String) recordData[14] : "Unknown";
-            String fullName = recordData[22] != null ? (String) recordData[22] : "Usuario " + empleadoId;
+            // Mapear campos de texto con verificación de tipos
+            String browserName = "Unknown";
+            if (recordData.length > 12 && recordData[12] != null && recordData[12] instanceof String) {
+                browserName = (String) recordData[12];
+            }
+            
+            String operatingSystem = "Unknown";
+            if (recordData.length > 14 && recordData[14] != null && recordData[14] instanceof String) {
+                operatingSystem = (String) recordData[14];
+            }
+            
+            String fullName = "Usuario " + empleadoId;
+            if (recordData.length > 22 && recordData[22] != null && recordData[22] instanceof String) {
+                fullName = (String) recordData[22];
+            }
         
             Map<String, Object> marcacion = new HashMap<>();
             marcacion.put("id", id);
