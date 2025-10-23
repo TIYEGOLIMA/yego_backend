@@ -667,8 +667,20 @@ public class AttendanceServiceImpl implements AttendanceService {
                 String attendanceType = (String) recordData[2];
             
             // Convertir fechas de java.sql a java.time
-            LocalDate recordedDate = ((java.sql.Date) recordData[3]).toLocalDate();
-            LocalTime recordedTime = ((java.sql.Time) recordData[4]).toLocalTime();
+            LocalDate recordedDate;
+            if (recordData[3] instanceof java.sql.Timestamp) {
+                recordedDate = ((java.sql.Timestamp) recordData[3]).toLocalDateTime().toLocalDate();
+            } else {
+                recordedDate = ((java.sql.Date) recordData[3]).toLocalDate();
+            }
+            
+            LocalTime recordedTime;
+            if (recordData[4] instanceof java.sql.Timestamp) {
+                recordedTime = ((java.sql.Timestamp) recordData[4]).toLocalDateTime().toLocalTime();
+            } else {
+                recordedTime = ((java.sql.Time) recordData[4]).toLocalTime();
+            }
+            
             LocalDateTime recordedAt = ((java.sql.Timestamp) recordData[5]).toLocalDateTime();
             
             // Manejar createdAt que puede ser null
