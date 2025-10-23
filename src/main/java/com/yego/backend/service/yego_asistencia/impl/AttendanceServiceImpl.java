@@ -667,10 +667,23 @@ public class AttendanceServiceImpl implements AttendanceService {
                 String attendanceType = (String) recordData[2];
             
             // Convertir fechas de java.sql a java.time
-            // Orden real: recordData[3] = recorded_date (DATE), recordData[4] = recorded_time (TIME), recordData[5] = recorded_at (TIMESTAMP)
-            LocalDate recordedDate = ((java.sql.Date) recordData[3]).toLocalDate();
-            LocalTime recordedTime = ((java.sql.Time) recordData[4]).toLocalTime();
-            LocalDateTime recordedAt = ((java.sql.Timestamp) recordData[5]).toLocalDateTime();
+            // Manejar diferentes órdenes de columnas entre desarrollo y producción
+            LocalDate recordedDate;
+            LocalTime recordedTime;
+            LocalDateTime recordedAt;
+            
+            // Detectar el orden basado en los tipos de datos
+            if (recordData[3] instanceof java.sql.Timestamp) {
+                // Producción: recordData[3] = TIMESTAMP, recordData[4] = DATE, recordData[5] = TIME
+                recordedAt = ((java.sql.Timestamp) recordData[3]).toLocalDateTime();
+                recordedDate = ((java.sql.Date) recordData[4]).toLocalDate();
+                recordedTime = ((java.sql.Time) recordData[5]).toLocalTime();
+            } else {
+                // Desarrollo: recordData[3] = DATE, recordData[4] = TIME, recordData[5] = TIMESTAMP
+                recordedDate = ((java.sql.Date) recordData[3]).toLocalDate();
+                recordedTime = ((java.sql.Time) recordData[4]).toLocalTime();
+                recordedAt = ((java.sql.Timestamp) recordData[5]).toLocalDateTime();
+            }
             
             // Manejar createdAt que puede ser null
             LocalDateTime createdAt = null;
