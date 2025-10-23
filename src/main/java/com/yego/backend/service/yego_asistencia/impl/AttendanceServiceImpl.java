@@ -659,9 +659,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         
         List<Map<String, Object>> marcaciones = new ArrayList<>();
         for (Object[] recordData : recordsWithNames) {
-            Long id = ((Number) recordData[0]).longValue();
-            Long empleadoId = ((Number) recordData[1]).longValue();
-            String attendanceType = (String) recordData[2];
+            log.info("🔍 [AttendanceService] Procesando registro con {} columnas", recordData.length);
+            
+            try {
+                Long id = ((Number) recordData[0]).longValue();
+                Long empleadoId = ((Number) recordData[1]).longValue();
+                String attendanceType = (String) recordData[2];
             
             // Convertir fechas de java.sql a java.time
             LocalDate recordedDate = ((java.sql.Date) recordData[3]).toLocalDate();
@@ -691,6 +694,12 @@ public class AttendanceServiceImpl implements AttendanceService {
             marcacion.put("dispositivo", browserName + "/" + operatingSystem);
             marcacion.put("fechaCreacion", createdAt.toString());
             marcaciones.add(marcacion);
+            } catch (Exception e) {
+                log.error("❌ [AttendanceService] Error al procesar registro: {}", e.getMessage(), e);
+                log.error("❌ [AttendanceService] Datos del registro: {}", java.util.Arrays.toString(recordData));
+                // Continuar con el siguiente registro en lugar de fallar completamente
+                continue;
+            }
         }
         
         log.info("✅ [AttendanceService] Encontradas {} marcaciones por rol", marcaciones.size());
