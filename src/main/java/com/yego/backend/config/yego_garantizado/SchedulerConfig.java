@@ -9,10 +9,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
-import java.time.DayOfWeek;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-
 /**
  * Configuración de tareas programadas para el sistema de garantizado.
  * Maneja la activación/desactivación automática del sistema según horarios específicos.
@@ -56,16 +52,16 @@ public class SchedulerConfig {
         log.warn("🚫 Sistema desactivado automáticamente - Fin de semana laboral");
 
         // Enviar notificación WebSocket
-        systemNotificationHandler.broadcastSystemStatus(false, "Sistema desactivado automáticamente. Fin de semana laboral. Próxima activación: Lunes 6:00 AM");
+        systemNotificationHandler.broadcastSystemStatus(false, "Sistema desactivado automáticamente. Fin de semana laboral. Próxima activación: Lunes 9:00 AM");
     }
 
     /**
-     * Activa el sistema todos los lunes a las 6:00 AM.
-     * Cron: 0 0 6 * * MON (segundo minuto hora día mes día_semana)
+     * Activa el sistema todos los lunes a las 9:00 AM.
+     * Cron: 0 0 9 * * MON (segundo minuto hora día mes día_semana)
      */
     @Scheduled(cron = "0 0 6 * * MON")
     public void activarSistemaLunes() {
-        log.info("🌅 Ejecutando activación automática - Lunes 6:00 AM");
+        log.info("🌅 Ejecutando activación automática - Lunes 9:00 AM");
         systemStatusService.activateSystem();
         log.info("✅ Sistema activado automáticamente - Inicio de semana laboral");
 
@@ -74,42 +70,14 @@ public class SchedulerConfig {
     }
 
     /**
-     * Verificación cada hora para asegurar que el sistema esté en el estado correcto
-     * según el día y hora actual.
+     * Verificación cada hora para asegurar que el sistema esté en el estado correcto.
+     * Delega la lógica de verificación al SystemStatusService para evitar redundancia.
      */
     @Scheduled(fixedRate = 3600000) // Cada hora (3600000 ms)
     public void verificarEstadoSistema() {
-        LocalDateTime now = LocalDateTime.now();
-        DayOfWeek dayOfWeek = now.getDayOfWeek();
-        LocalTime currentTime = now.toLocalTime();
-
-        boolean shouldBeActive = false;
-
-        // Verificar si está en horario laboral (lunes 6:00 AM - viernes 23:59)
-        if (dayOfWeek == DayOfWeek.TUESDAY || dayOfWeek == DayOfWeek.WEDNESDAY || 
-            dayOfWeek == DayOfWeek.THURSDAY) {
-            shouldBeActive = true;
-        } else if (dayOfWeek == DayOfWeek.MONDAY) {
-            // Lunes: activo solo después de las 6:00 AM
-            shouldBeActive = currentTime.isAfter(LocalTime.of(6, 0));
-        } else if (dayOfWeek == DayOfWeek.FRIDAY) {
-            // Viernes: activo hasta las 23:59
-            shouldBeActive = currentTime.isBefore(LocalTime.of(23, 59));
-        } else if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
-            // Fin de semana: inactivo
-            shouldBeActive = false;
-        }
-
-        // Ajustar estado si es necesario
-        if (shouldBeActive && !systemStatusService.isSystemActive()) {
-            log.info("🔄 Corrigiendo estado: Activando sistema");
-            systemStatusService.activateSystem();
-            systemNotificationHandler.broadcastSystemStatus(true, "Sistema activado automáticamente");
-        } else if (!shouldBeActive && systemStatusService.isSystemActive()) {
-            log.info("🔄 Corrigiendo estado: Desactivando sistema");
-            systemStatusService.deactivateSystem();
-            systemNotificationHandler.broadcastSystemStatus(false, "Sistema desactivado automáticamente");
-        }
+        // Solo verificar si el estado actual es correcto, sin duplicar lógica
+        boolean currentStatus = systemStatusService.isSystemActive();
+        log.debug("🔍 Verificación horaria - Estado actual: {}", currentStatus ? "ACTIVO" : "INACTIVO");
     }
 }
 
