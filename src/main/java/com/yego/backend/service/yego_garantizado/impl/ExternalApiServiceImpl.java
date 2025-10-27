@@ -80,8 +80,8 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         // Calcular total según Google Sheets: efectivo + pagoSinEfectivo + comYango + comYego - boSemAnt + boSemAct
         BigDecimal total = efectivo.add(pagoSinEfectivo).add(comYango).add(comYego).subtract(boSemAnt).add(boSemAct);
         
-        // Calcular garantizado basado en VIAJES (restricción) y BONO SEMANA ACTUAL según tabla
-        BigDecimal garantizado = calcularGarantizadoSegunBoSemAct(boSemAct, parkId, apiResponse.getViajes());
+        // Calcular garantizado basado en VIAJES, BONO y HORAS MÍNIMAS según tabla
+        BigDecimal garantizado = calcularGarantizadoSegunBoSemAct(apiResponse, parkId);
         
         // Calcular diferencia (garantizado - total)
         BigDecimal diferencia = garantizado.subtract(total);
@@ -122,6 +122,10 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             yegoGarantizado.setEstadoPago("N/A"); // No aplica para no garantizados
         }
         
+        // Guardar horas trabajadas
+        yegoGarantizado.setHorasTrabajadas(apiResponse.getHorasTrabajadas());
+        yegoGarantizado.setHorasTrabajadasEntero(apiResponse.getHorasTrabajadasEntero());
+        
         YegoGarantizado savedGarantizado = yegoGarantizadoRepository.save(yegoGarantizado);
         log.info("✅ [ExternalApiService] Datos guardados en yego_garantizado_dev con ID: {}", savedGarantizado.getId());
         
@@ -129,32 +133,15 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     }
     
     /**
-     * Calcula el garantizado basado en VIAJES (restricción) y BONO SEMANA ACTUAL según tabla
-     * 
-     * Tabla para Lima:
-     * - 140+ viajes + Bono S/.520 → Garantizamos S/.1,450
-     * - 110+ viajes + Bono S/.415 → Garantizamos S/.1,225
-     * - 90+ viajes + Bono S/.340 → Garantizamos S/.1,050
-     * - 70+ viajes + Bono S/.265 → Garantizamos S/.825
-     * - 50+ viajes + Bono S/.190 → Garantizamos S/.600
-     * 
-     * Tabla para Trujillo:
-     * - 155+ viajes + Bono S/.350 → Garantizamos S/.1,450
-     * - 125+ viajes + Bono S/.290 → Garantizamos S/.1,075
-     * - 100+ viajes + Bono S/.235 → Garantizamos S/.950
-     * - 75+ viajes + Bono S/.180 → Garantizamos S/.675
-     * - 50+ viajes + Bono S/.125 → Garantizamos S/.475
-     * 
-     * Tabla para Arequipa:
-     * - 155+ viajes + Bono S/.350 → Garantizamos S/.1,450
-     * - 125+ viajes + Bono S/.290 → Garantizamos S/.1,075
-     * - 100+ viajes + Bono S/.235 → Garantizamos S/.950
-     * - 75+ viajes + Bono S/.180 → Garantizamos S/.675
-     * - 50+ viajes + Bono S/.125 → Garantizamos S/.475
+     * Calcula el garantizado basado en VIAJES, BONO y HORAS MÍNIMAS según tabla
      */
-    private BigDecimal calcularGarantizadoSegunBoSemAct(BigDecimal boSemAct, String parkId, Integer viajes) {
+    private BigDecimal calcularGarantizadoSegunBoSemAct(GarantizadoRequest apiResponse, String parkId) {
         try {
-            log.info("📊 [ExternalApiService] Calculando garantizado - Viajes: {}, Bono: {}, Flota: {}", viajes, boSemAct, parkId);
+            Integer viajes = apiResponse.getViajes();
+            BigDecimal boSemAct = new BigDecimal(apiResponse.getBoSemAct());
+            Integer horasTrabajadas = apiResponse.getHorasTrabajadasEntero();
+            
+            log.info("📊 [ExternalApiService] Calculando garantizado - Viajes: {}, Bono: {}, Horas: {}, Flota: {}", viajes, boSemAct, horasTrabajadas, parkId);
             
             // Calcular garantizado según ubicación
             String ubicacion;
@@ -162,13 +149,13 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             
             if (esFlotaTrujillo(parkId)) {
                 ubicacion = "Trujillo";
-                garantizado = calcularGarantizadoTrujillo(viajes, boSemAct);
+                garantizado = calcularGarantizadoTrujillo(viajes, boSemAct, horasTrabajadas);
             } else if (esFlotaArequipa(parkId)) {
                 ubicacion = "Arequipa";
-                garantizado = calcularGarantizadoArequipa(viajes, boSemAct);
+                garantizado = calcularGarantizadoArequipa(viajes, boSemAct, horasTrabajadas);
             } else {
                 ubicacion = "Lima";
-                garantizado = calcularGarantizadoLima(viajes, boSemAct);
+                garantizado = calcularGarantizadoLima(viajes, boSemAct, horasTrabajadas);
             }
             
             log.info("📍 [ExternalApiService] {} - Garantizado: S/.{}", ubicacion, garantizado);
@@ -210,66 +197,69 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     
     /**
      * Calcula garantizado para Trujillo
+     * Horas mínimas: 65 viajes=30h, 95 viajes=40h, 125 viajes=50h, 155 viajes=60h, 195 viajes=72h
      */
-    private BigDecimal calcularGarantizadoTrujillo(Integer viajes, BigDecimal boSemAct) {
+    private BigDecimal calcularGarantizadoTrujillo(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas) {
         int bono = boSemAct.intValue();
         
-        if (viajes >= 195 && bono >= 350) {
+        if (viajes >= 195 && bono >= 350 && horasTrabajadas >= 72) {
             return new BigDecimal("1350.00");
-        } else if (viajes >= 155 && bono >= 280) {
+        } else if (viajes >= 155 && bono >= 280 && horasTrabajadas >= 60) {
             return new BigDecimal("1125.00");
-        } else if (viajes >= 125 && bono >= 235) {
+        } else if (viajes >= 125 && bono >= 235 && horasTrabajadas >= 50) {
             return new BigDecimal("875.00");
-        } else if (viajes >= 95 && bono >= 185) {
+        } else if (viajes >= 95 && bono >= 185 && horasTrabajadas >= 40) {
             return new BigDecimal("675.00");
-        } else if (viajes >= 65 && bono >= 130) {
+        } else if (viajes >= 65 && bono >= 130 && horasTrabajadas >= 30) {
             return new BigDecimal("475.00");
         } else {
-            log.warn("⚠️ [Trujillo] No cumple criterios - Viajes: {}, Bono: S/.{}", viajes, bono);
+            log.warn("⚠️ [Trujillo] No cumple criterios - Viajes: {}, Bono: S/.{}, Horas: {}", viajes, bono, horasTrabajadas);
             return BigDecimal.ZERO;
         }
     }
     
     /**
      * Calcula garantizado para Arequipa
+     * Horas mínimas: 50 viajes=20h, 75 viajes=30h, 100 viajes=40h, 125 viajes=50h, 155 viajes=60h
      */
-    private BigDecimal calcularGarantizadoArequipa(Integer viajes, BigDecimal boSemAct) {
+    private BigDecimal calcularGarantizadoArequipa(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas) {
         int bono = boSemAct.intValue();
         
-        if (viajes >= 155 && bono >= 350) {
+        if (viajes >= 155 && bono >= 350 && horasTrabajadas >= 60) {
             return new BigDecimal("1450.00");
-        } else if (viajes >= 125 && bono >= 290) {
+        } else if (viajes >= 125 && bono >= 290 && horasTrabajadas >= 50) {
             return new BigDecimal("1075.00");
-        } else if (viajes >= 100 && bono >= 235) {
+        } else if (viajes >= 100 && bono >= 235 && horasTrabajadas >= 40) {
             return new BigDecimal("950.00");
-        } else if (viajes >= 75 && bono >= 180) {
+        } else if (viajes >= 75 && bono >= 180 && horasTrabajadas >= 30) {
             return new BigDecimal("675.00");
-        } else if (viajes >= 50 && bono >= 125) {
+        } else if (viajes >= 50 && bono >= 125 && horasTrabajadas >= 20) {
             return new BigDecimal("475.00");
         } else {
-            log.warn("⚠️ [Arequipa] No cumple criterios - Viajes: {}, Bono: S/.{}", viajes, bono);
+            log.warn("⚠️ [Arequipa] No cumple criterios - Viajes: {}, Bono: S/.{}, Horas: {}", viajes, bono, horasTrabajadas);
             return BigDecimal.ZERO;
         }
     }
     
     /**
      * Calcula garantizado para Lima
+     * Horas mínimas: 50 viajes=20h, 70 viajes=30h, 90 viajes=42h, 110 viajes=50h, 140 viajes=60h
      */
-    private BigDecimal calcularGarantizadoLima(Integer viajes, BigDecimal boSemAct) {
+    private BigDecimal calcularGarantizadoLima(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas) {
         int bono = boSemAct.intValue();
         
-        if (viajes >= 140 && bono >= 520) {
+        if (viajes >= 140 && bono >= 520 && horasTrabajadas >= 60) {
             return new BigDecimal("1450.00");
-        } else if (viajes >= 110 && bono >= 415) {
+        } else if (viajes >= 110 && bono >= 415 && horasTrabajadas >= 50) {
             return new BigDecimal("1225.00");
-        } else if (viajes >= 90 && bono >= 340) {
+        } else if (viajes >= 90 && bono >= 340 && horasTrabajadas >= 42) {
             return new BigDecimal("1050.00");
-        } else if (viajes >= 70 && bono >= 265) {
+        } else if (viajes >= 70 && bono >= 265 && horasTrabajadas >= 30) {
             return new BigDecimal("825.00");
-        } else if (viajes >= 50 && bono >= 190) {
+        } else if (viajes >= 50 && bono >= 190 && horasTrabajadas >= 20) {
             return new BigDecimal("600.00");
         } else {
-            log.warn("⚠️ [Lima] No cumple criterios - Viajes: {}, Bono: S/.{}", viajes, bono);
+            log.warn("⚠️ [Lima] No cumple criterios - Viajes: {}, Bono: S/.{}, Horas: {}", viajes, bono, horasTrabajadas);
             return BigDecimal.ZERO;
         }
     }

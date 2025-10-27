@@ -3,6 +3,7 @@ package com.yego.backend.service.yego_garantizado;
 import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoListResponse;
 import com.yego.backend.entity.yego_garantizado.api.response.RegistroCompletoResponse;
 import com.yego.backend.entity.yego_garantizado.entities.YegoGarantizado;
+import org.springframework.security.core.Authentication;
 
 import java.util.List;
 
@@ -14,5 +15,5 @@ public interface YegoGarantizadoRegistroService {
     GarantizadoListResponse listarGarantizadosSemanaAnterior();
     List<RegistroCompletoResponse> obtenerRegistrosSemanaActualCompletos();
     byte[] exportarExcel(String flotaId, String estado, String semana);
-    boolean marcarComoPagado(Long id);
+    boolean marcarComoPagado(Long id, Authentication authentication);
 }

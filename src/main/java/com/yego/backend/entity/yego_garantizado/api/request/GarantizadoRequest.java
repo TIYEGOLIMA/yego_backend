@@ -17,4 +17,6 @@ public class GarantizadoRequest {
     private int comYego;        // En centavos
     private int boSemAnt;       // En centavos
     private int boSemAct;       // En centavos
+    private String horasTrabajadas;
+    private Integer horasTrabajadasEntero;
 }

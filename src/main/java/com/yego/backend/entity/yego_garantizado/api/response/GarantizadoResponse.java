@@ -39,4 +39,6 @@ public class GarantizadoResponse {
     private LocalDateTime fechaActualizacion;
     private Boolean activo;
     private String estadoPago;
+    private Long usuarioPagoId;
+    private String horasTrabajadas;
 }

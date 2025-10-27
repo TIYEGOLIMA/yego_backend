@@ -86,4 +86,13 @@ public class YegoGarantizado {
 
     @Column(name = "yeg_gara_estado_pago")
     private String estadoPago;
+
+    @Column(name = "yeg_gara_usuario_pago_id")
+    private Long usuarioPagoId;
+
+    @Column(name = "yeg_gara_horas_trabajadas")
+    private String horasTrabajadas;
+
+    @Column(name = "yeg_gara_horas_trabajadas_entero")
+    private Integer horasTrabajadasEntero;
 }

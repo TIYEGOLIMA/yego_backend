@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.BeanUtils;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -337,10 +338,14 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
 
     @Override
     @Transactional
-    public boolean marcarComoPagado(Long id) {
+    public boolean marcarComoPagado(Long id, Authentication authentication) {
         log.info("💰 [YegoGarantizadoRegistroService] Marcando como pagado el registro ID: {}", id);
         
         try {
+            // Extraer ID del usuario autenticado
+            Long usuarioId = Long.parseLong(authentication.getName());
+            log.debug("🔍 [YegoGarantizadoRegistroService] Usuario autenticado ID: {}", usuarioId);
+            
             YegoGarantizado garantizado = yegoGarantizadoRepository.findById(id)
                     .orElseThrow(() -> new IllegalArgumentException("Registro no encontrado con ID: " + id));
             
@@ -351,13 +356,14 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
             }
             
             garantizado.setEstadoPago("Pagado");
+            garantizado.setUsuarioPagoId(usuarioId);
             yegoGarantizadoRepository.save(garantizado);
             
-            log.info("✅ [YegoGarantizadoRegistroService] Registro {} marcado como pagado exitosamente", id);
+            log.info("✅ [YegoGarantizadoRegistroService] Registro {} marcado como pagado por usuario {}", id, usuarioId);
             return true;
             
         } catch (Exception e) {
-            log.error("❌ [YegoGarantizadoRegistroService] Error marcando como pagado el registro {}: {}", id, e.getMessage());
+            log.error("❌ [YegoGarantizadoRegistroService] Error marcando como pagado: {}", e.getMessage());
             return false;
         }
     }

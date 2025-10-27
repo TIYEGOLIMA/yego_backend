@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -95,22 +96,20 @@ public class YegoGarantizadoController {
     }
 
     @PutMapping("/marcar-pagado/{id}")
-    public ResponseEntity<String> marcarComoPagado(@PathVariable Long id) {
+    public ResponseEntity<String> marcarComoPagado(@PathVariable Long id, Authentication authentication) {
         log.info("💰 [YegoGarantizadoController] Recibida solicitud para marcar como pagado el registro ID: {}", id);
         
         try {
-            boolean resultado = yegoGarantizadoRegistroService.marcarComoPagado(id);
+            boolean resultado = yegoGarantizadoRegistroService.marcarComoPagado(id, authentication);
             
             if (resultado) {
-                log.info("✅ [YegoGarantizadoController] Registro {} marcado como pagado exitosamente", id);
                 return ResponseEntity.ok("Registro marcado como pagado exitosamente");
             } else {
-                log.warn("⚠️ [YegoGarantizadoController] No se pudo marcar como pagado el registro {}", id);
                 return ResponseEntity.badRequest().body("No se puede marcar como pagado. Verifique que el conductor esté garantizado.");
             }
             
         } catch (Exception e) {
-            log.error("❌ [YegoGarantizadoController] Error marcando como pagado el registro {}: {}", id, e.getMessage());
+            log.error("❌ [YegoGarantizadoController] Error: {}", e.getMessage());
             return ResponseEntity.internalServerError().body("Error interno del servidor");
         }
     }
