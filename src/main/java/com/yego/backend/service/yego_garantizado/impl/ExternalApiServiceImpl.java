@@ -130,54 +130,52 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     
     /**
      * Calcula el garantizado basado en VIAJES (restricción) y BONO SEMANA ACTUAL según tabla
-     * Tabla:
+     * 
+     * Tabla para Lima:
      * - 140+ viajes + Bono S/.520 → Garantizamos S/.1,450
      * - 110+ viajes + Bono S/.415 → Garantizamos S/.1,225
      * - 90+ viajes + Bono S/.340 → Garantizamos S/.1,050
      * - 70+ viajes + Bono S/.265 → Garantizamos S/.825
      * - 50+ viajes + Bono S/.190 → Garantizamos S/.600
+     * 
+     * Tabla para Trujillo:
+     * - 155+ viajes + Bono S/.350 → Garantizamos S/.1,450
+     * - 125+ viajes + Bono S/.290 → Garantizamos S/.1,075
+     * - 100+ viajes + Bono S/.235 → Garantizamos S/.950
+     * - 75+ viajes + Bono S/.180 → Garantizamos S/.675
+     * - 50+ viajes + Bono S/.125 → Garantizamos S/.475
+     * 
+     * Tabla para Arequipa:
+     * - 155+ viajes + Bono S/.350 → Garantizamos S/.1,450
+     * - 125+ viajes + Bono S/.290 → Garantizamos S/.1,075
+     * - 100+ viajes + Bono S/.235 → Garantizamos S/.950
+     * - 75+ viajes + Bono S/.180 → Garantizamos S/.675
+     * - 50+ viajes + Bono S/.125 → Garantizamos S/.475
      */
     private BigDecimal calcularGarantizadoSegunBoSemAct(BigDecimal boSemAct, String parkId, Integer viajes) {
         try {
             log.info("📊 [ExternalApiService] Calculando garantizado - Viajes: {}, Bono: {}, Flota: {}", viajes, boSemAct, parkId);
             
-            // Determinar si es Perú o Colombia
-            boolean esPeruano = esFlotaPeruana(parkId);
-            String moneda = esPeruano ? "Soles Peruanos" : "Pesos Colombianos";
-            log.info("💰 [ExternalApiService] Moneda detectada: {} (Flota: {})", moneda, parkId);
+            // Calcular garantizado según ubicación
+            String ubicacion;
+            BigDecimal garantizado;
             
-            // No se valida aquí, ya se validó al inicio de procesarDatosApi
-            
-            // Calcular garantizado según VIAJES y BONO según tabla
-            BigDecimal garantizado = BigDecimal.ZERO;
-            
-            // Convertir bono a int para comparación
-            int bonoValue = boSemAct.intValue();
-            
-            // Determinar nivel basado en VIAJES Y BONO
-            if (viajes >= 140 && bonoValue >= 520) {
-                garantizado = new BigDecimal("1450.00");
-            } else if (viajes >= 110 && bonoValue >= 415) {
-                garantizado = new BigDecimal("1225.00");
-            } else if (viajes >= 90 && bonoValue >= 340) {
-                garantizado = new BigDecimal("1050.00");
-            } else if (viajes >= 70 && bonoValue >= 265) {
-                garantizado = new BigDecimal("825.00");
-            } else if (viajes >= 50 && bonoValue >= 190) {
-                garantizado = new BigDecimal("600.00");
+            if (esFlotaTrujillo(parkId)) {
+                ubicacion = "Trujillo";
+                garantizado = calcularGarantizadoTrujillo(viajes, boSemAct);
+            } else if (esFlotaArequipa(parkId)) {
+                ubicacion = "Arequipa";
+                garantizado = calcularGarantizadoArequipa(viajes, boSemAct);
             } else {
-                garantizado = BigDecimal.ZERO;
-                log.info("⚠️ [ExternalApiService] Conductor NO cumple criterios - Viajes: {}, Bono: S/.{}", viajes, bonoValue);
+                ubicacion = "Lima";
+                garantizado = calcularGarantizadoLima(viajes, boSemAct);
             }
             
-            log.info("✅ [ExternalApiService] Garantizado asignado: S/.{} (Viajes: {}, Bono: S/.{})", garantizado, viajes, bonoValue);
+            log.info("📍 [ExternalApiService] {} - Garantizado: S/.{}", ubicacion, garantizado);
             
-            // Si es Colombia, convertir (por ahora tasa 1:1)
-            if (!esPeruano) {
-                BigDecimal tasaCambio = new BigDecimal("1.00");
-                BigDecimal garantizadoPesos = garantizado.multiply(tasaCambio);
-                log.info("🔄 [ExternalApiService] Conversión: S/.{} → ${} pesos colombianos", garantizado, garantizadoPesos);
-                return garantizadoPesos;
+            // Conversión para Colombia
+            if (!esFlotaPeruana(parkId)) {
+                return garantizado.multiply(new BigDecimal("1.00"));
             }
             
             return garantizado;
@@ -201,6 +199,80 @@ public class ExternalApiServiceImpl implements ExternalApiService {
                "ae57aaedeacd41eb9fdbe1ff7a89a3f2".equals(parkId) || // Yego,
                "2e39f6699c854bc49cc75197431fe25c".equals(parkId);   // Yego.
     }
+    
+    private boolean esFlotaTrujillo(String parkId) {
+        return "851e30755bba4d298e2e837f571b4ab8".equals(parkId); // Yego Trujillo
+    }
+    
+    private boolean esFlotaArequipa(String parkId) {
+        return "56e4607dfc354e0a9cde4f0aa7973003".equals(parkId); // Yego Arequipa
+    }
+    
+    /**
+     * Calcula garantizado para Trujillo
+     */
+    private BigDecimal calcularGarantizadoTrujillo(Integer viajes, BigDecimal boSemAct) {
+        int bono = boSemAct.intValue();
+        
+        if (viajes >= 195 && bono >= 350) {
+            return new BigDecimal("1350.00");
+        } else if (viajes >= 155 && bono >= 280) {
+            return new BigDecimal("1125.00");
+        } else if (viajes >= 125 && bono >= 235) {
+            return new BigDecimal("875.00");
+        } else if (viajes >= 95 && bono >= 185) {
+            return new BigDecimal("675.00");
+        } else if (viajes >= 65 && bono >= 130) {
+            return new BigDecimal("475.00");
+        } else {
+            log.warn("⚠️ [Trujillo] No cumple criterios - Viajes: {}, Bono: S/.{}", viajes, bono);
+            return BigDecimal.ZERO;
+        }
+    }
+    
+    /**
+     * Calcula garantizado para Arequipa
+     */
+    private BigDecimal calcularGarantizadoArequipa(Integer viajes, BigDecimal boSemAct) {
+        int bono = boSemAct.intValue();
+        
+        if (viajes >= 155 && bono >= 350) {
+            return new BigDecimal("1450.00");
+        } else if (viajes >= 125 && bono >= 290) {
+            return new BigDecimal("1075.00");
+        } else if (viajes >= 100 && bono >= 235) {
+            return new BigDecimal("950.00");
+        } else if (viajes >= 75 && bono >= 180) {
+            return new BigDecimal("675.00");
+        } else if (viajes >= 50 && bono >= 125) {
+            return new BigDecimal("475.00");
+        } else {
+            log.warn("⚠️ [Arequipa] No cumple criterios - Viajes: {}, Bono: S/.{}", viajes, bono);
+            return BigDecimal.ZERO;
+        }
+    }
+    
+    /**
+     * Calcula garantizado para Lima
+     */
+    private BigDecimal calcularGarantizadoLima(Integer viajes, BigDecimal boSemAct) {
+        int bono = boSemAct.intValue();
+        
+        if (viajes >= 140 && bono >= 520) {
+            return new BigDecimal("1450.00");
+        } else if (viajes >= 110 && bono >= 415) {
+            return new BigDecimal("1225.00");
+        } else if (viajes >= 90 && bono >= 340) {
+            return new BigDecimal("1050.00");
+        } else if (viajes >= 70 && bono >= 265) {
+            return new BigDecimal("825.00");
+        } else if (viajes >= 50 && bono >= 190) {
+            return new BigDecimal("600.00");
+        } else {
+            log.warn("⚠️ [Lima] No cumple criterios - Viajes: {}, Bono: S/.{}", viajes, bono);
+            return BigDecimal.ZERO;
+        }
+    }
 
     /**
      * Obtiene el nombre de la flota desde mapeo local (más confiable que API externa)
@@ -222,7 +294,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             case "05b1c831e66f41a9a87f5f3fa0a186ae":
                 return "Yego Cali";
             case "08e20910d81d42658d4334d3f6d10ac0":
-                return "Yego";
+                return "Yego Lima";
             case "56e4607dfc354e0a9cde4f0aa7973003":
                 return "Yego Arequipa";
             case "ef21f793358144f589aabcbeb8bd7d50":
