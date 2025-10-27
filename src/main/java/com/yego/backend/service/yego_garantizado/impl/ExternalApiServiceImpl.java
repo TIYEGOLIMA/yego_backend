@@ -86,8 +86,17 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         // Calcular diferencia (garantizado - total)
         BigDecimal diferencia = garantizado.subtract(total);
         
-        // Determinar valor de garantizado
-        String garantizadoValor = diferencia.compareTo(BigDecimal.ZERO) >= 0 ? "Garantizado" : "No Garantizado";
+        // Determinar valor de garantizado y motivo de rechazo
+        String garantizadoValor;
+        String motivoRechazo;
+        
+        if (diferencia.compareTo(BigDecimal.ZERO) >= 0) {
+            garantizadoValor = "Garantizado";
+            motivoRechazo = "No hay motivo";
+        } else {
+            garantizadoValor = "No Garantizado";
+            motivoRechazo = determinarMotivoRechazo(apiResponse, parkId, garantizado, total);
+        }
         
         // Obtener datos del conductor desde la tabla drivers
         String[] datosConductor = obtenerDatosConductor(apiResponse.getLicencia(), parkId);
@@ -125,6 +134,9 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         // Guardar horas trabajadas
         yegoGarantizado.setHorasTrabajadas(apiResponse.getHorasTrabajadas());
         yegoGarantizado.setHorasTrabajadasEntero(apiResponse.getHorasTrabajadasEntero());
+        
+        // Guardar motivo de rechazo si aplica
+        yegoGarantizado.setMotivoRechazo(motivoRechazo);
         
         YegoGarantizado savedGarantizado = yegoGarantizadoRepository.save(yegoGarantizado);
         log.info("✅ [ExternalApiService] Datos guardados en yego_garantizado_dev con ID: {}", savedGarantizado.getId());
@@ -346,5 +358,116 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             log.error("❌ [ExternalApiService] Error consultando datos del conductor {}: {}", numeroLicencia, e.getMessage());
             return new String[]{"Conductor " + numeroLicencia, "N/A"};
         }
+    }
+    
+    /**
+     * Determina el motivo específico del rechazo basado en los criterios de garantizado
+     */
+    private String determinarMotivoRechazo(GarantizadoRequest apiResponse, String parkId, BigDecimal garantizado, BigDecimal total) {
+        try {
+            Integer viajes = apiResponse.getViajes();
+            BigDecimal boSemAct = new BigDecimal(apiResponse.getBoSemAct());
+            Integer horasTrabajadas = apiResponse.getHorasTrabajadasEntero();
+            
+            // Verificar criterios específicos según la ubicación
+            if (esFlotaTrujillo(parkId)) {
+                return determinarMotivoRechazoTrujillo(viajes, boSemAct, horasTrabajadas, garantizado, total);
+            } else if (esFlotaArequipa(parkId)) {
+                return determinarMotivoRechazoArequipa(viajes, boSemAct, horasTrabajadas, garantizado, total);
+            } else {
+                return determinarMotivoRechazoLima(viajes, boSemAct, horasTrabajadas, garantizado, total);
+            }
+            
+        } catch (Exception e) {
+            log.error("❌ [ExternalApiService] Error determinando motivo de rechazo: {}", e.getMessage());
+            return "Error al determinar motivo de rechazo";
+        }
+    }
+    
+    /**
+     * Determina motivo de rechazo para Lima
+     */
+    private String determinarMotivoRechazoLima(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas, BigDecimal garantizado, BigDecimal total) {
+        StringBuilder motivo = new StringBuilder();
+        
+        // Verificar horas mínimas
+        if (horasTrabajadas < 40) {
+            motivo.append("Horas insuficientes (").append(horasTrabajadas).append("/40). ");
+        }
+        
+        // Verificar viajes mínimos
+        if (viajes < 50) {
+            motivo.append("Viajes insuficientes (").append(viajes).append("/50). ");
+        }
+        
+        // Verificar bono según tabla de Lima
+        if (boSemAct.compareTo(new BigDecimal("600")) < 0) {
+            motivo.append("Bono insuficiente (S/.").append(boSemAct).append("/S/.600). ");
+        }
+        
+        // Si no hay motivo específico, indicar que el total supera el garantizado
+        if (motivo.length() == 0) {
+            motivo.append("Total supera garantizado (S/.").append(total).append(" > S/.").append(garantizado).append(")");
+        }
+        
+        return motivo.toString().trim();
+    }
+    
+    /**
+     * Determina motivo de rechazo para Trujillo
+     */
+    private String determinarMotivoRechazoTrujillo(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas, BigDecimal garantizado, BigDecimal total) {
+        StringBuilder motivo = new StringBuilder();
+        
+        // Verificar horas mínimas para Trujillo
+        if (horasTrabajadas < 40) {
+            motivo.append("Horas insuficientes (").append(horasTrabajadas).append("/40). ");
+        }
+        
+        // Verificar viajes mínimos
+        if (viajes < 50) {
+            motivo.append("Viajes insuficientes (").append(viajes).append("/50). ");
+        }
+        
+        // Verificar bono según tabla de Trujillo
+        if (boSemAct.compareTo(new BigDecimal("600")) < 0) {
+            motivo.append("Bono insuficiente (S/.").append(boSemAct).append("/S/.600). ");
+        }
+        
+        // Si no hay motivo específico, indicar que el total supera el garantizado
+        if (motivo.length() == 0) {
+            motivo.append("Total supera garantizado (S/.").append(total).append(" > S/.").append(garantizado).append(")");
+        }
+        
+        return motivo.toString().trim();
+    }
+    
+    /**
+     * Determina motivo de rechazo para Arequipa
+     */
+    private String determinarMotivoRechazoArequipa(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas, BigDecimal garantizado, BigDecimal total) {
+        StringBuilder motivo = new StringBuilder();
+        
+        // Verificar horas mínimas para Arequipa
+        if (horasTrabajadas < 40) {
+            motivo.append("Horas insuficientes (").append(horasTrabajadas).append("/40). ");
+        }
+        
+        // Verificar viajes mínimos
+        if (viajes < 50) {
+            motivo.append("Viajes insuficientes (").append(viajes).append("/50). ");
+        }
+        
+        // Verificar bono según tabla de Arequipa
+        if (boSemAct.compareTo(new BigDecimal("600")) < 0) {
+            motivo.append("Bono insuficiente (S/.").append(boSemAct).append("/S/.600). ");
+        }
+        
+        // Si no hay motivo específico, indicar que el total supera el garantizado
+        if (motivo.length() == 0) {
+            motivo.append("Total supera garantizado (S/.").append(total).append(" > S/.").append(garantizado).append(")");
+        }
+        
+        return motivo.toString().trim();
     }
 }

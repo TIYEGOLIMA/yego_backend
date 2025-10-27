@@ -41,4 +41,5 @@ public class GarantizadoResponse {
     private String estadoPago;
     private Long usuarioPagoId;
     private String horasTrabajadas;
+    private String motivoRechazo;
 }

@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -19,4 +20,5 @@ public class GarantizadoListResponse {
     private String semanaAnterior; 
     private String semanaActual;
     private List<GarantizadoResponse> conductores;
+    private BigDecimal totalDiferenciaGarantizados; // Suma de diferencias solo de conductores garantizados
 }

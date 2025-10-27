@@ -95,4 +95,7 @@ public class YegoGarantizado {
 
     @Column(name = "yeg_gara_horas_trabajadas_entero")
     private Integer horasTrabajadasEntero;
+
+    @Column(name = "yeg_gara_motivo_rechazo")
+    private String motivoRechazo;
 }

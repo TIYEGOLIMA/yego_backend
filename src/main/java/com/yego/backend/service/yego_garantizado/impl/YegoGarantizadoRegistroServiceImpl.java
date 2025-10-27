@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -93,10 +94,14 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
             // Obtener también la semana actual
             String semanaActual = obtenerSemanaActual();
             
+            // Calcular total de diferencias solo de conductores garantizados
+            BigDecimal totalDiferenciaGarantizados = calcularTotalDiferenciaGarantizados(conductores);
+            
             GarantizadoListResponse response = GarantizadoListResponse.builder()
                     .semanaAnterior(semanaAnterior)
                     .semanaActual(semanaActual)
                     .conductores(conductores)
+                    .totalDiferenciaGarantizados(totalDiferenciaGarantizados)
                     .build();
             
             log.info(" [YegoGarantizadoRegistroService] Encontrados {} garantizados para flota {} de la semana {}", conductores.size(), flotaId, semanaAnterior);
@@ -107,6 +112,7 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                     .semanaAnterior("SEMANA0")
                     .semanaActual("SEMANA0")
                     .conductores(new ArrayList<>())
+                    .totalDiferenciaGarantizados(BigDecimal.ZERO)
                     .build();
         }
     }
@@ -131,10 +137,14 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
             // Obtener también la semana actual
             String semanaActual = obtenerSemanaActual();
             
+            // Calcular total de diferencias solo de conductores garantizados
+            BigDecimal totalDiferenciaGarantizados = calcularTotalDiferenciaGarantizados(conductores);
+            
             GarantizadoListResponse response = GarantizadoListResponse.builder()
                     .semanaAnterior(semanaAnterior)
                     .semanaActual(semanaActual)
                     .conductores(conductores)
+                    .totalDiferenciaGarantizados(totalDiferenciaGarantizados)
                     .build();
             
             log.info("[YegoGarantizadoRegistroService] Procesados y devueltos {} conductores de la semana anterior", conductores.size());
@@ -145,6 +155,7 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                     .semanaAnterior("SEMANA0")
                     .semanaActual("SEMANA0")
                     .conductores(new ArrayList<>())
+                    .totalDiferenciaGarantizados(BigDecimal.ZERO)
                     .build();
         }
     }
@@ -166,10 +177,14 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
             // Obtener también la semana actual
             String semanaActual = obtenerSemanaActual();
             
+            // Calcular total de diferencias solo de conductores garantizados
+            BigDecimal totalDiferenciaGarantizados = calcularTotalDiferenciaGarantizados(conductores);
+            
             GarantizadoListResponse response = GarantizadoListResponse.builder()
                     .semanaAnterior(semanaAnterior)
                     .semanaActual(semanaActual)
                     .conductores(conductores)
+                    .totalDiferenciaGarantizados(totalDiferenciaGarantizados)
                     .build();
             
             log.info("✅ [YegoGarantizadoRegistroService] Listados {} conductores de la semana anterior", conductores.size());
@@ -180,6 +195,7 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                     .semanaAnterior("SEMANA0")
                     .semanaActual("SEMANA0")
                     .conductores(new ArrayList<>())
+                    .totalDiferenciaGarantizados(BigDecimal.ZERO)
                     .build();
         }
     }
@@ -251,10 +267,15 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                         .collect(Collectors.toList());
 
                 String semanaActual = obtenerSemanaActual();
+                
+                // Calcular total de diferencias solo de conductores garantizados
+                BigDecimal totalDiferenciaGarantizados = calcularTotalDiferenciaGarantizados(conductores);
+                
                 response = GarantizadoListResponse.builder()
                         .semanaAnterior(semana)
                         .semanaActual(semanaActual)
                         .conductores(conductores)
+                        .totalDiferenciaGarantizados(totalDiferenciaGarantizados)
                         .build();
             }
             
@@ -401,6 +422,17 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
         GarantizadoResponse response = new GarantizadoResponse();
         BeanUtils.copyProperties(garantizado, response);
         return response;
+    }
+
+    /**
+     * Calcula el total de diferencias solo de conductores con estado "Garantizado"
+     */
+    private BigDecimal calcularTotalDiferenciaGarantizados(List<GarantizadoResponse> conductores) {
+        return conductores.stream()
+                .filter(conductor -> "Garantizado".equals(conductor.getGarantizadoValor()))
+                .map(GarantizadoResponse::getDiferencia)
+                .filter(diferencia -> diferencia != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
 }
