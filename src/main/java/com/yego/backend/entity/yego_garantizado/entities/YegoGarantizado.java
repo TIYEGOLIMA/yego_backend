@@ -83,4 +83,7 @@ public class YegoGarantizado {
 
     @Column(name = "yeg_gara_activo", nullable = false)
     private Boolean activo = true;
+
+    @Column(name = "yeg_gara_estado_pago")
+    private String estadoPago;
 }

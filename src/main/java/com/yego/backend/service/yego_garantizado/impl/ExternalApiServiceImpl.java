@@ -115,6 +115,13 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         yegoGarantizado.setGarantizadoValor(garantizadoValor);
         yegoGarantizado.setActivo(true);
         
+        // Inicializar estado de pago: "No Pagado" solo para conductores garantizados
+        if ("Garantizado".equals(garantizadoValor)) {
+            yegoGarantizado.setEstadoPago("No Pagado");
+        } else {
+            yegoGarantizado.setEstadoPago("N/A"); // No aplica para no garantizados
+        }
+        
         YegoGarantizado savedGarantizado = yegoGarantizadoRepository.save(yegoGarantizado);
         log.info("✅ [ExternalApiService] Datos guardados en yego_garantizado_dev con ID: {}", savedGarantizado.getId());
         

@@ -38,4 +38,5 @@ public class GarantizadoResponse {
     private LocalDateTime fechaCreacion;
     private LocalDateTime fechaActualizacion;
     private Boolean activo;
+    private String estadoPago;
 }

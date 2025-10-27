@@ -14,4 +14,5 @@ public interface YegoGarantizadoRegistroService {
     GarantizadoListResponse listarGarantizadosSemanaAnterior();
     List<RegistroCompletoResponse> obtenerRegistrosSemanaActualCompletos();
     byte[] exportarExcel(String flotaId, String estado, String semana);
+    boolean marcarComoPagado(Long id);
 }

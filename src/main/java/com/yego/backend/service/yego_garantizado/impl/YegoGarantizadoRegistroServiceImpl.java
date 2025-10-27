@@ -335,6 +335,33 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
         }
     }
 
+    @Override
+    @Transactional
+    public boolean marcarComoPagado(Long id) {
+        log.info("💰 [YegoGarantizadoRegistroService] Marcando como pagado el registro ID: {}", id);
+        
+        try {
+            YegoGarantizado garantizado = yegoGarantizadoRepository.findById(id)
+                    .orElseThrow(() -> new IllegalArgumentException("Registro no encontrado con ID: " + id));
+            
+            // Solo se puede marcar como pagado si está garantizado
+            if (!"Garantizado".equals(garantizado.getGarantizadoValor())) {
+                log.warn("⚠️ [YegoGarantizadoRegistroService] No se puede marcar como pagado - Estado: {}", garantizado.getGarantizadoValor());
+                return false;
+            }
+            
+            garantizado.setEstadoPago("Pagado");
+            yegoGarantizadoRepository.save(garantizado);
+            
+            log.info("✅ [YegoGarantizadoRegistroService] Registro {} marcado como pagado exitosamente", id);
+            return true;
+            
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoRegistroService] Error marcando como pagado el registro {}: {}", id, e.getMessage());
+            return false;
+        }
+    }
+
     
     /**
      * Calcula la semana anterior del año
