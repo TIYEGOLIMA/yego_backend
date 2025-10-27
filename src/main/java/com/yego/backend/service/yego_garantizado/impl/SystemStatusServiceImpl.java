@@ -40,7 +40,7 @@ public class SystemStatusServiceImpl implements SystemStatusService {
             shouldBeActive = true;
         } else if (currentDay == DayOfWeek.MONDAY) {
             // Lunes: activo solo después de las 6:00 AM
-            shouldBeActive = currentTime.isAfter(LocalTime.of(10, 0));
+            shouldBeActive = currentTime.isAfter(LocalTime.of(6, 0));
         } else if (currentDay == DayOfWeek.FRIDAY) {
             // Viernes: activo hasta las 23:59
             shouldBeActive = currentTime.isBefore(LocalTime.of(23, 59));
@@ -103,7 +103,7 @@ public class SystemStatusServiceImpl implements SystemStatusService {
             nextActivation = now.plusDays(3).with(LocalTime.of(6, 0));
         } else {
             // Si es lunes antes de 6:00 AM, próxima activación es hoy 6:00 AM
-            nextActivation = now.with(LocalTime.of(10, 0));
+            nextActivation = now.with(LocalTime.of(6, 0));
         }
         
         return nextActivation.format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));

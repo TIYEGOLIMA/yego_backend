@@ -61,7 +61,7 @@ public class SchedulerConfig {
      */
     @Scheduled(cron = "0 0 6 * * MON")
     public void activarSistemaLunes() {
-        log.info("🌅 Ejecutando activación automática - Lunes 9:00 AM");
+        log.info("🌅 Ejecutando activación automática - Lunes 6:00 AM");
         systemStatusService.activateSystem();
         log.info("✅ Sistema activado automáticamente - Inicio de semana laboral");
 
