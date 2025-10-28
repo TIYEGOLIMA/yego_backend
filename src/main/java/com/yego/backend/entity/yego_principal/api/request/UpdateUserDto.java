@@ -30,7 +30,7 @@ public class UpdateUserDto {
     @Size(max = 255, message = "El apellido no puede exceder 255 caracteres")
     private String lastName;
 
-    @Size(min = 8, max = 8, message = "El DNI debe tener 8 caracteres")
+    @Size(min = 8, max = 12, message = "El documento debe tener entre 8 y 12 caracteres")
     private String dni;
 
     private Boolean active;

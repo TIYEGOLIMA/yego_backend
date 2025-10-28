@@ -6,6 +6,7 @@ import com.yego.backend.entity.yego_principal.entities.Role;
 import com.yego.backend.repository.yego_principal.RoleRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_principal.RoleService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,7 @@ public class RoleServiceImpl implements RoleService {
     
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
     
     @Override
     @Transactional
@@ -37,12 +39,22 @@ public class RoleServiceImpl implements RoleService {
             throw new IllegalStateException("El rol '" + createRoleDto.getName() + "' ya existe");
         }
         
+        // Convertir permissions a JSON string
+        String permissionsJson = null;
+        if (createRoleDto.getPermissions() != null) {
+            try {
+                permissionsJson = objectMapper.writeValueAsString(createRoleDto.getPermissions());
+            } catch (Exception e) {
+                log.error("Error convirtiendo permissions a JSON: {}", e.getMessage());
+                throw new RuntimeException("Error procesando permisos del rol");
+            }
+        }
+        
         Role role = Role.builder()
                 .name(createRoleDto.getName())
                 .description(createRoleDto.getDescription())
-                .permissions(createRoleDto.getPermissions() != null ? 
-                    createRoleDto.getPermissions().toString() : null)
-                .active(true)
+                .permissions(permissionsJson)
+                .activo(true)
                 .build();
         
         Role savedRole = roleRepository.save(role);
@@ -96,7 +108,13 @@ public class RoleServiceImpl implements RoleService {
             role.setDescription(updateRoleDto.getDescription());
         }
         if (updateRoleDto.getPermissions() != null) {
-            role.setPermissions(updateRoleDto.getPermissions().toString());
+            try {
+                String permissionsJson = objectMapper.writeValueAsString(updateRoleDto.getPermissions());
+                role.setPermissions(permissionsJson);
+            } catch (Exception e) {
+                log.error("Error convirtiendo permissions a JSON en update: {}", e.getMessage());
+                throw new RuntimeException("Error procesando permisos del rol");
+            }
         }
         
         Role savedRole = roleRepository.save(role);
@@ -119,13 +137,34 @@ public class RoleServiceImpl implements RoleService {
         // Verificar si el rol tiene usuarios asignados
         Long userCount = getUserCountByRole(role.getName());
         if (userCount > 0) {
-            throw new IllegalStateException("No se puede eliminar el rol '" + role.getName() + 
-                    "' porque tiene " + userCount + " usuarios asignados");
+            // En lugar de eliminar, desactivar el rol
+            role.setActivo(false);
+            roleRepository.save(role);
+            log.info("🔒 Rol YEGO Principal desactivado (tenía {} usuarios): {}", userCount, role.getName());
+        } else {
+            // Solo eliminar si no tiene usuarios asignados
+            roleRepository.delete(role);
+            log.info("🗑️ Rol YEGO Principal eliminado: {}", role.getName());
         }
+    }
+    
+    @Override
+    @Transactional
+    public RoleResponseDto toggleStatus(Long id) {
+        Role role = roleRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + id + " no encontrado"));
         
-        roleRepository.delete(role);
+        // Cambiar el estado activo - manejar null como false
+        Boolean currentStatus = role.getActivo();
+        boolean newStatus = currentStatus != null ? !currentStatus : true;
+        role.setActivo(newStatus);
         
-        log.info("🗑️ Rol YEGO Principal eliminado: {}", role.getName());
+        Role savedRole = roleRepository.save(role);
+        
+        String status = newStatus ? "activado" : "desactivado";
+        log.info("🔄 Rol YEGO Principal {}: {}", status, savedRole.getName());
+        
+        return mapToResponseDto(savedRole);
     }
     
     @Override
@@ -173,7 +212,7 @@ public class RoleServiceImpl implements RoleService {
                 .name(role.getName())
                 .description(role.getDescription())
                 .permissions(role.getPermissions())
-                .active(role.getActive())
+                .active(role.getActivo())
                 .createdAt(role.getCreatedAt())
                 .updatedAt(role.getUpdatedAt())
                 .build();

@@ -36,9 +36,9 @@ public class Role {
     @JdbcTypeCode(SqlTypes.JSON)
     private String permissions;
     
-    @Column(name = "active", nullable = false)
+    @Column(name = "activo", nullable = false)
     @Builder.Default
-    private Boolean active = true;
+    private Boolean activo = true;
     
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

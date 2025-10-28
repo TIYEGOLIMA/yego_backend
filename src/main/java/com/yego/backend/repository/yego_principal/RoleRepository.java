@@ -41,7 +41,7 @@ public interface RoleRepository extends JpaRepository<Role, Long> {
     /**
      * Buscar roles activos
      */
-    @Query("SELECT r FROM Role r WHERE r.active = true ORDER BY r.name ASC")
+    @Query("SELECT r FROM Role r WHERE r.activo = true ORDER BY r.name ASC")
     List<Role> findActiveRoles();
 }
 

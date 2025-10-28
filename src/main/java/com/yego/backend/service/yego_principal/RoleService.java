@@ -61,5 +61,10 @@ public interface RoleService {
      * Obtener roles activos
      */
     List<RoleResponseDto> findActive();
+    
+    /**
+     * Activar/Desactivar rol
+     */
+    RoleResponseDto toggleStatus(Long id);
 }
 

@@ -26,7 +26,7 @@ public class RoleController {
     /**
      * Crear nuevo rol
      */
-    @PostMapping
+    @PostMapping("/create")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> create(@Valid @RequestBody CreateRoleDto createRoleDto) {
         RoleResponseDto role = roleService.create(createRoleDto);
@@ -36,7 +36,7 @@ public class RoleController {
     /**
      * Obtener todos los roles
      */
-    @GetMapping
+    @GetMapping("/find-all")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<List<RoleResponseDto>> findAll() {
         List<RoleResponseDto> roles = roleService.findAll();
@@ -66,7 +66,7 @@ public class RoleController {
     /**
      * Actualizar rol
      */
-    @PutMapping("/{id}")
+    @PutMapping("/update/{id}")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> update(@PathVariable Long id, 
                                    @Valid @RequestBody UpdateRoleDto updateRoleDto) {
@@ -77,10 +77,20 @@ public class RoleController {
     /**
      * Eliminar rol
      */
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/delete/{id}")
     @PreAuthorize("hasRole('SUPERADMIN')")
     public ResponseEntity<?> remove(@PathVariable Long id) {
         roleService.remove(id);
         return ResponseEntity.ok().build();
+    }
+    
+    /**
+     * Activar/Desactivar rol
+     */
+    @PutMapping("/toggle-status/{id}")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
+    public ResponseEntity<?> toggleStatus(@PathVariable Long id) {
+        RoleResponseDto role = roleService.toggleStatus(id);
+        return ResponseEntity.ok(role);
     }
 }

@@ -420,12 +420,14 @@ public class UserServiceImpl implements UserService {
         log.info("🆔 [UserService] Consultando DNI: {}", dni);
         
         try {
-            // Validar formato de DNI
+            // Validar si es un DNI peruano (exactamente 8 dígitos)
             if (!dni.matches("^\\d{8}$")) {
-                return ResponseEntity.badRequest().body(DniResponseDto.builder()
+                // Si no es DNI de 8 dígitos, no consultar API (puede ser CE, pasaporte, etc.)
+                log.info("📄 [UserService] Documento {} no es DNI peruano (8 dígitos), no se consulta API", dni);
+                return ResponseEntity.ok(DniResponseDto.builder()
                     .success(false)
                     .dni(dni)
-                    .error("DNI debe tener 8 dígitos")
+                    .error("Solo se pueden consultar DNI peruanos de 8 dígitos")
                     .build());
             }
             

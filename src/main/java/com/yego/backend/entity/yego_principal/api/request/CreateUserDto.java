@@ -40,8 +40,8 @@ public class CreateUserDto {
     @Builder.Default
     private Boolean active = true;
 
-    @NotBlank(message = "El DNI es obligatorio")
-    @Size(min = 8, max = 8, message = "El DNI debe tener 8 caracteres")
+    @NotBlank(message = "El documento es obligatorio")
+    @Size(min = 8, max = 12, message = "El documento debe tener entre 8 y 12 caracteres")
     private String dni;
     
     private Long moduleId;
