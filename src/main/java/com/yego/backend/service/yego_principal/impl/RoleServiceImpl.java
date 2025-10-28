@@ -65,6 +65,7 @@ public class RoleServiceImpl implements RoleService {
     }
     
     @Override
+    @Transactional(readOnly = true)
     public List<RoleResponseDto> findAll() {
         List<Role> roles = roleRepository.findAllOrderByNameAsc();
         
@@ -74,6 +75,18 @@ public class RoleServiceImpl implements RoleService {
     }
     
     @Override
+    @Transactional(readOnly = true)
+    public List<RoleSimpleDto> findAllActive() {
+        log.info("📋 [RoleService] Obteniendo roles activos (solo id y name)");
+        List<Role> activeRoles = roleRepository.findActiveRoles();
+        
+        return activeRoles.stream()
+                .map(this::mapToSimpleDto)
+                .collect(Collectors.toList());
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
     public RoleResponseDto findOne(Long id) {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + id + " no encontrado"));
@@ -82,6 +95,7 @@ public class RoleServiceImpl implements RoleService {
     }
     
     @Override
+    @Transactional(readOnly = true)
     public Role findByName(String name) {
         return roleRepository.findByName(name)
                 .orElseThrow(() -> new EntityNotFoundException("Rol '" + name + "' no encontrado"));
@@ -207,6 +221,8 @@ public class RoleServiceImpl implements RoleService {
     }
     
     private RoleResponseDto mapToResponseDto(Role role) {
+        Long userCount = userRepository.countByRoleName(role.getName());
+        
         return RoleResponseDto.builder()
                 .id(role.getId())
                 .name(role.getName())
@@ -215,6 +231,14 @@ public class RoleServiceImpl implements RoleService {
                 .active(role.getActivo())
                 .createdAt(role.getCreatedAt())
                 .updatedAt(role.getUpdatedAt())
+                .userCount(userCount)
+                .build();
+    }
+    
+    private RoleSimpleDto mapToSimpleDto(Role role) {
+        return RoleSimpleDto.builder()
+                .id(role.getId())
+                .name(role.getName())
                 .build();
     }
     

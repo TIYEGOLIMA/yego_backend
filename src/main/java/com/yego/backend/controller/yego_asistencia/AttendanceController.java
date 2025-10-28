@@ -266,13 +266,13 @@ public class AttendanceController {
             // Si no se proporciona fecha, usar la fecha actual en zona horaria de Perú
             LocalDate fechaConsulta = fecha != null ? LocalDate.parse(fecha) : LocalDate.now(java.time.ZoneId.of("America/Lima"));
             
-            var marcaciones = attendanceService.getAttendanceRecordsByRole(userId, user.getRole(), fechaConsulta);
+            var marcaciones = attendanceService.getAttendanceRecordsByRole(userId, user.getRoleName(), fechaConsulta);
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "marcaciones", marcaciones,
-                "total", marcaciones.size(),
+                "total", marcaciones != null ? marcaciones.size() : 0,
                 "fecha", fechaConsulta.toString(),
-                "rolUsuario", user.getRole()
+                "rolUsuario", user.getRoleName()
             ));
 
         } catch (Exception e) {
@@ -294,12 +294,12 @@ public class AttendanceController {
                 return ResponseEntity.status(401).body(Map.of("message", "Token de acceso requerido"));
             }
 
-            var usuarios = attendanceService.getUsersByRole(user.getRole());
+            var usuarios = attendanceService.getUsersByRole(user.getRoleName());
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "usuarios", usuarios,
-                "total", usuarios.size(),
-                "rolUsuario", user.getRole()
+                "total", usuarios != null ? usuarios.size() : 0,
+                "rolUsuario", user.getRoleName()
             ));
 
         } catch (Exception e) {

@@ -8,14 +8,13 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * DTO de respuesta para permisos del sistema YEGO Principal
+ * DTO para respuesta de permisos
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class PermissionResponseDto {
-    
     private Long id;
     private String name;
     private String description;
@@ -23,7 +22,6 @@ public class PermissionResponseDto {
     private String action;
     private String conditions;
     private Boolean active;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private LocalDateTime created_at;
+    private LocalDateTime updated_at;
 }
-

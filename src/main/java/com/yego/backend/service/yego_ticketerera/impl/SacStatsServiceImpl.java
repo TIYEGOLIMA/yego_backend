@@ -41,7 +41,7 @@ public class SacStatsServiceImpl implements SacStatsService {
         log.info("📊 Calculando estadísticas generales de SAC");
         
         // Obtener todos los usuarios con rol SAC
-        List<User> sacUsers = userRepository.findByRole("SAC");
+        List<User> sacUsers = userRepository.findByRoleName("SAC");
         log.info("👥 Usuarios SAC encontrados: {}", sacUsers.size());
         
         // Obtener todos los tickets

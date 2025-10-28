@@ -3,7 +3,9 @@ package com.yego.backend.service.yego_principal.impl;
 import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
 import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.entity.yego_principal.entities.Role;
 import com.yego.backend.repository.yego_principal.UserRepository;
+import com.yego.backend.repository.yego_principal.RoleRepository;
 import com.yego.backend.service.yego_principal.AuthService;
 import com.yego.backend.service.yego_principal.AuditService;
 import com.yego.backend.service.yego_principal.SessionService;
@@ -44,6 +46,7 @@ import java.util.Optional;
 public class AuthServiceImpl implements AuthService {
     
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final SessionService sessionService;
     private final AuditService auditService;
     private final QueueAgentService queueAgentService;
@@ -139,7 +142,7 @@ public class AuthServiceImpl implements AuthService {
                     .username(userDto.getUsername())
                     .email(userDto.getEmail())
                     .name(userDto.getName())
-                    .role(userDto.getRole())
+                    .role(userDto.getRoleName())
                     .moduleId(userDto.getModuleId() != null ? userDto.getModuleId().toString() : null)
                     .active(userDto.getActive())
                     .lastLogin(LocalDateTime.now())
@@ -191,7 +194,7 @@ public class AuthServiceImpl implements AuthService {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .name(user.getName())
-                .role(user.getRole())
+                .role(user.getRoleName())
                 .moduleId(user.getModuleId() != null ? user.getModuleId().toString() : null)
                 .active(user.getActive())
                 .lastLogin(LocalDateTime.now())
@@ -215,12 +218,18 @@ public class AuthServiceImpl implements AuthService {
         String passwordHash = passwordEncoder.encode(registerDto.getPassword());
         
         // Crear usuario
+        // Buscar rol por defecto "usuario" o el primer rol activo disponible
+        Role defaultRole = roleRepository.findByName("ADMIN")
+                .orElseGet(() -> roleRepository.findActiveRoles().stream()
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalStateException("No hay roles disponibles en el sistema")));
+        
         User user = User.builder()
                 .username(registerDto.getUsername())
                 .email(registerDto.getEmail())
                 .name(registerDto.getNombre())
                 .password(passwordHash)
-                .role("usuario")
+                .role(defaultRole)
                 .active(true)
                 .build();
         
@@ -268,16 +277,7 @@ public class AuthServiceImpl implements AuthService {
         if (user == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
         }
-        
-        // Verificar que el usuario requiera cambio de contraseña
-        User userEntity = userRepository.findById(user.getId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
-        
-        // Por ahora, permitir cambio de contraseña sin verificar flag
-        // if (!userEntity.getRequiereCambioPassword()) {
-        //     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Este usuario no requiere cambio de contraseña");
-        // }
-        
+    
         changePassword(user.getId(), changePasswordDto.getCurrentPassword(), 
                 changePasswordDto.getNewPassword());
     }
@@ -310,7 +310,7 @@ public class AuthServiceImpl implements AuthService {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .name(user.getName())
-                .role(user.getRole())
+                .role(user.getRoleName())
                 .moduleId(user.getModuleId() != null ? user.getModuleId().toString() : null)
                 .active(user.getActive())
                 .lastLogin(user.getLastLogin())
@@ -346,7 +346,7 @@ public class AuthServiceImpl implements AuthService {
                 log.warn(" Usuario {} no encontrado para logout", userId);
             }
             
-            if (user != null && "SAC".equalsIgnoreCase(user.getRole())) {
+            if (user != null && "SAC".equalsIgnoreCase(user.getRoleName())) {
                 try {
                     log.info("🔄 [AuthService] Usuario SAC - Liberando módulo asignado...");
                     queueAgentService.liberarModuloDelUsuario(user.getId());
@@ -374,7 +374,7 @@ public class AuthServiceImpl implements AuthService {
                 .setSubject(user.getId().toString())
                 .claim("username", user.getUsername())
                 .claim("userId", user.getId())
-                .claim("role", user.getRole())
+                .claim("role", user.getRoleName())
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
                 .signWith(getSigningKey(), SignatureAlgorithm.HS512)
@@ -387,7 +387,10 @@ public class AuthServiceImpl implements AuthService {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .name(user.getName())
-                .role(user.getRole())
+                .lastName(user.getLastName())
+                .dni(user.getDni())
+                .role(user.getRoleId())
+                .roleName(user.getRoleName())
                 .moduleId(user.getModuleId())
                 .active(user.getActive())
                 .lastLogin(user.getLastLogin())
@@ -410,14 +413,26 @@ public class AuthServiceImpl implements AuthService {
     }
     
     @Override
+    @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + username));
         
+        String roleName = user.getRoleName();
+        log.info("🔐 [AuthService] Usuario: {}, Rol: {}", username, roleName);
+        
+        if (roleName == null || roleName.isEmpty()) {
+            log.warn("⚠️ [AuthService] Usuario {} no tiene rol asignado", username);
+            roleName = "USER"; // Rol por defecto
+        }
+        
+        String authority = "ROLE_" + roleName.toUpperCase();
+        log.info("🔐 [AuthService] Authority creada: {}", authority);
+        
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getUsername())
                 .password(user.getPassword())
-                .authorities(new SimpleGrantedAuthority("ROLE_" + user.getRole()))
+                .authorities(new SimpleGrantedAuthority(authority))
                 .accountExpired(false)
                 .accountLocked(!user.getActive())
                 .credentialsExpired(false)

@@ -67,6 +67,19 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT COUNT(u) FROM User u WHERE u.active = true")
     Long countActiveUsers();
     
+    // NUEVAS queries optimizadas con JOIN FETCH
+    @Query("SELECT u FROM User u JOIN FETCH u.role WHERE u.id = :id")
+    Optional<User> findByIdWithRole(@Param("id") Long id);
+    
+    @Query("SELECT u FROM User u JOIN FETCH u.role ORDER BY u.name ASC")
+    List<User> findAllWithRoles();
+    
+    @Query("SELECT u FROM User u JOIN FETCH u.role WHERE u.role.id = :roleId")
+    List<User> findByRoleId(@Param("roleId") Long roleId);
+    
+    @Query("SELECT u FROM User u JOIN FETCH u.role WHERE u.role.name = :roleName")
+    List<User> findByRoleName(@Param("roleName") String roleName);
+    
     /**
      * Contar usuarios creados después de una fecha
      */
@@ -111,8 +124,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Long countByCreatedAtAfter(LocalDateTime date);
     
     /**
-     * Buscar usuarios por rol
+     * Contar usuarios por nombre de rol
      */
-    List<User> findByRole(String role);
+    @Query("SELECT COUNT(u) FROM User u WHERE u.role.name = :roleName")
+    Long countByRoleName(@Param("roleName") String roleName);
+    
 }
 

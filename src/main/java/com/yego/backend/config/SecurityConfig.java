@@ -63,7 +63,7 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         // Permitir localhost para desarrollo
         configuration.setAllowedOrigins(Arrays.asList(
-            "http://localhost:3000",
+            "http://localhost:3030",
             "http://localhost:5173",
             "http://localhost:5174",
             "https://integral.yego.pro",
@@ -96,6 +96,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/flota/**").permitAll() // Flota endpoints
                 .requestMatchers("/api/conductor-registro/**").permitAll() // Conductor registro endpoints
                 .requestMatchers("/api/drivers/**").permitAll() // Drivers endpoints
+                .requestMatchers("/api/roles/**").permitAll() // Roles endpoints
                 .requestMatchers("/api/registros/**").permitAll() // Registros endpoints
                 .requestMatchers("/api/modules/**").permitAll() // Módulos endpoints
                 .requestMatchers("/api/system/**").permitAll() // Sistema endpoints

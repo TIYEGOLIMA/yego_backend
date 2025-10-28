@@ -60,6 +60,17 @@ public class PermissionServiceImpl implements PermissionService {
     }
     
     @Override
+    @Transactional(readOnly = true)
+    public List<PermissionResponseDto> findAllActive() {
+        log.info("📋 [PermissionService] Obteniendo permisos activos ordenados por módulo y acción");
+        List<Permission> activePermissions = permissionRepository.findByActiveTrueOrderByModuleAscActionAsc();
+        
+        return activePermissions.stream()
+                .map(this::mapToResponseDto)
+                .collect(Collectors.toList());
+    }
+    
+    @Override
     public List<PermissionResponseDto> findByModule(String module) {
         List<Permission> permissions = permissionRepository.findByModuleAndActiveOrderByActionAsc(module, true);
         
@@ -177,8 +188,8 @@ public class PermissionServiceImpl implements PermissionService {
                 .action(permission.getAction())
                 .conditions(permission.getConditions())
                 .active(permission.getActive())
-                .createdAt(permission.getCreatedAt())
-                .updatedAt(permission.getUpdatedAt())
+                .created_at(permission.getCreatedAt())
+                .updated_at(permission.getUpdatedAt())
                 .build();
     }
     

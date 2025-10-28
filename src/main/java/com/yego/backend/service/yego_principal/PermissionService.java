@@ -23,6 +23,11 @@ public interface PermissionService {
     List<PermissionResponseDto> findAll();
     
     /**
+     * Obtener todos los permisos activos
+     */
+    List<PermissionResponseDto> findAllActive();
+    
+    /**
      * Obtener permisos por módulo
      */
     List<PermissionResponseDto> findByModule(String module);

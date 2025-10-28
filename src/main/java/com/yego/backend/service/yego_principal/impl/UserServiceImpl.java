@@ -3,7 +3,9 @@ package com.yego.backend.service.yego_principal.impl;
 import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
 import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.entity.yego_principal.entities.Role;
 import com.yego.backend.repository.yego_principal.UserRepository;
+import com.yego.backend.repository.yego_principal.RoleRepository;
 import com.yego.backend.service.yego_principal.UserService;
 import com.yego.backend.service.WebSocketService;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +16,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import jakarta.persistence.EntityNotFoundException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -33,6 +34,7 @@ import java.util.stream.Collectors;
 public class UserServiceImpl implements UserService {
     
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final WebSocketService webSocketService;
     
@@ -49,6 +51,10 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("La contraseña no cumple con los requisitos de seguridad");
         }
         
+        // Validar que el rol existe
+        Role role = roleRepository.findById(createUserDto.getRoleId())
+                .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + createUserDto.getRoleId() + " no encontrado"));
+        
         // Crear usuario
         User user = User.builder()
                 .username(createUserDto.getUsername())
@@ -56,7 +62,7 @@ public class UserServiceImpl implements UserService {
                 .name(createUserDto.getName())
                 .lastName(createUserDto.getLastName())
                 .password(passwordEncoder.encode(createUserDto.getPassword()))
-                .role(createUserDto.getRole() != null ? createUserDto.getRole() : "usuario")
+                .role(role)
                 .dni(createUserDto.getDni())
                 .moduleId(createUserDto.getModuleId())
                 .active(true)
@@ -247,8 +253,10 @@ public class UserServiceImpl implements UserService {
         if (updateUserDto.getName() != null) {
             user.setName(updateUserDto.getName());
         }
-        if (updateUserDto.getRole() != null) {
-            user.setRole(updateUserDto.getRole());
+        if (updateUserDto.getRoleId() != null) {
+            Role role = roleRepository.findById(updateUserDto.getRoleId())
+                    .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + updateUserDto.getRoleId() + " no encontrado"));
+            user.setRole(role);
         }
 
         if (updateUserDto.getLastName() != null) {
@@ -357,7 +365,10 @@ public class UserServiceImpl implements UserService {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .name(user.getName())
-                .role(user.getRole())
+                .lastName(user.getLastName())
+                .dni(user.getDni())
+                .role(user.getRoleId())
+                .roleName(user.getRoleName())
                 .moduleId(user.getModuleId())
                 .active(user.getActive())
                 .lastLogin(user.getLastLogin())
@@ -372,7 +383,7 @@ public class UserServiceImpl implements UserService {
                 .email(user.getEmail())
                 .name(user.getName())
                 .lastName(user.getLastName())
-                .role(user.getRole())
+                .role(user.getRoleName())
                 .dni(user.getDni())
                 .active(user.getActive())
                 .createdAt(user.getCreatedAt())

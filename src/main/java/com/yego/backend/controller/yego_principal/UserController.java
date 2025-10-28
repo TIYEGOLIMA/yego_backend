@@ -82,6 +82,7 @@ public class UserController {
         userService.remove(id);
         return ResponseEntity.ok().build();
     }
+    
 
     /**
      * Cambiar estado de usuario

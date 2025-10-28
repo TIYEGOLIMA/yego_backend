@@ -21,6 +21,11 @@ public interface RoleService {
      * Obtener todos los roles
      */
     List<RoleResponseDto> findAll();
+
+    /**
+     * Obtener roles activos (solo id y name - para formularios)
+     */
+    List<RoleSimpleDto> findAllActive();
     
     /**
      * Obtener rol por ID

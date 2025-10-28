@@ -19,5 +19,6 @@ public class RoleResponseDto {
     private Boolean active;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private Long userCount; // Cantidad de usuarios con este rol
 }
 

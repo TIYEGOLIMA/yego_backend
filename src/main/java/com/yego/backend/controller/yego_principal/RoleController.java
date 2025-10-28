@@ -34,7 +34,7 @@ public class RoleController {
     }
     
     /**
-     * Obtener todos los roles
+     * Obtener todos los roles (completo - solo para admin)
      */
     @GetMapping("/find-all")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
@@ -44,14 +44,15 @@ public class RoleController {
     }
     
     /**
-     * Obtener roles activos
+     * Obtener roles activos (solo id y name - para formularios)
      */
-    @GetMapping("/active")
+    @GetMapping("/find-all-active")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
-    public ResponseEntity<List<RoleResponseDto>> findActive() {
-        List<RoleResponseDto> roles = roleService.findActive();
+    public ResponseEntity<List<RoleSimpleDto>> findAllActive() {
+        List<RoleSimpleDto> roles = roleService.findAllActive();
         return ResponseEntity.ok(roles);
     }
+    
     
     /**
      * Obtener rol por ID

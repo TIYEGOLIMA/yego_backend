@@ -2,6 +2,7 @@ package com.yego.backend.entity.yego_principal.api.request;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -33,9 +34,8 @@ public class CreateUserDto {
     @Size(max = 255, message = "El apellido no puede exceder 255 caracteres")
     private String lastName;
 
-    @NotBlank(message = "El rol es obligatorio")
-    @Size(max = 255, message = "El rol no puede exceder 255 caracteres")
-    private String role;
+    @NotNull(message = "El rol es obligatorio")
+    private Long roleId;
 
     @Builder.Default
     private Boolean active = true;

@@ -36,7 +36,6 @@ import java.util.stream.Collectors;
 public class ImportServiceImpl implements ImportService {
     
     private final ImportRepository importRepository;
-    private final UserRepository userRepository;
     
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     

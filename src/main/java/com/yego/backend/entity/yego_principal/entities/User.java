@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Entidad JPA para usuarios del sistema YEGO Principal
@@ -46,8 +48,9 @@ public class User {
     @Column(name = "password", nullable = false, length = 255)
     private String password;
     
-    @Column(name = "role", nullable = false, length = 255)
-    private String role;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "role", nullable = false)
+    private Role role;
     
     @Column(name = "username", nullable = false, unique = true, length = 255)
     private String username;
@@ -61,6 +64,20 @@ public class User {
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+    }
+    
+    // Métodos helper para compatibilidad
+    public Long getRoleId() {
+        return role != null ? role.getId() : null;
+    }
+    
+    public String getRoleName() {
+        return role != null ? role.getName() : null;
+    }
+    
+    public Set<Permission> getUserPermissions() {
+        // TODO: Implementar cuando se cree RolePermission
+        return new HashSet<>();
     }
 }
 

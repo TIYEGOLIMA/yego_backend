@@ -1,7 +1,6 @@
 package com.yego.backend.controller.yego_principal;
 
-import com.yego.backend.entity.yego_principal.api.request.*;
-import com.yego.backend.entity.yego_principal.api.response.*;
+import com.yego.backend.entity.yego_principal.api.response.PermissionResponseDto;
 import com.yego.backend.service.yego_principal.PermissionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.validation.Valid;
 import java.util.List;
 
 /**
@@ -24,19 +22,19 @@ public class PermissionController {
     private final PermissionService permissionService;
     
     /**
-     * Crear nuevo permiso
+     * Obtener todos los permisos activos
      */
-    @PostMapping
-    @PreAuthorize("hasRole('SUPERADMIN')")
-    public ResponseEntity<?> create(@Valid @RequestBody CreatePermissionDto createPermissionDto) {
-        PermissionResponseDto permission = permissionService.create(createPermissionDto);
-        return ResponseEntity.status(201).body(permission);
+    @GetMapping("/find-all-active")
+    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
+    public ResponseEntity<List<PermissionResponseDto>> findAllActive() {
+        List<PermissionResponseDto> permissions = permissionService.findAllActive();
+        return ResponseEntity.ok(permissions);
     }
     
     /**
      * Obtener todos los permisos
      */
-    @GetMapping
+    @GetMapping("/find-all")
     @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<List<PermissionResponseDto>> findAll() {
         List<PermissionResponseDto> permissions = permissionService.findAll();
@@ -51,36 +49,5 @@ public class PermissionController {
     public ResponseEntity<List<PermissionResponseDto>> findByModule(@PathVariable String module) {
         List<PermissionResponseDto> permissions = permissionService.findByModule(module);
         return ResponseEntity.ok(permissions);
-    }
-    
-    /**
-     * Obtener permiso por ID
-     */
-    @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
-    public ResponseEntity<?> findOne(@PathVariable Long id) {
-        PermissionResponseDto permission = permissionService.findOne(id);
-        return ResponseEntity.ok(permission);
-    }
-    
-    /**
-     * Actualizar permiso
-     */
-    @PutMapping("/{id}")
-    @PreAuthorize("hasRole('SUPERADMIN')")
-    public ResponseEntity<?> update(@PathVariable Long id, 
-                                   @Valid @RequestBody UpdatePermissionDto updatePermissionDto) {
-        PermissionResponseDto permission = permissionService.update(id, updatePermissionDto);
-        return ResponseEntity.ok(permission);
-    }
-    
-    /**
-     * Eliminar permiso
-     */
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('SUPERADMIN')")
-    public ResponseEntity<?> remove(@PathVariable Long id) {
-        permissionService.remove(id);
-        return ResponseEntity.ok().build();
     }
 }

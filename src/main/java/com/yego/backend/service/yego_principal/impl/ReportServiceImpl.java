@@ -202,7 +202,7 @@ public class ReportServiceImpl implements ReportService {
             row.createCell(1).setCellValue(user.getName());
             row.createCell(2).setCellValue(user.getUsername());
             row.createCell(3).setCellValue(user.getEmail());
-            row.createCell(4).setCellValue(user.getRole());
+            row.createCell(4).setCellValue(user.getRoleName());
             row.createCell(5).setCellValue(user.getActive() ? "Activo" : "Inactivo");
             row.createCell(6).setCellValue(user.getCreatedAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")));
         }
@@ -355,7 +355,7 @@ public class ReportServiceImpl implements ReportService {
                 .name(user.getName())
                 .username(user.getUsername())
                 .email(user.getEmail())
-                .role(user.getRole())
+                .role(user.getRoleName())
                 .lastLogin(user.getLastLogin())
                 .active(user.getActive())
                 .createdAt(user.getCreatedAt())
