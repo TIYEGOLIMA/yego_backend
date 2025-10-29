@@ -6,7 +6,6 @@ import com.yego.backend.service.yego_ticketerera.SacStatsExportService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -23,7 +22,6 @@ public class SacStatsController {
     private final SacStatsExportService sacStatsExportService;
 
     @GetMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('SUPERVISOR')")
     public ResponseEntity<SacStatsResponse> obtenerTodasLasEstadisticas() {
         log.info("📊 [SacStats] Obteniendo TODAS las estadísticas de SAC");
         SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas();
@@ -31,14 +29,12 @@ public class SacStatsController {
     }
     
     @GetMapping("/export/excel")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('SUPERVISOR')")
     public ResponseEntity<byte[]> exportarAExcel() {
         log.info("📊 [SacStats] Exportando estadísticas a Excel");
         return sacStatsExportService.exportarAExcel();
     }
     
     @GetMapping("/export/image/{formato}")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('SUPERVISOR')")
     public ResponseEntity<byte[]> exportarAImagen(@PathVariable String formato) {
         log.info("📊 [SacStats] Exportando estadísticas a imagen: {}", formato);
         return sacStatsExportService.exportarAImagen(formato);

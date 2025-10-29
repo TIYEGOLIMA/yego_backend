@@ -102,6 +102,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/modules/**").permitAll() // Módulos endpoints
                 .requestMatchers("/api/system/**").permitAll() // Sistema endpoints
                 .requestMatchers("/api/marcacion/**").permitAll() // Asistencia endpoints
+                .requestMatchers("/api/ticketera/**").permitAll() // Ticketera endpoints
                 .requestMatchers("/api/empleado/**").permitAll() // Asistencia empleado endpoints
                 .requestMatchers("/api/mensaje/**").permitAll() // Asistencia mensaje endpoints
                 .requestMatchers("/api/verificar-ip").permitAll() // Asistencia IP verification

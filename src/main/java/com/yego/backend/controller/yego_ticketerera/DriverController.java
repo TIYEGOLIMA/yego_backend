@@ -4,7 +4,6 @@ import com.yego.backend.service.yego_ticketerera.DriverConsultaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -22,25 +21,21 @@ public class DriverController {
     private final DriverConsultaService driverConsultaService;
     
     @GetMapping("/buscar/telefono/{phoneDigits}")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('SAC') or hasRole('TV') or hasRole('TABLET1') or hasRole('TABLET2') or hasRole('PRINCIPAL')")
-    public ResponseEntity<Map<String, Object>> buscarPorTelefonoFrontend(@PathVariable String phoneDigits) {
+     public ResponseEntity<Map<String, Object>> buscarPorTelefonoFrontend(@PathVariable String phoneDigits) {
         return driverConsultaService.buscarConductorConRespuestaCompleta(phoneDigits);
     }
     
     @PostMapping("/drivers/registrar")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or hasRole('PRINCIPAL') or hasRole('SAC')")
     public ResponseEntity<Map<String, Object>> registrarConductorManual(@RequestBody Map<String, String> datos) {
         return driverConsultaService.registrarConductorManualConRespuesta(datos);
     }
     
     @PostMapping("/drivers/registrar-dni")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR') or  hasRole('PRINCIPAL') or hasRole('SAC')")
     public ResponseEntity<Map<String, Object>> registrarConductorPorDni(@RequestBody Map<String, String> datos) {
         return driverConsultaService.registrarConductorPorDniConRespuesta(datos);
     }
     
     @GetMapping("/drivers/cache/clear")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> limpiarCache() {
         return driverConsultaService.limpiarCacheConRespuesta();
     }
