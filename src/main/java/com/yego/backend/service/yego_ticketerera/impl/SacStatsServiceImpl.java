@@ -37,12 +37,26 @@ public class SacStatsServiceImpl implements SacStatsService {
     public SacStatsResponse obtenerTodasLasEstadisticas() {
         log.info("📊 Calculando estadísticas generales de SAC");
         
-        // Obtener todos los usuarios con rol SAC
+        // Obtener todos los usuarios con rol SAC (probar diferentes variaciones del nombre)
         List<User> sacUsers = userRepository.findByRoleName("SAC");
+        if (sacUsers.isEmpty()) {
+            log.warn("⚠️ No se encontraron usuarios con rol 'SAC', intentando con 'sac'");
+            sacUsers = userRepository.findByRoleName("sac");
+        }
+        if (sacUsers.isEmpty()) {
+            log.warn("⚠️ No se encontraron usuarios con rol 'sac', intentando con 'Sac'");
+            sacUsers = userRepository.findByRoleName("Sac");
+        }
+        
         log.info("👥 Usuarios SAC encontrados: {}", sacUsers.size());
+        if (!sacUsers.isEmpty()) {
+            sacUsers.forEach(user -> log.info("   - {} (ID: {}, Rol: {})", 
+                user.getName(), user.getId(), user.getRoleName()));
+        }
         
         // Obtener todos los tickets
         List<Ticket> allTickets = ticketRepository.findAll();
+        log.info("🎫 Total de tickets en el sistema: {}", allTickets.size());
         
         // Obtener todas las calificaciones ordenadas por fecha
         List<QueueRating> allRatings = queueRatingRepository.findAllByOrderByCreatedAtDesc();
@@ -57,22 +71,43 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .orElse(0.0);
         int totalRatings = allRatings.size();
         
-        // Calcular rendimiento de cada SAC
-        List<SacPerformanceResponse> sacPerformance = sacUsers.stream()
-                .map(this::calcularRendimientoSac)
-                .collect(Collectors.toList());
+        log.info("📊 Estadísticas generales - SACs: {}, Tickets: {}, Ratings: {}, Promedio: {}", 
+            totalSACs, totalTickets, totalRatings, averageRating);
         
-        // Obtener top performers (ordenados por satisfacción)
-        List<SacPerformanceResponse> topPerformers = sacPerformance.stream()
-                .sorted((a, b) -> Double.compare(b.getSatisfactionPercentage(), a.getSatisfactionPercentage()))
-                .limit(3)
-                .collect(Collectors.toList());
+        // Calcular rendimiento de cada SAC
+        List<SacPerformanceResponse> sacPerformance = new ArrayList<>();
+        if (!sacUsers.isEmpty()) {
+            log.info("🔄 Calculando rendimiento para {} usuarios SAC", sacUsers.size());
+            sacPerformance = sacUsers.stream()
+                    .map(this::calcularRendimientoSac)
+                    .collect(Collectors.toList());
+            log.info("✅ Rendimiento calculado para {} SACs", sacPerformance.size());
+        } else {
+            log.warn("⚠️ No hay usuarios SAC para calcular rendimiento");
+        }
+        
+        // Obtener top performers (ordenados por satisfacción, solo si hay datos)
+        List<SacPerformanceResponse> topPerformers = new ArrayList<>();
+        if (!sacPerformance.isEmpty()) {
+            log.info("🏆 Calculando top performers de {} SACs", sacPerformance.size());
+            topPerformers = sacPerformance.stream()
+                    .filter(sac -> sac.getTotalTickets() > 0) // Solo incluir SACs con tickets
+                    .sorted((a, b) -> Double.compare(b.getSatisfactionPercentage(), a.getSatisfactionPercentage()))
+                    .limit(3)
+                    .collect(Collectors.toList());
+            log.info("✅ Top performers calculados: {}", topPerformers.size());
+        } else {
+            log.warn("⚠️ No hay datos de rendimiento para calcular top performers");
+        }
         
         // Obtener calificaciones recientes (ya están ordenadas por fecha en la consulta)
         List<RecentRatingResponse> recentRatings = allRatings.stream()
                 .limit(10)
                 .map(this::convertirARecentRating)
                 .collect(Collectors.toList());
+        
+        log.info("📋 Respuesta final - SAC Performance: {}, Top Performers: {}, Recent Ratings: {}", 
+            sacPerformance.size(), topPerformers.size(), recentRatings.size());
         
         return SacStatsResponse.builder()
                 .totalSACs(totalSACs)
