@@ -90,5 +90,19 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, Lo
                    "WHERE ar.user_id = :userId AND ar.recorded_date = :fecha " +
                    "ORDER BY ar.recorded_at ASC", nativeQuery = true)
     List<Object[]> findByUserIdAndDateWithUserNames(@Param("userId") Long userId, @Param("fecha") LocalDate fecha);
+    
+    /**
+     * Obtener marcaciones por fecha y rol con información del usuario
+     */
+    @Query(value = "SELECT ar.id, ar.user_id, ar.attendance_type, ar.recorded_date, ar.recorded_time, ar.recorded_at, " +
+                   "COALESCE(CONCAT(u.name, ' ', u.last_name), 'Usuario ' || ar.user_id) as full_name, " +
+                   "u.email, r.name as role_name " +
+                   "FROM module_attendance_records ar " +
+                   "LEFT JOIN users u ON ar.user_id = u.id " +
+                   "LEFT JOIN roles r ON u.role = r.id " +
+                   "WHERE ar.recorded_date = :fecha " +
+                   "AND LOWER(r.name) = LOWER(:rol) " +
+                   "ORDER BY u.name ASC, ar.recorded_at ASC", nativeQuery = true)
+    List<Object[]> findByDateAndRole(@Param("fecha") LocalDate fecha, @Param("rol") String rol);
 }
 

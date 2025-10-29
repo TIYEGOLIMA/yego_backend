@@ -76,7 +76,6 @@ public class User {
     }
     
     public Set<Permission> getUserPermissions() {
-        // TODO: Implementar cuando se cree RolePermission
         return new HashSet<>();
     }
 }

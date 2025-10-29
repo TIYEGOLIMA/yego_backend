@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -22,6 +23,8 @@ import java.util.stream.Collectors;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashMap;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 @Slf4j
 @Service
@@ -787,5 +790,200 @@ public class AttendanceServiceImpl implements AttendanceService {
         
         log.info("✅ [AttendanceService] Encontrados {} usuarios por rol", usuarios.size());
         return usuarios;
+    }
+    
+    @Override
+    public byte[] exportarMarcacionesPorFechaYRol(String fecha, String rol, String rolUsuarioGenerador) {
+        log.info("📊 [AttendanceService] Exportando marcaciones para fecha: {} y rol: {} - Generado por: {}", fecha, rol, rolUsuarioGenerador);
+        
+        // Validar y parsear fecha
+        LocalDate fechaConsulta;
+        try {
+            fechaConsulta = LocalDate.parse(fecha);
+        } catch (java.time.format.DateTimeParseException e) {
+            log.error("❌ [AttendanceService] Formato de fecha inválido: {}", fecha);
+            throw new IllegalArgumentException("Formato de fecha inválido. Use YYYY-MM-DD");
+        }
+        
+        // Validar que el rol no esté vacío
+        if (rol == null || rol.trim().isEmpty()) {
+            log.error("❌ [AttendanceService] Rol no puede estar vacío");
+            throw new IllegalArgumentException("El rol no puede estar vacío");
+        }
+        
+        try {
+            // Obtener marcaciones por fecha y rol
+            List<Object[]> recordsWithNames = attendanceRepository.findByDateAndRole(fechaConsulta, rol);
+            
+            log.info("📊 [AttendanceService] Marcaciones encontradas: {}", recordsWithNames.size());
+            
+            // Crear libro Excel
+            Workbook workbook = new XSSFWorkbook();
+            Sheet sheet = workbook.createSheet("Marcaciones");
+            
+            // Crear estilos
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font font = workbook.createFont();
+            font.setBold(true);
+            font.setFontHeightInPoints((short) 12);
+            headerStyle.setFont(font);
+            headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            
+            // Estilo para título principal - ROJO
+            CellStyle titleStyle = workbook.createCellStyle();
+            Font titleFont = workbook.createFont();
+            titleFont.setBold(true);
+            titleFont.setFontHeightInPoints((short) 16);
+            titleFont.setColor(IndexedColors.WHITE.getIndex());
+            titleStyle.setFont(titleFont);
+            titleStyle.setFillForegroundColor(IndexedColors.RED.getIndex());
+            titleStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            titleStyle.setAlignment(HorizontalAlignment.CENTER);
+            titleStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+            
+            // Estilo para información (etiquetas en negrita)
+            CellStyle infoStyle = workbook.createCellStyle();
+            Font infoFont = workbook.createFont();
+            infoFont.setFontHeightInPoints((short) 10);
+            infoFont.setBold(true);
+            infoStyle.setFont(infoFont);
+            
+            // Estilo para valores de información
+            CellStyle infoValueStyle = workbook.createCellStyle();
+            Font infoValueFont = workbook.createFont();
+            infoValueFont.setFontHeightInPoints((short) 10);
+            infoValueStyle.setFont(infoValueFont);
+            
+            int rowNum = 0;
+            
+            // Título principal - ROJO
+            Row titleRow = sheet.createRow(rowNum++);
+            Cell titleCell = titleRow.createCell(0);
+            titleCell.setCellValue("REPORTE DE MARCACIONES - YEGO");
+            titleCell.setCellStyle(titleStyle);
+            titleRow.setHeightInPoints(25); // Altura del título
+            
+            // Fusionar celdas para el título
+            sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 6));
+            
+            // Información del reporte en formato compacto (2 filas, múltiples columnas)
+            LocalDateTime fechaGeneracion = LocalDateTime.now();
+            String fechaGeneracionStr = fechaGeneracion.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
+            String fechaConsultaStr = fechaConsulta.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            
+            // Fila 1 de información compacta
+            Row infoRow1 = sheet.createRow(rowNum++);
+            infoRow1.setHeightInPoints(18);
+            infoRow1.createCell(0).setCellValue("Fecha de Consulta:");
+            infoRow1.getCell(0).setCellStyle(infoStyle);
+            infoRow1.createCell(1).setCellValue(fechaConsultaStr);
+            infoRow1.getCell(1).setCellStyle(infoValueStyle);
+            infoRow1.createCell(2).setCellValue("Rol Consultado:");
+            infoRow1.getCell(2).setCellStyle(infoStyle);
+            infoRow1.createCell(3).setCellValue(rol.toUpperCase());
+            infoRow1.getCell(3).setCellStyle(infoValueStyle);
+            infoRow1.createCell(4).setCellValue("Total:");
+            infoRow1.getCell(4).setCellStyle(infoStyle);
+            infoRow1.createCell(5).setCellValue(recordsWithNames.size());
+            infoRow1.getCell(5).setCellStyle(infoValueStyle);
+            
+            // Fila 2 de información compacta
+            Row infoRow2 = sheet.createRow(rowNum++);
+            infoRow2.setHeightInPoints(18);
+            infoRow2.createCell(0).setCellValue("Fecha de Generación:");
+            infoRow2.getCell(0).setCellStyle(infoStyle);
+            infoRow2.createCell(1).setCellValue(fechaGeneracionStr);
+            infoRow2.getCell(1).setCellStyle(infoValueStyle);
+            infoRow2.createCell(2).setCellValue("Generado por:");
+            infoRow2.getCell(2).setCellStyle(infoStyle);
+            infoRow2.createCell(3).setCellValue(rolUsuarioGenerador != null ? rolUsuarioGenerador.toUpperCase() : "N/A");
+            infoRow2.getCell(3).setCellStyle(infoValueStyle);
+            
+            rowNum++; // Un solo espacio antes de los encabezados
+            
+            // Encabezados - Columnas: ID, Usuario, Email, Rol, Tipo de Marcación, Fecha, Hora
+            Row headerRow = sheet.createRow(rowNum++);
+            headerRow.createCell(0).setCellValue("ID");
+            headerRow.createCell(1).setCellValue("Usuario");
+            headerRow.createCell(2).setCellValue("Email");
+            headerRow.createCell(3).setCellValue("Rol");
+            headerRow.createCell(4).setCellValue("Tipo de Marcación");
+            headerRow.createCell(5).setCellValue("Fecha");
+            headerRow.createCell(6).setCellValue("Hora");
+            
+            // Aplicar estilo a todos los encabezados
+            for (int i = 0; i < 7; i++) {
+                headerRow.getCell(i).setCellStyle(headerStyle);
+            }
+            
+            // Llenar datos
+            // El query devuelve: id, user_id, attendance_type, recorded_date, recorded_time, recorded_at, full_name, email, role_name
+            for (Object[] recordData : recordsWithNames) {
+                try {
+                    Row row = sheet.createRow(rowNum++);
+                    
+                    // Extraer datos del array según el orden del query
+                    Long id = ((Number) recordData[0]).longValue();
+                    Long empleadoId = ((Number) recordData[1]).longValue();
+                    String attendanceType = (String) recordData[2];
+                    LocalDate recordedDate = ((java.sql.Date) recordData[3]).toLocalDate();
+                    LocalTime recordedTime = ((java.sql.Time) recordData[4]).toLocalTime();
+                    
+                    // Datos del usuario
+                    String fullName = recordData[6] != null ? (String) recordData[6] : "Usuario " + empleadoId;
+                    String email = recordData[7] != null ? (String) recordData[7] : "";
+                    String roleName = recordData[8] != null ? (String) recordData[8] : "";
+                    
+                    // Mapear tipo de marcación a español
+                    String tipoMarcacion;
+                    switch (attendanceType) {
+                        case "ENTRY":
+                            tipoMarcacion = "ENTRADA";
+                            break;
+                        case "EXIT_BREAK":
+                            tipoMarcacion = "SALIDA REFRIGERIO";
+                            break;
+                        case "RETURN_BREAK":
+                            tipoMarcacion = "REGRESO REFRIGERIO";
+                            break;
+                        case "EXIT":
+                            tipoMarcacion = "SALIDA";
+                            break;
+                        default:
+                            tipoMarcacion = attendanceType;
+                    }
+                    
+                    // Escribir todas las columnas en el orden correcto
+                    row.createCell(0).setCellValue(id);
+                    row.createCell(1).setCellValue(fullName);
+                    row.createCell(2).setCellValue(email);
+                    row.createCell(3).setCellValue(roleName);
+                    row.createCell(4).setCellValue(tipoMarcacion);
+                    row.createCell(5).setCellValue(recordedDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+                    row.createCell(6).setCellValue(recordedTime.toString());
+                    
+                } catch (Exception e) {
+                    log.error("❌ [AttendanceService] Error procesando registro para Excel: {}", e.getMessage());
+                }
+            }
+            
+            // Ajustar ancho de columnas - Las 7 columnas
+            for (int i = 0; i < 7; i++) {
+                sheet.autoSizeColumn(i);
+            }
+            
+            // Convertir a byte array
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            workbook.write(outputStream);
+            workbook.close();
+            
+            log.info("✅ [AttendanceService] Excel generado exitosamente con {} registros", recordsWithNames.size());
+            return outputStream.toByteArray();
+            
+        } catch (Exception e) {
+            log.error("❌ [AttendanceService] Error generando Excel: {}", e.getMessage(), e);
+            throw new RuntimeException("Error generando Excel", e);
+        }
     }
 }

@@ -4,6 +4,8 @@ import com.yego.backend.service.yego_asistencia.AttendanceService;
 import com.yego.backend.service.yego_asistencia.TokenValidationService;
 import com.yego.backend.service.yego_asistencia.MessageService;
 import com.yego.backend.entity.yego_principal.entities.User;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import lombok.extern.slf4j.Slf4j;
@@ -303,6 +305,61 @@ public class AttendanceController {
             ));
 
         } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of(
+                "success", false,
+                "message", "Error interno del servidor"
+            ));
+        }
+    }
+    
+    /**
+     * Exportar marcaciones a Excel por fecha y rol
+     */
+    @GetMapping("/marcaciones/exportar")
+    public ResponseEntity<?> exportarMarcaciones(@RequestParam String fecha,
+                                                  @RequestParam String rol,
+                                                  @RequestHeader("Authorization") String token) {
+        log.info("📥 [AttendanceController] Solicitud de exportación - Fecha: {}, Rol: {}", fecha, rol);
+        try {
+            User user = tokenValidationService.getUserByToken(token);
+            if (user == null) {
+                log.warn("⚠️ [AttendanceController] Token inválido o expirado");
+                return ResponseEntity.status(401).body(Map.of("message", "Token de acceso requerido"));
+            }
+            
+            log.info("✅ [AttendanceController] Usuario autenticado: {} (Rol: {})", user.getUsername(), user.getRoleName());
+
+            // Delegar toda la lógica al servicio, pasando el rol del usuario que genera el reporte
+            byte[] excelBytes = attendanceService.exportarMarcacionesPorFechaYRol(fecha, rol, user.getRoleName());
+            
+            log.info("📊 [AttendanceController] Excel generado - Tamaño: {} bytes", excelBytes != null ? excelBytes.length : 0);
+            
+            if (excelBytes == null || excelBytes.length == 0) {
+                log.warn("⚠️ [AttendanceController] Excel vacío o null - No hay marcaciones para exportar");
+                return ResponseEntity.status(404).body(Map.of(
+                    "success", false,
+                    "message", "No se encontraron marcaciones para los parámetros especificados"
+                ));
+            }
+
+            // Configurar headers para descarga
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            String nombreArchivo = "marcaciones_" + fecha + "_" + rol + ".xlsx";
+            headers.setContentDispositionFormData("attachment", nombreArchivo);
+            headers.setContentLength(excelBytes.length);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .body(excelBytes);
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(400).body(Map.of(
+                "success", false,
+                "message", e.getMessage()
+            ));
+        } catch (Exception e) {
+            log.error("❌ [AttendanceController] Error exportando marcaciones: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Map.of(
                 "success", false,
                 "message", "Error interno del servidor"

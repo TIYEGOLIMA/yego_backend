@@ -97,10 +97,14 @@ public class UserServiceImpl implements UserService {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String userRole = authentication.getAuthorities().stream()
                 .findFirst()
-                .map(authority -> authority.getAuthority().replace("ROLE_", ""))
+                .map(authority -> {
+                    String authorityStr = authority.getAuthority();
+                    log.debug("🔍 Authority completo: {}", authorityStr);
+                    return authorityStr.replace("ROLE_", "").toUpperCase();
+                })
                 .orElse("");
         
-        log.info("Usuario autenticado con rol: {}", userRole);
+        log.info("👤 Usuario autenticado con rol extraído: {}", userRole);
         
         // Primero obtener TODOS los usuarios sin paginación
         List<User> allUsers;
@@ -155,10 +159,14 @@ public class UserServiceImpl implements UserService {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String userRole = authentication.getAuthorities().stream()
                 .findFirst()
-                .map(authority -> authority.getAuthority().replace("ROLE_", ""))
+                .map(authority -> {
+                    String authorityStr = authority.getAuthority();
+                    log.debug("🔍 Authority completo: {}", authorityStr);
+                    return authorityStr.replace("ROLE_", "").toUpperCase();
+                })
                 .orElse("");
         
-        log.info("Usuario autenticado con rol: {}", userRole);
+        log.info("👤 Usuario autenticado con rol extraído: {}", userRole);
         
         List<User> users;
         
@@ -182,26 +190,49 @@ public class UserServiceImpl implements UserService {
     private List<User> filtrarUsuariosPorRol(List<User> users, String userRole) {
         switch (userRole) {
             case "SUPERADMIN":
+            case "superadmin":
                 // SUPERADMIN ve todos los usuarios
                 log.info("SUPERADMIN: mostrando todos los usuarios");
                 return users;
                 
             case "ADMIN":
+            case "admin":
                 // ADMIN ve todos menos SUPERADMIN
                 log.info("ADMIN: mostrando todos menos SUPERADMIN");
                 return users.stream()
-                        .filter(user -> !"SUPERADMIN".equals(user.getRoleName()))
+                        .filter(user -> {
+                            String roleName = user.getRoleName();
+                            if (roleName == null) return true; // Incluir si no tiene rol
+                            return !"superadmin".equalsIgnoreCase(roleName.trim());
+                        })
                         .collect(Collectors.toList());
                 
             case "SUPERVISOR":
+            case "supervisor":
                 // SUPERVISOR solo ve SUPERVISOR, OPERADOR y SAC
-                log.info("SUPERVISOR: mostrando solo OPERADOR, SAC y SUPERVISOR");
-                return users.stream()
+                log.info("👁️ SUPERVISOR: filtrando usuarios para mostrar solo OPERADOR, SAC y SUPERVISOR");
+                log.info("👁️ Total de usuarios antes del filtro: {}", users.size());
+                List<User> filtered = users.stream()
                         .filter(user -> {
                             String roleName = user.getRoleName();
-                            return "OPERADOR".equals(roleName) || "SAC".equals(roleName) || "SUPERVISOR".equals(roleName);
+                            if (roleName == null) {
+                                log.debug("⚠️ Usuario {} no tiene rol asignado", user.getUsername());
+                                return false;
+                            }
+                            String normalizedRole = roleName.toLowerCase().trim();
+                            boolean matches = "operador".equals(normalizedRole) || 
+                                             "sac".equals(normalizedRole) || 
+                                             "supervisor".equals(normalizedRole);
+                            if (matches) {
+                                log.debug("✅ Usuario {} con rol {} incluido", user.getUsername(), roleName);
+                            } else {
+                                log.debug("❌ Usuario {} con rol {} excluido", user.getUsername(), roleName);
+                            }
+                            return matches;
                         })
                         .collect(Collectors.toList());
+                log.info("👁️ Total de usuarios después del filtro: {}", filtered.size());
+                return filtered;
                 
             default:
                 // Cualquier otro rol no ve usuarios
