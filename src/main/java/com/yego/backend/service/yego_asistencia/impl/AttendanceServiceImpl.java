@@ -746,6 +746,18 @@ public class AttendanceServiceImpl implements AttendanceService {
             // Admin y SuperAdmin ven todos los usuarios
             log.info("🔓 [AttendanceService] Usuario {} - obteniendo todos los usuarios", userRole);
             usersData = attendanceRepository.findAllUsers();
+        } else if ("SUPERVISOR".equalsIgnoreCase(userRole)) {
+            // SUPERVISOR solo puede ver SAC, SUPERVISOR y OPERADOR
+            log.info("👁️ [AttendanceService] Usuario SUPERVISOR - obteniendo solo SAC, SUPERVISOR y OPERADOR");
+            List<Object[]> allUsers = attendanceRepository.findAllUsers();
+            usersData = allUsers.stream()
+                    .filter(userData -> {
+                        String role = (String) userData[3]; // El rol está en la posición 3
+                        return "SAC".equalsIgnoreCase(role) || 
+                               "SUPERVISOR".equalsIgnoreCase(role) || 
+                               "OPERADOR".equalsIgnoreCase(role);
+                    })
+                    .collect(Collectors.toList());
         } else {
             // Otros roles no pueden ver usuarios
             log.info("👤 [AttendanceService] Usuario {} - sin permisos para ver usuarios", userRole);

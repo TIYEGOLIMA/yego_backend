@@ -74,9 +74,12 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, Lo
     List<AttendanceRecord> findByAttendanceType(AttendanceType attendanceType);
     
     /**
-     * Obtener todos los usuarios
+     * Obtener todos los usuarios con el nombre del rol desde la tabla roles
      */
-    @Query(value = "SELECT u.id, u.name, u.last_name, u.role, u.email FROM users u ORDER BY u.name ASC", nativeQuery = true)
+    @Query(value = "SELECT u.id, u.name, u.last_name, r.name as role, u.email " +
+                   "FROM users u " +
+                   "LEFT JOIN roles r ON u.role = r.id " +
+                   "ORDER BY u.name ASC", nativeQuery = true)
     List<Object[]> findAllUsers();
     
     /**

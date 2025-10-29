@@ -5,22 +5,20 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 /**
- * DTO para respuesta de permisos
+ * DTO que representa una acción disponible para un módulo
+ * Útil para formularios de creación/edición de roles
+ * Los atributos coinciden con Permission entity
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class PermissionResponseDto {
-    private Long id;
+public class ActionDto {
+
+    private String action;
     private String name;
     private String description;
     private String module;
-    private String action;
-    private Boolean active;
-    private LocalDateTime created_at;
-    private LocalDateTime updated_at;
 }
+

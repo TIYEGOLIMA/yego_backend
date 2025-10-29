@@ -6,8 +6,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import jakarta.persistence.*;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 import java.time.LocalDateTime;
 
 /**
@@ -37,10 +35,6 @@ public class Permission {
     
     @Column(name = "action", nullable = false, length = 50)
     private String action;
-    
-    @Column(name = "conditions")
-    @JdbcTypeCode(SqlTypes.JSON)
-    private String conditions;
     
     @Column(name = "active", nullable = false)
     @Builder.Default

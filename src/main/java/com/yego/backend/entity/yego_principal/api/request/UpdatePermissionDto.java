@@ -18,7 +18,6 @@ public class UpdatePermissionDto {
     private String description;
     private String module;
     private String action;
-    private String conditions;
     private Boolean active;
 }
 

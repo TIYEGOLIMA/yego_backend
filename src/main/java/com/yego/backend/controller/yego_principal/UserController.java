@@ -6,7 +6,6 @@ import com.yego.backend.service.yego_principal.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,7 +27,6 @@ public class UserController {
      * Obtener perfil del usuario actual
      */
     @GetMapping("/profile")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> getProfile(Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
         UserResponseDto user = userService.findOne(userId);
@@ -36,7 +34,6 @@ public class UserController {
     }
     
     @GetMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
     public ResponseEntity<?> findAll(@RequestParam(required = false) Integer page,
                                      @RequestParam(required = false) Integer limit,
                                      @RequestParam(required = false) String search,
@@ -46,7 +43,6 @@ public class UserController {
     }
     
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN')")
     public ResponseEntity<?> findOne(@PathVariable Long id) {
         UserResponseDto user = userService.findOne(id);
         return ResponseEntity.ok(user);
@@ -56,7 +52,6 @@ public class UserController {
      * Crear nuevo usuario
      */
     @PostMapping("/create")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
     public ResponseEntity<?> create(@Valid @RequestBody CreateUserDto createUserDto) {
         UserResponseDto user = userService.create(createUserDto);
         return ResponseEntity.status(201).body(user);
@@ -66,7 +61,6 @@ public class UserController {
      * Actualizar usuario
      */
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
     public ResponseEntity<?> update(@PathVariable Long id, 
                                    @Valid @RequestBody UpdateUserDto updateUserDto) {
         UserResponseDto user = userService.update(id, updateUserDto);
@@ -77,7 +71,6 @@ public class UserController {
      * Eliminar usuario
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('SUPERADMIN')")
     public ResponseEntity<?> remove(@PathVariable Long id) {
         userService.remove(id);
         return ResponseEntity.ok().build();
@@ -88,7 +81,6 @@ public class UserController {
      * Cambiar estado de usuario
      */
     @PatchMapping("/{id}/estado")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
     public ResponseEntity<?> cambiarEstado(@PathVariable Long id, 
                                            @Valid @RequestBody CambiarEstadoDto cambiarEstadoDto) {
         UserResponseDto user = userService.cambiarEstado(id, cambiarEstadoDto.getActivo());

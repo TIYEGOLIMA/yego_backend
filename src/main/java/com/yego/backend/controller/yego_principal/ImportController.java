@@ -29,7 +29,6 @@ public class ImportController {
      * Obtener todas las importaciones
      */
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<List<ImportResponseDto>> findAll(
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
@@ -43,7 +42,6 @@ public class ImportController {
      * Obtener importación por ID
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> findOne(@PathVariable Long id) {
         ImportResponseDto importDto = importService.findOne(id);
         return ResponseEntity.ok(importDto);
@@ -53,7 +51,6 @@ public class ImportController {
      * Subir archivo para importación
      */
     @PostMapping("/upload")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> uploadFile(@RequestParam("file") MultipartFile file,
                                        @Valid @RequestBody UploadImportDto uploadImportDto,
                                        Authentication authentication) {
@@ -66,7 +63,6 @@ public class ImportController {
      * Obtener preview de importación
      */
     @GetMapping("/{id}/preview")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> getPreview(@PathVariable Long id) {
         ImportPreviewDto preview = importService.getPreview(id);
         return ResponseEntity.ok(preview);
@@ -76,7 +72,6 @@ public class ImportController {
      * Procesar importación
      */
     @PostMapping("/{id}/process")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> processImport(@PathVariable Long id,
                                           @Valid @RequestBody ProcessImportDto processImportDto) {
         ImportResponseDto response = importService.processImport(id, processImportDto);
@@ -87,7 +82,6 @@ public class ImportController {
      * Cancelar importación
      */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> cancelImport(@PathVariable Long id) {
         importService.remove(id);
         return ResponseEntity.ok().build();

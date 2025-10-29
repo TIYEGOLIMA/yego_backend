@@ -2,7 +2,6 @@ package com.yego.backend.service.yego_principal;
 
 import com.yego.backend.entity.yego_principal.api.request.ModuleRequest;
 import com.yego.backend.entity.yego_principal.api.response.ModuleResponse;
-import com.yego.backend.entity.yego_principal.entities.Module;
 
 import java.util.List;
 
@@ -21,4 +20,9 @@ public interface ModuleService {
     void eliminar(Long id);
     
     void toggleActive(Long id);
+    
+    /**
+     * Obtener módulos permitidos para un usuario según su rol
+     */
+    List<ModuleResponse> obtenerModulosPorUsuario(Long userId);
 }

@@ -6,6 +6,8 @@ import com.yego.backend.entity.yego_principal.entities.Role;
 import com.yego.backend.repository.yego_principal.RoleRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_principal.RoleService;
+import com.yego.backend.service.yego_principal.ModuleService;
+import com.yego.backend.service.yego_principal.PermissionService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,9 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityNotFoundException;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -30,6 +30,8 @@ public class RoleServiceImpl implements RoleService {
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private final ModuleService moduleService;
+    private final PermissionService permissionService;
     
     @Override
     @Transactional
@@ -302,6 +304,138 @@ public class RoleServiceImpl implements RoleService {
         return roles.stream()
                 .map(this::mapToResponseDto)
                 .collect(Collectors.toList());
+    }
+    
+    @Override
+    @Transactional(readOnly = true)
+    public List<ModuleWithActionsDto> getModulesWithActions() {
+        log.info("📋 [RoleService] Obteniendo módulos con acciones disponibles para crear/editar roles");
+        
+        // Obtener todos los módulos activos
+        List<ModuleResponse> modules = moduleService.obtenerActivos();
+        
+        // Obtener todos los permisos activos
+        List<PermissionResponseDto> permissions = permissionService.findAllActive();
+        
+        // Agrupar permisos por módulo
+        Map<String, List<PermissionResponseDto>> permissionsByModule = permissions.stream()
+                .collect(Collectors.groupingBy(PermissionResponseDto::getModule));
+        
+        log.info("📋 [RoleService] Módulos activos encontrados: {}", modules.size());
+        log.info("📋 [RoleService] Permisos activos encontrados: {}", permissions.size());
+        log.info("📋 [RoleService] Permisos agrupados por módulo: {}", permissionsByModule.keySet());
+        
+        // Mapear módulos con sus acciones
+        List<ModuleWithActionsDto> modulesWithActions = modules.stream()
+                .map(module -> {
+                    // Normalizar nombre del módulo para matching con permissions.module
+                    String moduleKey = normalizeModuleNameForMatching(module.getNombre());
+                    
+                    // También extraer clave desde la URL si contiene información útil
+                    String urlKey = extractModuleKeyFromUrl(module.getUrl());
+                    
+                    log.debug("📋 [RoleService] Procesando módulo: {} (key: {}, urlKey: {})", 
+                        module.getNombre(), moduleKey, urlKey);
+                    
+                    // Buscar acciones para este módulo
+                    List<PermissionResponseDto> modulePermissions = permissionsByModule.entrySet().stream()
+                            .filter(entry -> {
+                                String permModule = entry.getKey().toLowerCase().trim();
+                                String normalizedPermModule = normalizeModuleNameForMatching(permModule);
+                                
+                                // Comparar de múltiples formas
+                                boolean matches = 
+                                    normalizedPermModule.equalsIgnoreCase(moduleKey) || 
+                                    moduleKey.equalsIgnoreCase(normalizedPermModule) ||
+                                    moduleKey.contains(normalizedPermModule) ||
+                                    normalizedPermModule.contains(moduleKey) ||
+                                    (urlKey != null && !urlKey.isEmpty() && (
+                                        normalizedPermModule.equalsIgnoreCase(urlKey) ||
+                                        urlKey.contains(normalizedPermModule) ||
+                                        normalizedPermModule.contains(urlKey)
+                                    ));
+                                
+                                if (matches) {
+                                    log.debug("✅ [RoleService] Match encontrado: módulo '{}' <-> permiso.module '{}'", 
+                                        module.getNombre(), permModule);
+                                }
+                                
+                                return matches;
+                            })
+                            .flatMap(entry -> entry.getValue().stream())
+                            .collect(Collectors.toList());
+                    
+                    log.debug("📋 [RoleService] Módulo '{}' tiene {} permisos asociados", 
+                        module.getNombre(), modulePermissions.size());
+                    
+                    // Convertir permisos a acciones (agrupar por acción para evitar duplicados)
+                    List<ActionDto> actions = modulePermissions.stream()
+                            .collect(Collectors.toMap(
+                                PermissionResponseDto::getAction,
+                                perm -> ActionDto.builder()
+                                    .action(perm.getAction())
+                                    .name(perm.getName())
+                                    .description(perm.getDescription())
+                                    .module(perm.getModule())
+                                    .build(),
+                                (existing, replacement) -> existing // Si hay duplicados, mantener el primero
+                            ))
+                            .values()
+                            .stream()
+                            .sorted((a1, a2) -> a1.getAction().compareToIgnoreCase(a2.getAction()))
+                            .collect(Collectors.toList());
+                    
+                    return ModuleWithActionsDto.builder()
+                            .id(module.getId())
+                            .nombre(module.getNombre())
+                            .descripcion(module.getDescripcion())
+                            .url(module.getUrl())
+                            .estado(module.getEstado())
+                            .activo(module.getActivo())
+                            .actions(actions)
+                            .build();
+                })
+                .collect(Collectors.toList());
+        
+        log.info("✅ [RoleService] Devueltos {} módulos con acciones para crear/editar roles", modulesWithActions.size());
+        return modulesWithActions;
+    }
+    
+    /**
+     * Normaliza el nombre del módulo para hacer matching con permissions.module
+     */
+    private String normalizeModuleNameForMatching(String moduleName) {
+        if (moduleName == null) return "";
+        return moduleName.toLowerCase()
+                .replaceAll("[^a-z0-9]", "")
+                .trim();
+    }
+    
+    /**
+     * Extrae una clave de módulo desde la URL (útil para matching con permissions.module)
+     */
+    private String extractModuleKeyFromUrl(String url) {
+        if (url == null || url.isEmpty()) return null;
+        
+        try {
+            // Si es una URL completa, extraer solo la ruta
+            if (url.startsWith("http://") || url.startsWith("https://")) {
+                java.net.URL urlObj = new java.net.URL(url);
+                url = urlObj.getPath();
+            }
+            
+            // Remover la barra inicial y extraer el primer segmento
+            String path = url.startsWith("/") ? url.substring(1) : url;
+            String[] parts = path.split("/");
+            
+            if (parts.length > 0 && !parts[0].isEmpty()) {
+                return normalizeModuleNameForMatching(parts[0]);
+            }
+        } catch (Exception e) {
+            log.debug("No se pudo extraer clave de URL: {}", url);
+        }
+        
+        return null;
     }
 }
 

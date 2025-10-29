@@ -25,7 +25,6 @@ public class ReportController {
      * Obtener estadísticas del sistema
      */
     @GetMapping("/system/stats")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> getSystemStats(@RequestParam(defaultValue = "30") Integer days) {
         SystemStatsDto stats = reportService.getSystemStats(days);
         return ResponseEntity.ok(stats);
@@ -35,7 +34,6 @@ public class ReportController {
      * Obtener datos del dashboard
      */
     @GetMapping("/dashboard")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> getDashboardData() {
         DashboardDataDto data = reportService.getDashboardData();
         return ResponseEntity.ok(data);
@@ -45,7 +43,6 @@ public class ReportController {
      * Obtener estadísticas de usuarios
      */
     @GetMapping("/users/stats")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<List<UserStatsDto>> getUserStats() {
         List<UserStatsDto> stats = reportService.getUserStats();
         return ResponseEntity.ok(stats);
@@ -55,7 +52,6 @@ public class ReportController {
      * Obtener estadísticas semanales
      */
     @GetMapping("/weekly")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> getWeeklyStats() {
         WeeklyStatsDto stats = reportService.getWeeklyStats();
         return ResponseEntity.ok(stats);
@@ -65,7 +61,6 @@ public class ReportController {
      * Exportar reporte
      */
     @GetMapping("/export/{type}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<byte[]> exportReport(@PathVariable String type,
                                               @RequestParam(defaultValue = "30") Integer days) {
         byte[] report = reportService.exportReport(type, days);

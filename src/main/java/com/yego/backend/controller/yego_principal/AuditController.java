@@ -26,7 +26,6 @@ public class AuditController {
      * Obtener todos los logs de auditoría
      */
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> getAllAuditLogs(
             @RequestParam(defaultValue = "0") Integer page,
             @RequestParam(defaultValue = "50") Integer size,
@@ -48,7 +47,6 @@ public class AuditController {
      * Obtener logs de auditoría por usuario
      */
     @GetMapping("/user/{userId}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<List<AuditLogResponseDto>> getAuditLogsByUser(
             @PathVariable Long userId,
             @RequestParam(defaultValue = "50") Integer limit) {
@@ -60,7 +58,6 @@ public class AuditController {
      * Obtener logs de auditoría por acción
      */
     @GetMapping("/action/{action}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<List<AuditLogResponseDto>> getAuditLogsByAction(
             @PathVariable String action,
             @RequestParam(defaultValue = "50") Integer limit) {
@@ -72,7 +69,6 @@ public class AuditController {
      * Obtener estadísticas de auditoría
      */
     @GetMapping("/stats")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> getAuditStats(@RequestParam(defaultValue = "30") Integer days) {
         AuditStatsDto stats = auditService.getStats(days);
         return ResponseEntity.ok(stats);
@@ -82,7 +78,6 @@ public class AuditController {
      * Obtener actividad reciente
      */
     @GetMapping("/recent")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<List<AuditLogResponseDto>> getRecentActivity(
             @RequestParam(defaultValue = "20") Integer limit) {
         List<AuditLogResponseDto> logs = auditService.getRecentActivity(limit);

@@ -1,9 +1,13 @@
 package com.yego.backend.service.yego_principal.impl;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_principal.api.request.ModuleRequest;
 import com.yego.backend.entity.yego_principal.api.response.ModuleResponse;
 import com.yego.backend.entity.yego_principal.entities.Module;
+import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.repository.yego_principal.ModuleRepository;
+import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_principal.ModuleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,7 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -21,6 +25,8 @@ import java.util.stream.Collectors;
 public class ModuleServiceImpl implements ModuleService {
 
     private final ModuleRepository moduleRepository;
+    private final UserRepository userRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     @Transactional(readOnly = true)
@@ -36,12 +42,21 @@ public class ModuleServiceImpl implements ModuleService {
     @Override
     @Transactional(readOnly = true)
     public List<ModuleResponse> obtenerActivos() {
-        log.info("📋 [ModuleService] Obteniendo módulos activos");
+        log.info("📋 [ModuleService] Obteniendo TODOS los módulos activos de la base de datos");
         List<Module> modulos = moduleRepository.findByActivoTrue();
-        log.info("✅ [ModuleService] Encontrados {} módulos activos", modulos.size());
-        return modulos.stream()
+        log.info("✅ [ModuleService] Total de módulos activos encontrados en BD: {}", modulos.size());
+        
+        if (modulos.isEmpty()) {
+            log.warn("⚠️ [ModuleService] No hay módulos activos en la base de datos");
+            return Collections.emptyList();
+        }
+        
+        List<ModuleResponse> response = modulos.stream()
                 .map(this::convertirAResponse)
                 .collect(Collectors.toList());
+        
+        log.info("✅ [ModuleService] Módulos convertidos a respuesta: {}", response.size());
+        return response;
     }
     
     @Override
@@ -122,12 +137,232 @@ public class ModuleServiceImpl implements ModuleService {
                 nuevoEstado ? "activado" : "desactivado", id);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<ModuleResponse> obtenerModulosPorUsuario(Long userId) {
+        log.info("📋 [ModuleService] Obteniendo módulos permitidos para usuario ID: {}", userId);
+        
+        // Obtener usuario con su rol
+        User user = userRepository.findByIdWithRole(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con ID: " + userId));
+        
+        if (user.getRole() == null) {
+            log.warn("⚠️ [ModuleService] Usuario {} no tiene rol asignado", userId);
+            return Collections.emptyList();
+        }
+        
+        // Verificación especial para superadmin - acceso completo a todos los módulos
+        String roleName = user.getRole().getName();
+        if (roleName != null && "superadmin".equalsIgnoreCase(roleName.trim())) {
+            log.info("🔑 [ModuleService] ════════════════════════════════════════════");
+            log.info("🔑 [ModuleService] USUARIO ES SUPERADMIN (rol: {})", roleName);
+            log.info("🔑 [ModuleService] Otorgando acceso completo a TODOS los módulos activos");
+            log.info("🔑 [ModuleService] ════════════════════════════════════════════");
+            
+            List<ModuleResponse> allModules = obtenerActivos();
+            
+            log.info("✅ [ModuleService] SUPERADMIN - Total de módulos activos devueltos: {}", allModules.size());
+            
+            if (allModules.isEmpty()) {
+                log.warn("⚠️ [ModuleService] ⚠️ ADVERTENCIA: No hay módulos activos en la base de datos para el superadmin");
+            } else {
+                log.info("✅ [ModuleService] Módulos disponibles para SUPERADMIN:");
+                allModules.forEach(module -> 
+                    log.info("   📦 ID: {} | Nombre: {} | URL: {} | Activo: {}", 
+                        module.getId(), module.getNombre(), module.getUrl(), module.getActivo())
+                );
+            }
+            
+            log.info("🔑 [ModuleService] ════════════════════════════════════════════");
+            return allModules;
+        }
+        
+        // Obtener permisos del rol
+        String permissionsJson = user.getRole().getPermissions();
+        log.info("📋 [ModuleService] JSON de permisos del rol {} (raw): {}", user.getRole().getName(), permissionsJson);
+        
+        if (permissionsJson == null || permissionsJson.isEmpty()) {
+            log.warn("⚠️ [ModuleService] Rol {} no tiene permisos configurados", user.getRole().getName());
+            return Collections.emptyList();
+        }
+        
+        try {
+            // Parsear JSON de permisos
+            Map<String, Object> permissionsMap = objectMapper.readValue(
+                    permissionsJson, 
+                    new TypeReference<Map<String, Object>>() {}
+            );
+            
+            log.info("📋 [ModuleService] Permisos parseados para rol {}: {}", user.getRole().getName(), permissionsMap);
+            
+            // Si el rol tiene acceso completo a todos los módulos
+            // Verificar primero si tiene la clave "all" y qué valor tiene
+            boolean hasAllAccess = false;
+            
+            if (permissionsMap.containsKey("all")) {
+                Object allPermission = permissionsMap.get("all");
+                log.info("📋 [ModuleService] ¿Contiene 'all'?: TRUE - Valor: {} (tipo: {})", 
+                    allPermission, 
+                    allPermission != null ? allPermission.getClass().getName() : "null");
+                
+                if (allPermission != null) {
+                    if (allPermission instanceof Boolean) {
+                        hasAllAccess = (Boolean) allPermission;
+                        log.info("📋 [ModuleService] 'all' es Boolean: {}", hasAllAccess);
+                    } else if (allPermission instanceof String) {
+                        String allStr = ((String) allPermission).toLowerCase().trim();
+                        hasAllAccess = "true".equals(allStr) || "1".equals(allStr);
+                        log.info("📋 [ModuleService] 'all' es String '{}': {}", allStr, hasAllAccess);
+                    } else if (allPermission instanceof Number) {
+                        hasAllAccess = ((Number) allPermission).intValue() == 1;
+                        log.info("📋 [ModuleService] 'all' es Number {}: {}", allPermission, hasAllAccess);
+                    }
+                } else {
+                    log.warn("⚠️ [ModuleService] 'all' existe pero es null");
+                }
+            } else {
+                log.info("📋 [ModuleService] ¿Contiene 'all'?: FALSE - El rol no tiene permiso 'all'");
+            }
+            
+            if (hasAllAccess) {
+                log.info("✅ [ModuleService] ════════════════════════════════════════════");
+                log.info("✅ [ModuleService] Usuario {} (superadmin) tiene acceso completo (all=true)", userId);
+                log.info("✅ [ModuleService] Devolviendo TODOS los módulos activos");
+                log.info("✅ [ModuleService] ════════════════════════════════════════════");
+                List<ModuleResponse> allModules = obtenerActivos();
+                log.info("✅ [ModuleService] Total de módulos activos encontrados: {}", allModules.size());
+                if (allModules.isEmpty()) {
+                    log.warn("⚠️ [ModuleService] ⚠️ ADVERTENCIA: No hay módulos activos en la base de datos");
+                } else {
+                    log.info("✅ [ModuleService] Módulos que se devuelven: {}", 
+                        allModules.stream().map(ModuleResponse::getNombre).collect(Collectors.toList()));
+                }
+                return allModules;
+            }
+            
+            // Extraer nombres de módulos de las claves del mapa de permisos
+            // Excluir "all" ya que es un permiso especial
+            Set<String> moduleNamesFromPermissions = permissionsMap.keySet().stream()
+                    .filter(key -> !"all".equalsIgnoreCase(key))
+                    .collect(Collectors.toSet());
+            
+            log.info("📋 [ModuleService] Permisos del rol {} (excluyendo 'all'): {}", user.getRole().getName(), moduleNamesFromPermissions);
+            
+            // Si no hay permisos específicos después de excluir "all", y no tiene acceso completo,
+            // significa que el rol no tiene módulos asignados
+            if (moduleNamesFromPermissions.isEmpty()) {
+                log.warn("⚠️ [ModuleService] El rol {} no tiene módulos específicos asignados", user.getRole().getName());
+                return Collections.emptyList();
+            }
+            
+            // Obtener todos los módulos activos
+            List<Module> allActiveModules = moduleRepository.findByActivoTrue();
+            log.info("📋 [ModuleService] Total de módulos activos en BD: {}", allActiveModules.size());
+            
+            // Crear un mapa de nombres normalizados de permisos para búsqueda rápida
+            Set<String> normalizedPermissionKeys = moduleNamesFromPermissions.stream()
+                    .map(this::normalizePermissionKey)
+                    .collect(Collectors.toSet());
+            
+            log.info("📋 [ModuleService] Claves de permisos normalizadas para buscar: {}", normalizedPermissionKeys);
+            
+            // Filtrar módulos que coincidan con los permisos
+            // Buscamos coincidencias tanto en el nombre como en la URL del módulo
+            List<Module> allowedModules = allActiveModules.stream()
+                    .filter(module -> {
+                        // Normalizar nombre del módulo
+                        String normalizedModuleName = normalizeModuleName(module.getNombre());
+                        
+                        // Normalizar URL del módulo (puede contener el nombre del módulo)
+                        String normalizedUrl = normalizeModuleName(module.getUrl());
+                        
+                        // Verificar si coincide con alguna clave de permiso
+                        boolean matchesPermission = normalizedPermissionKeys.stream()
+                                .anyMatch(permKey -> 
+                                    normalizedModuleName.contains(permKey) || 
+                                    permKey.contains(normalizedModuleName) ||
+                                    normalizedUrl.contains(permKey) ||
+                                    permKey.contains(normalizedUrl) ||
+                                    normalizedModuleName.equalsIgnoreCase(permKey)
+                                );
+                        
+                        // Si no hay coincidencia exacta pero el módulo tiene permisos configurados,
+                        // podríamos devolverlo de todas formas. Por ahora, lo incluimos si hay algún match
+                        return matchesPermission;
+                    })
+                    .collect(Collectors.toList());
+            
+            // Si no hay coincidencias exactas pero hay permisos configurados,
+            // devolvemos todos los módulos activos (el admin puede ajustar esto después)
+            if (allowedModules.isEmpty() && !moduleNamesFromPermissions.isEmpty()) {
+                log.info("⚠️ [ModuleService] No se encontraron coincidencias exactas, devolviendo todos los módulos activos para usuario {}", userId);
+                return obtenerActivos();
+            }
+            
+            log.info("✅ [ModuleService] Encontrados {} módulos permitidos para usuario {}", allowedModules.size(), userId);
+            
+            return allowedModules.stream()
+                    .map(this::convertirAResponse)
+                    .collect(Collectors.toList());
+                    
+        } catch (Exception e) {
+            log.error("❌ [ModuleService] Error parseando permisos del rol: {}", e.getMessage());
+            // Si hay error parseando, por seguridad devolvemos lista vacía
+            return Collections.emptyList();
+        }
+    }
+    
+    /**
+     * Normaliza el nombre del módulo para comparación
+     */
+    private String normalizeModuleName(String moduleName) {
+        if (moduleName == null) return "";
+        return moduleName.toLowerCase()
+                .replaceAll("[^a-z0-9]", "")
+                .trim();
+    }
+    
+    /**
+     * Normaliza la clave de permiso para comparación
+     */
+    private String normalizePermissionKey(String permissionKey) {
+        if (permissionKey == null) return "";
+        return permissionKey.toLowerCase()
+                .replaceAll("[^a-z0-9]", "")
+                .trim();
+    }
+
     private ModuleResponse convertirAResponse(Module modulo) {
+        // Normalizar la URL para asegurar que sea una ruta relativa del frontend
+        String url = modulo.getUrl();
+        
+        // Si la URL es una URL completa (http:// o https://), extraer solo la ruta
+        if (url != null && (url.startsWith("http://") || url.startsWith("https://"))) {
+            try {
+                java.net.URL urlObj = new java.net.URL(url);
+                String path = urlObj.getPath();
+                // Si la ruta está vacía, mantener la URL original
+                if (path != null && !path.isEmpty()) {
+                    url = path;
+                    log.debug("📋 [ModuleService] URL normalizada: {} -> {}", modulo.getUrl(), url);
+                }
+            } catch (Exception e) {
+                log.warn("⚠️ [ModuleService] Error normalizando URL {}: {}", url, e.getMessage());
+            }
+        }
+        
+        // Si la URL contiene /api/, es una URL de API y debe ser corregida
+        // (no debería pasar, pero por seguridad)
+        if (url != null && url.contains("/api/")) {
+            log.warn("⚠️ [ModuleService] ADVERTENCIA: El módulo '{}' tiene una URL de API ({}) que no debería estar aquí", 
+                modulo.getNombre(), url);
+        }
+        
         return ModuleResponse.builder()
                 .id(modulo.getId())
                 .nombre(modulo.getNombre())
                 .descripcion(modulo.getDescripcion())
-                .url(modulo.getUrl())
+                .url(url)
                 .estado(modulo.getEstado())
                 .ultimoCheck(modulo.getUltimoCheck())
                 .activo(modulo.getActivo())

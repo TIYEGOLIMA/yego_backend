@@ -39,7 +39,6 @@ public class PermissionServiceImpl implements PermissionService {
                 .description(createPermissionDto.getDescription())
                 .module(createPermissionDto.getModule())
                 .action(createPermissionDto.getAction())
-                .conditions(createPermissionDto.getConditions())
                 .active(createPermissionDto.getActive() != null ? createPermissionDto.getActive() : true)
                 .build();
         
@@ -119,9 +118,6 @@ public class PermissionServiceImpl implements PermissionService {
         if (updatePermissionDto.getAction() != null) {
             permission.setAction(updatePermissionDto.getAction());
         }
-        if (updatePermissionDto.getConditions() != null) {
-            permission.setConditions(updatePermissionDto.getConditions());
-        }
         if (updatePermissionDto.getActive() != null) {
             permission.setActive(updatePermissionDto.getActive());
         }
@@ -186,7 +182,6 @@ public class PermissionServiceImpl implements PermissionService {
                 .description(permission.getDescription())
                 .module(permission.getModule())
                 .action(permission.getAction())
-                .conditions(permission.getConditions())
                 .active(permission.getActive())
                 .created_at(permission.getCreatedAt())
                 .updated_at(permission.getUpdatedAt())

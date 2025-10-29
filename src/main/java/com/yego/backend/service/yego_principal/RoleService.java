@@ -71,5 +71,11 @@ public interface RoleService {
      * Activar/Desactivar rol
      */
     RoleResponseDto toggleStatus(Long id);
+    
+    /**
+     * Obtener módulos con sus acciones disponibles para crear/editar roles
+     * Combina información de queue_modulos y permissions
+     */
+    List<ModuleWithActionsDto> getModulesWithActions();
 }
 

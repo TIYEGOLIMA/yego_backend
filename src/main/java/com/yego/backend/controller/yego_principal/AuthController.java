@@ -3,6 +3,7 @@ package com.yego.backend.controller.yego_principal;
 import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
 import com.yego.backend.service.yego_principal.AuthService;
+import com.yego.backend.service.yego_principal.ModuleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,8 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+
+import java.util.List;
 
 /**
  * Controlador REST para autenticación del sistema YEGO Principal
@@ -25,6 +28,7 @@ import jakarta.validation.Valid;
 public class AuthController {
     
     private final AuthService authService;
+    private final ModuleService moduleService;
     
     /**
      * Iniciar sesión
@@ -64,7 +68,6 @@ public class AuthController {
      * Obtener perfil del usuario autenticado
      */
     @GetMapping("/profile")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> getProfile(Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
         UserProfileDto profile = authService.getUserProfile(userId);
@@ -75,7 +78,6 @@ public class AuthController {
      * Cambiar contraseña del usuario autenticado
      */
     @PostMapping("/change-password")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordDto changePasswordDto,
                                            Authentication authentication) {
         try {
@@ -134,6 +136,24 @@ public class AuthController {
         }
         
         return ResponseEntity.ok().build();
+    }
+    
+    /**
+     * Obtener módulos permitidos para el usuario autenticado según su rol
+     * El frontend puede usar este endpoint para mostrar solo las opciones disponibles
+     */
+    @GetMapping("/my-modules")
+    public ResponseEntity<List<ModuleResponse>> getMyModules(Authentication authentication) {
+        try {
+            Long userId = Long.parseLong(authentication.getName());
+            log.info("📋 [AuthController] Obteniendo módulos para usuario ID: {}", userId);
+            List<ModuleResponse> modules = moduleService.obtenerModulosPorUsuario(userId);
+            log.info("✅ [AuthController] Devueltos {} módulos para usuario {}", modules.size(), userId);
+            return ResponseEntity.ok(modules);
+        } catch (Exception e) {
+            log.error("❌ [AuthController] Error obteniendo módulos del usuario: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }
 

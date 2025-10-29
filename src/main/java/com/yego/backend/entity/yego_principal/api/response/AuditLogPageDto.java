@@ -20,7 +20,6 @@ public class AuditLogPageDto {
     private Long total;
     private Integer page;
     private Integer limit;
-    private Integer totalPages;
     
     public Integer getTotalPages() {
         if (total == null || limit == null || limit == 0) {

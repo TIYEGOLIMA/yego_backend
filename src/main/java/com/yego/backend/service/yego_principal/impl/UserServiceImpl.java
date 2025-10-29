@@ -190,14 +190,17 @@ public class UserServiceImpl implements UserService {
                 // ADMIN ve todos menos SUPERADMIN
                 log.info("ADMIN: mostrando todos menos SUPERADMIN");
                 return users.stream()
-                        .filter(user -> !"SUPERADMIN".equals(user.getRole()))
+                        .filter(user -> !"SUPERADMIN".equals(user.getRoleName()))
                         .collect(Collectors.toList());
                 
-            case "OPERADOR":
-                // OPERADOR solo ve OPERADOR y SAC
-                log.info("OPERADOR: mostrando solo OPERADOR y SAC");
+            case "SUPERVISOR":
+                // SUPERVISOR solo ve SUPERVISOR, OPERADOR y SAC
+                log.info("SUPERVISOR: mostrando solo OPERADOR, SAC y SUPERVISOR");
                 return users.stream()
-                        .filter(user -> "OPERADOR".equals(user.getRole()) || "SAC".equals(user.getRole()))
+                        .filter(user -> {
+                            String roleName = user.getRoleName();
+                            return "OPERADOR".equals(roleName) || "SAC".equals(roleName) || "SUPERVISOR".equals(roleName);
+                        })
                         .collect(Collectors.toList());
                 
             default:

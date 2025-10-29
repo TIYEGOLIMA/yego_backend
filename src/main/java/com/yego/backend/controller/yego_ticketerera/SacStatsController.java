@@ -23,7 +23,7 @@ public class SacStatsController {
     private final SacStatsExportService sacStatsExportService;
 
     @GetMapping
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('SUPERVISOR')")
     public ResponseEntity<SacStatsResponse> obtenerTodasLasEstadisticas() {
         log.info("📊 [SacStats] Obteniendo TODAS las estadísticas de SAC");
         SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas();
@@ -31,14 +31,14 @@ public class SacStatsController {
     }
     
     @GetMapping("/export/excel")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('SUPERVISOR')")
     public ResponseEntity<byte[]> exportarAExcel() {
         log.info("📊 [SacStats] Exportando estadísticas a Excel");
         return sacStatsExportService.exportarAExcel();
     }
     
     @GetMapping("/export/image/{formato}")
-    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('OPERADOR')")
+    @PreAuthorize("hasRole('SUPERADMIN') or hasRole('ADMIN') or hasRole('SUPERVISOR')")
     public ResponseEntity<byte[]> exportarAImagen(@PathVariable String formato) {
         log.info("📊 [SacStats] Exportando estadísticas a imagen: {}", formato);
         return sacStatsExportService.exportarAImagen(formato);

@@ -5,21 +5,24 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.util.List;
 
+/**
+ * DTO que representa un módulo con sus acciones disponibles
+ * Útil para formularios de creación/edición de roles
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ModuleResponse {
+public class ModuleWithActionsDto {
     
     private Long id;
     private String nombre;
     private String descripcion;
     private String url;
     private String estado;
-    private LocalDateTime ultimoCheck;
     private Boolean activo;
-    private LocalDateTime fechaCreacion;
-    private LocalDateTime fechaActualizacion;
+    private List<ActionDto> actions;
 }
+

@@ -5,7 +5,6 @@ import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.RecentRatingResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.SacPerformanceResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.SacPerformanceResponse.RatingResponse;
-import com.yego.backend.entity.yego_ticketerera.entities.QueueAgent;
 import com.yego.backend.entity.yego_ticketerera.entities.QueueRating;
 import com.yego.backend.entity.yego_ticketerera.entities.Ticket;
 import com.yego.backend.repository.yego_principal.UserRepository;
@@ -21,8 +20,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
-import java.util.Random;
 import java.util.stream.Collectors;
 
 @Slf4j

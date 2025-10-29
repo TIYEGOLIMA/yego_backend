@@ -5,7 +5,6 @@ import com.yego.backend.service.yego_principal.SessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,7 +25,6 @@ public class SessionController {
      * Obtener sesiones del usuario actual
      */
     @GetMapping("/current")
-    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<?> getCurrentUserSessions(Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
         List<SessionResponseDto> sessions = sessionService.findAll(userId);
@@ -37,7 +35,6 @@ public class SessionController {
      * Obtener sesión por ID
      */
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> findOne(@PathVariable Long id) {
         SessionResponseDto session = sessionService.findOne(id);
         return ResponseEntity.ok(session);
@@ -47,7 +44,6 @@ public class SessionController {
      * Cerrar sesión por ID
      */
     @DeleteMapping("/{sessionId}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> closeSession(@PathVariable Long sessionId) {
         sessionService.deactivate(sessionId);
         return ResponseEntity.ok().build();
@@ -57,7 +53,6 @@ public class SessionController {
      * Cerrar todas las sesiones de un usuario
      */
     @DeleteMapping("/user/{userId}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> closeUserSessions(@PathVariable Long userId) {
         sessionService.deactivateByUserId(userId, "Cerrado por administrador");
         return ResponseEntity.ok().build();
@@ -67,7 +62,6 @@ public class SessionController {
      * Obtener estadísticas de sesiones
      */
     @GetMapping("/stats")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> getSessionStats() {
         SessionStatsDto stats = sessionService.getSessionStats();
         return ResponseEntity.ok(stats);
@@ -77,7 +71,6 @@ public class SessionController {
      * Obtener estadísticas de WebSocket
      */
     @GetMapping("/websocket/stats")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> getWebSocketStats() {
         ConnectionStatsDto stats = sessionService.getWebSocketStats();
         return ResponseEntity.ok(stats);

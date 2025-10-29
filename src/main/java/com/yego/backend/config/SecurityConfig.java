@@ -97,6 +97,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/conductor-registro/**").permitAll() // Conductor registro endpoints
                 .requestMatchers("/api/drivers/**").permitAll() // Drivers endpoints
                 .requestMatchers("/api/roles/**").permitAll() // Roles endpoints
+                .requestMatchers("/api/permissions/**").permitAll() // Permisos endpoints
                 .requestMatchers("/api/registros/**").permitAll() // Registros endpoints
                 .requestMatchers("/api/modules/**").permitAll() // Módulos endpoints
                 .requestMatchers("/api/system/**").permitAll() // Sistema endpoints

@@ -1,13 +1,14 @@
 package com.yego.backend.entity.yego_principal.api.request;
 
-import com.yego.backend.entity.yego_principal.entities.Module;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * DTO para crear módulos del sistema YEGO Principal
+ */
 @Data
 @Builder
 @NoArgsConstructor

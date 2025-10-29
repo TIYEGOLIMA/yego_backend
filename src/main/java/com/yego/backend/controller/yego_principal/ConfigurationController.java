@@ -27,7 +27,6 @@ public class ConfigurationController {
      * Obtener todas las configuraciones
      */
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<List<ConfigurationResponseDto>> findAll() {
         List<ConfigurationResponseDto> configurations = configurationService.findAll();
         return ResponseEntity.ok(configurations);
@@ -37,7 +36,6 @@ public class ConfigurationController {
      * Obtener configuraciones por categoría
      */
     @GetMapping("/category/{category}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<List<ConfigurationResponseDto>> findByCategory(@PathVariable String category) {
         List<ConfigurationResponseDto> configurations = configurationService.findByCategory(category);
         return ResponseEntity.ok(configurations);
@@ -47,7 +45,6 @@ public class ConfigurationController {
      * Obtener configuración por clave
      */
     @GetMapping("/{key}")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> findByKey(@PathVariable String key) {
         ConfigurationResponseDto configuration = configurationService.findOne(key);
         return ResponseEntity.ok(configuration);
@@ -57,7 +54,6 @@ public class ConfigurationController {
      * Actualizar configuración
      */
     @PutMapping("/{key}")
-    @PreAuthorize("hasRole('SUPERADMIN')")
     public ResponseEntity<?> update(@PathVariable String key, 
                                    @Valid @RequestBody UpdateConfigurationDto updateConfigurationDto) {
         ConfigurationResponseDto configuration = configurationService.update(key, updateConfigurationDto);
@@ -68,7 +64,6 @@ public class ConfigurationController {
      * Eliminar configuración
      */
     @DeleteMapping("/{key}")
-    @PreAuthorize("hasRole('SUPERADMIN')")
     public ResponseEntity<?> remove(@PathVariable String key) {
         configurationService.remove(key);
         return ResponseEntity.ok().build();
@@ -78,7 +73,6 @@ public class ConfigurationController {
      * Obtener configuración del sistema
      */
     @GetMapping("/system")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('SUPERADMIN')")
     public ResponseEntity<?> getSystemConfig() {
         SystemConfigDto config = configurationService.getSystemConfig();
         return ResponseEntity.ok(config);
