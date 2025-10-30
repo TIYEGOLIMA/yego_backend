@@ -793,27 +793,17 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
     
     @Override
-    public byte[] exportarMarcacionesPorFechaYRol(String fecha, String rol, String rolUsuarioGenerador) {
-        log.info("📊 [AttendanceService] Exportando marcaciones para fecha: {} y rol: {} - Generado por: {}", fecha, rol, rolUsuarioGenerador);
+    public byte[] exportarMarcacionesPorRangoDeFechasYRol(String fechaInicio, String fechaFin, String rol, String rolUsuarioGenerador) {
+        log.info("📊 [AttendanceService] Exportando marcaciones para rango de fechas: {} - {} y rol: {} - Generado por: {}", 
+            fechaInicio, fechaFin, rol, rolUsuarioGenerador);
         
-        // Validar y parsear fecha
-        LocalDate fechaConsulta;
-        try {
-            fechaConsulta = LocalDate.parse(fecha);
-        } catch (java.time.format.DateTimeParseException e) {
-            log.error("❌ [AttendanceService] Formato de fecha inválido: {}", fecha);
-            throw new IllegalArgumentException("Formato de fecha inválido. Use YYYY-MM-DD");
-        }
-        
-        // Validar que el rol no esté vacío
-        if (rol == null || rol.trim().isEmpty()) {
-            log.error("❌ [AttendanceService] Rol no puede estar vacío");
-            throw new IllegalArgumentException("El rol no puede estar vacío");
-        }
+        // Parsear fechas (las validaciones ya se hicieron en el controller)
+        LocalDate fechaConsultaInicio = LocalDate.parse(fechaInicio);
+        LocalDate fechaConsultaFin = LocalDate.parse(fechaFin);
         
         try {
-            // Obtener marcaciones por fecha y rol
-            List<Object[]> recordsWithNames = attendanceRepository.findByDateAndRole(fechaConsulta, rol);
+            // Obtener marcaciones por rango de fechas y rol
+            List<Object[]> recordsWithNames = attendanceRepository.findByDateRangeAndRole(fechaConsultaInicio, fechaConsultaFin, rol);
             
             log.info("📊 [AttendanceService] Marcaciones encontradas: {}", recordsWithNames.size());
             
@@ -867,21 +857,22 @@ public class AttendanceServiceImpl implements AttendanceService {
             // Fusionar celdas para el título
             sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 6));
             
-            // Información del reporte en formato compacto (2 filas, múltiples columnas)
+            // Información del reporte en formato compacto (3 filas, múltiples columnas)
             LocalDateTime fechaGeneracion = LocalDateTime.now();
             String fechaGeneracionStr = fechaGeneracion.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
-            String fechaConsultaStr = fechaConsulta.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            String fechaConsultaInicioStr = fechaConsultaInicio.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            String fechaConsultaFinStr = fechaConsultaFin.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
             
             // Fila 1 de información compacta
             Row infoRow1 = sheet.createRow(rowNum++);
             infoRow1.setHeightInPoints(18);
-            infoRow1.createCell(0).setCellValue("Fecha de Consulta:");
+            infoRow1.createCell(0).setCellValue("Fecha Inicio:");
             infoRow1.getCell(0).setCellStyle(infoStyle);
-            infoRow1.createCell(1).setCellValue(fechaConsultaStr);
+            infoRow1.createCell(1).setCellValue(fechaConsultaInicioStr);
             infoRow1.getCell(1).setCellStyle(infoValueStyle);
-            infoRow1.createCell(2).setCellValue("Rol Consultado:");
+            infoRow1.createCell(2).setCellValue("Fecha Fin:");
             infoRow1.getCell(2).setCellStyle(infoStyle);
-            infoRow1.createCell(3).setCellValue(rol.toUpperCase());
+            infoRow1.createCell(3).setCellValue(fechaConsultaFinStr);
             infoRow1.getCell(3).setCellStyle(infoValueStyle);
             infoRow1.createCell(4).setCellValue("Total:");
             infoRow1.getCell(4).setCellStyle(infoStyle);
@@ -891,14 +882,22 @@ public class AttendanceServiceImpl implements AttendanceService {
             // Fila 2 de información compacta
             Row infoRow2 = sheet.createRow(rowNum++);
             infoRow2.setHeightInPoints(18);
-            infoRow2.createCell(0).setCellValue("Fecha de Generación:");
+            infoRow2.createCell(0).setCellValue("Rol Consultado:");
             infoRow2.getCell(0).setCellStyle(infoStyle);
-            infoRow2.createCell(1).setCellValue(fechaGeneracionStr);
+            infoRow2.createCell(1).setCellValue(rol.toUpperCase());
             infoRow2.getCell(1).setCellStyle(infoValueStyle);
-            infoRow2.createCell(2).setCellValue("Generado por:");
-            infoRow2.getCell(2).setCellStyle(infoStyle);
-            infoRow2.createCell(3).setCellValue(rolUsuarioGenerador != null ? rolUsuarioGenerador.toUpperCase() : "N/A");
-            infoRow2.getCell(3).setCellStyle(infoValueStyle);
+            
+            // Fila 3 de información compacta
+            Row infoRow3 = sheet.createRow(rowNum++);
+            infoRow3.setHeightInPoints(18);
+            infoRow3.createCell(0).setCellValue("Fecha de Generación:");
+            infoRow3.getCell(0).setCellStyle(infoStyle);
+            infoRow3.createCell(1).setCellValue(fechaGeneracionStr);
+            infoRow3.getCell(1).setCellStyle(infoValueStyle);
+            infoRow3.createCell(2).setCellValue("Generado por:");
+            infoRow3.getCell(2).setCellStyle(infoStyle);
+            infoRow3.createCell(3).setCellValue(rolUsuarioGenerador != null ? rolUsuarioGenerador.toUpperCase() : "N/A");
+            infoRow3.getCell(3).setCellStyle(infoValueStyle);
             
             rowNum++; // Un solo espacio antes de los encabezados
             

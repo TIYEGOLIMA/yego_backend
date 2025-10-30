@@ -145,14 +145,16 @@ public interface AttendanceService {
      */
     List<Map<String, Object>> getUsersByRole(String userRole);
     
+    
     /**
-     * Exportar marcaciones a Excel por fecha y rol
-     * @param fecha Fecha en formato YYYY-MM-DD
+     * Exportar marcaciones a Excel por rango de fechas y rol
+     * @param fechaInicio Fecha de inicio en formato YYYY-MM-DD
+     * @param fechaFin Fecha de fin en formato YYYY-MM-DD
      * @param rol Nombre del rol
      * @param rolUsuarioGenerador Rol del usuario que genera el reporte
      * @return Byte array del archivo Excel
-     * @throws IllegalArgumentException si la fecha es inválida
+     * @throws IllegalArgumentException si las fechas son inválidas
      */
-    byte[] exportarMarcacionesPorFechaYRol(String fecha, String rol, String rolUsuarioGenerador);
+    byte[] exportarMarcacionesPorRangoDeFechasYRol(String fechaInicio, String fechaFin, String rol, String rolUsuarioGenerador);
 }
 

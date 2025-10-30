@@ -313,13 +313,15 @@ public class AttendanceController {
     }
     
     /**
-     * Exportar marcaciones a Excel por fecha y rol
+     * Exportar marcaciones a Excel por rango de fechas y rol
      */
     @GetMapping("/marcaciones/exportar")
-    public ResponseEntity<?> exportarMarcaciones(@RequestParam String fecha,
+    public ResponseEntity<?> exportarMarcaciones(@RequestParam String fechaInicio,
+                                                  @RequestParam String fechaFin,
                                                   @RequestParam String rol,
                                                   @RequestHeader("Authorization") String token) {
-        log.info("📥 [AttendanceController] Solicitud de exportación - Fecha: {}, Rol: {}", fecha, rol);
+        log.info("📥 [AttendanceController] Solicitud de exportación - Fecha Inicio: {}, Fecha Fin: {}, Rol: {}", 
+            fechaInicio, fechaFin, rol);
         try {
             User user = tokenValidationService.getUserByToken(token);
             if (user == null) {
@@ -329,8 +331,9 @@ public class AttendanceController {
             
             log.info("✅ [AttendanceController] Usuario autenticado: {} (Rol: {})", user.getUsername(), user.getRoleName());
 
-            // Delegar toda la lógica al servicio, pasando el rol del usuario que genera el reporte
-            byte[] excelBytes = attendanceService.exportarMarcacionesPorFechaYRol(fecha, rol, user.getRoleName());
+            // Delegar toda la lógica al servicio
+            byte[] excelBytes = attendanceService.exportarMarcacionesPorRangoDeFechasYRol(
+                fechaInicio, fechaFin, rol, user.getRoleName());
             
             log.info("📊 [AttendanceController] Excel generado - Tamaño: {} bytes", excelBytes != null ? excelBytes.length : 0);
             
@@ -345,7 +348,7 @@ public class AttendanceController {
             // Configurar headers para descarga
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            String nombreArchivo = "marcaciones_" + fecha + "_" + rol + ".xlsx";
+            String nombreArchivo = "marcaciones_" + fechaInicio + "_" + fechaFin + "_" + rol + ".xlsx";
             headers.setContentDispositionFormData("attachment", nombreArchivo);
             headers.setContentLength(excelBytes.length);
 
@@ -353,11 +356,6 @@ public class AttendanceController {
                     .headers(headers)
                     .body(excelBytes);
 
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(400).body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
         } catch (Exception e) {
             log.error("❌ [AttendanceController] Error exportando marcaciones: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Map.of(
