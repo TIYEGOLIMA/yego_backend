@@ -1,6 +1,5 @@
 package com.yego.backend.handler.yego_garantizado;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -12,13 +11,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
-/**
- * Handler para notificaciones WebSocket del sistema de garantizado
- * Maneja envío de notificaciones en tiempo real usando STOMP
- * 
- * @author Sistema Yego
- * @version 1.0
- */
+
 @Component
 @Slf4j
 @RequiredArgsConstructor

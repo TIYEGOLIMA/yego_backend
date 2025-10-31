@@ -224,9 +224,12 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
                 String flotaId = fila[2].toString();
                 String nombreFlota = externalApiService.obtenerNombreFlota(flotaId);
                 
+                // Ya viene como Timestamp desde la consulta SQL
+                LocalDateTime fechaRegistro = ((Timestamp) fila[1]).toLocalDateTime();
+                
                 RegistroCompletoResponse registroCompleto = RegistroCompletoResponse.builder()
                         .yegLicenciaNumero(fila[0].toString())  // Licencia (índice 0)
-                        .yegFechaRegistro(((Timestamp) fila[1]).toLocalDateTime())  // Hora de registro (índice 1)
+                        .yegFechaRegistro(fechaRegistro)  // Hora de registro (índice 1)
                         .yegFlota(flotaId)  // yegoFlota (índice 2)
                         .flotaNombre(nombreFlota)  // Nombre real de la flota desde API
                         .yegSemana(fila[3].toString())  // Semana (índice 3)

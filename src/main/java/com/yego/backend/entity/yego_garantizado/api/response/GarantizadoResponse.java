@@ -42,4 +42,5 @@ public class GarantizadoResponse {
     private Long usuarioPagoId;
     private String horasTrabajadas;
     private String motivoRechazo;
+    private Boolean brandeo;
 }

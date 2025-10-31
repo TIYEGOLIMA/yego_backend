@@ -27,7 +27,7 @@ public interface YegoGarantizadoRegistroRepository extends JpaRepository<Registr
      * @param semana semana a buscar
      * @return Lista de objetos con datos simplificados: licencia, fecha_registro, flota, semana
      */
-    @Query(value = "SELECT r.yeg_licencia_numero, r.yeg_fecha_registro, r.yeg_flota, r.yeg_semana " +
+    @Query(value = "SELECT r.yeg_licencia_numero, CAST(r.yeg_fecha_registro AS TIMESTAMP) as yeg_fecha_registro, r.yeg_flota, r.yeg_semana " +
                    "FROM garantizado_registro r " +
                    "WHERE r.yeg_semana = :semana " +
                    "ORDER BY r.yeg_fecha_registro DESC", nativeQuery = true)

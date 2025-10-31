@@ -98,4 +98,8 @@ public class YegoGarantizado {
 
     @Column(name = "yeg_gara_motivo_rechazo")
     private String motivoRechazo;
+
+    @Column(name = "yeg_gara_brandeo", nullable = false)
+    private Boolean brandeo = false;
+
 }

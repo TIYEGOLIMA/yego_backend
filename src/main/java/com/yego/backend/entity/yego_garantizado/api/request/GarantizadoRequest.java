@@ -19,4 +19,5 @@ public class GarantizadoRequest {
     private int boSemAct;       // En centavos
     private String horasTrabajadas;
     private Integer horasTrabajadasEntero;
+    private boolean brandeo;    // true = con brandeo, false = sin brandeo
 }

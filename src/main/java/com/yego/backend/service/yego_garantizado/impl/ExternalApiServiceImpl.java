@@ -1,9 +1,13 @@
 package com.yego.backend.service.yego_garantizado.impl;
 
 import com.yego.backend.entity.yego_garantizado.api.request.GarantizadoRequest;
+import com.yego.backend.entity.yego_garantizado.api.response.FlotaResponse;
+import com.yego.backend.entity.yego_garantizado.entities.CalculoGarantizado;
 import com.yego.backend.entity.yego_garantizado.entities.YegoGarantizado;
+import com.yego.backend.repository.yego_garantizado.CalculoGarantizadoRepository;
 import com.yego.backend.repository.yego_garantizado.YegoGarantizadoRepository;
 import com.yego.backend.service.yego_garantizado.ExternalApiService;
+import com.yego.backend.service.yego_garantizado.FlotaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -16,6 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +30,8 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     private final RestTemplate restTemplate;
     private final YegoGarantizadoRepository yegoGarantizadoRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final CalculoGarantizadoRepository calculoGarantizadoRepository;
+    private final FlotaService flotaService;
     private static final String EXTERNAL_API_URL = "http://5.161.229.77:8087/procesar-conductor";
 
     @Override
@@ -81,7 +88,8 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         BigDecimal total = efectivo.add(pagoSinEfectivo).add(comYango).add(comYego).subtract(boSemAnt).add(boSemAct);
         
         // Calcular garantizado basado en VIAJES, BONO y HORAS MÍNIMAS según tabla
-        BigDecimal garantizado = calcularGarantizadoSegunBoSemAct(apiResponse, parkId);
+        // PRIMERO intenta usar valores guardados del frontend, si no usa cálculo automático
+        BigDecimal garantizado = calcularGarantizadoSegunBoSemAct(apiResponse, parkId, semana);
         
         // Calcular diferencia (garantizado - total)
         BigDecimal diferencia = garantizado.subtract(total);
@@ -95,7 +103,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             motivoRechazo = "No hay motivo";
         } else {
             garantizadoValor = "No Garantizado";
-            motivoRechazo = determinarMotivoRechazo(apiResponse, parkId, garantizado, total);
+            motivoRechazo = "Total supera garantizado (S/." + total + " > S/." + garantizado + ")";
         }
         
         // Obtener datos del conductor desde la tabla drivers
@@ -138,6 +146,9 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         // Guardar motivo de rechazo si aplica
         yegoGarantizado.setMotivoRechazo(motivoRechazo);
         
+        // Guardar brandeo
+        yegoGarantizado.setBrandeo(apiResponse.isBrandeo());
+        
         YegoGarantizado savedGarantizado = yegoGarantizadoRepository.save(yegoGarantizado);
         log.info("✅ [ExternalApiService] Datos guardados en yego_garantizado_dev con ID: {}", savedGarantizado.getId());
         
@@ -146,38 +157,77 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     
     /**
      * Calcula el garantizado basado en VIAJES, BONO y HORAS MÍNIMAS según tabla
+     * PRIMERO intenta buscar valores guardados desde el frontend, si no existen usa cálculo automático
      */
-    private BigDecimal calcularGarantizadoSegunBoSemAct(GarantizadoRequest apiResponse, String parkId) {
+    private BigDecimal calcularGarantizadoSegunBoSemAct(GarantizadoRequest apiResponse, String parkId, String semana) {
         try {
             Integer viajes = apiResponse.getViajes();
             BigDecimal boSemAct = new BigDecimal(apiResponse.getBoSemAct());
             Integer horasTrabajadas = apiResponse.getHorasTrabajadasEntero();
+            boolean brandeo = apiResponse.isBrandeo();
             
-            log.info("📊 [ExternalApiService] Calculando garantizado - Viajes: {}, Bono: {}, Horas: {}, Flota: {}", viajes, boSemAct, horasTrabajadas, parkId);
+            log.info("📊 [ExternalApiService] Calculando garantizado - Viajes: {}, Bono: {}, Horas: {}, Brandeo: {}, Flota: {}, Semana: {}", 
+                viajes, boSemAct, horasTrabajadas, brandeo, parkId, semana);
             
-            // Calcular garantizado según ubicación
-            String ubicacion;
-            BigDecimal garantizado;
+            // Obtener país y ciudad desde el parkId
+            String[] paisYCiudad = obtenerPaisYCiudadDesdeFlota(parkId);
             
-            if (esFlotaTrujillo(parkId)) {
-                ubicacion = "Trujillo";
-                garantizado = calcularGarantizadoTrujillo(viajes, boSemAct, horasTrabajadas);
-            } else if (esFlotaArequipa(parkId)) {
-                ubicacion = "Arequipa";
-                garantizado = calcularGarantizadoArequipa(viajes, boSemAct, horasTrabajadas);
+            // Validar que se pudo obtener país y ciudad
+            if (paisYCiudad == null || paisYCiudad.length < 2) {
+                log.error("❌ [ExternalApiService] No se pudo obtener país/ciudad para parkId: {}", parkId);
+                return BigDecimal.ZERO;
+            }
+            
+            String pais = paisYCiudad[0];
+            String ciudad = paisYCiudad[1];
+            
+            log.info("🌍 [ExternalApiService] País: {}, Ciudad: {}", pais, ciudad);
+            
+            // Consultar TODAS las configuraciones guardadas por el frontend para esta semana
+            // Ahora hay registros separados: uno para conBrandeo y otro para sinBrandeo
+            List<CalculoGarantizado> calculosGuardados = calculoGarantizadoRepository
+                    .findAllByPaisAndCiudadAndSemana(pais.toLowerCase(), ciudad.toLowerCase(), semana);
+            
+            if (!calculosGuardados.isEmpty()) {
+                // Buscar el registro correcto según el tipo de brandeo
+                CalculoGarantizado calculoCorrecto = null;
+                
+                if (brandeo) {
+                    // Si tiene brandeo, buscar el registro donde viajesConBrandeo > 0
+                    calculoCorrecto = calculosGuardados.stream()
+                            .filter(c -> c.getViajesConBrandeo() != null && c.getViajesConBrandeo() > 0)
+                            .findFirst()
+                            .orElse(null);
+                } else {
+                    // Si NO tiene brandeo, buscar el registro donde viajesSinBrandeo > 0
+                    calculoCorrecto = calculosGuardados.stream()
+                            .filter(c -> c.getViajesSinBrandeo() != null && c.getViajesSinBrandeo() > 0)
+                            .findFirst()
+                            .orElse(null);
+                }
+                
+                if (calculoCorrecto != null) {
+                    // Usar valores guardados del frontend
+                    BigDecimal garantizadoGuardado = calcularGarantizadoDesdeValoresGuardados(
+                        viajes, boSemAct, horasTrabajadas, brandeo, 
+                        calculoCorrecto.getViajesConBrandeo(), calculoCorrecto.getBonoConBrandeo(), 
+                        calculoCorrecto.getGarantizadoConBrandeo(), calculoCorrecto.getHorasConBrandeo(), 
+                        calculoCorrecto.getViajesSinBrandeo(), calculoCorrecto.getBonoSinBrandeo(), 
+                        calculoCorrecto.getGarantizadoSinBrandeo(), calculoCorrecto.getHorasSinBrandeo()
+                    );
+                    log.info("✅ [ExternalApiService] Usando garantizado guardado de semana {} (Brandeo: {}): S/.{}", 
+                        semana, brandeo, garantizadoGuardado);
+                    return garantizadoGuardado;
+                } else {
+                    log.warn("⚠️ [ExternalApiService] Se encontraron {} registros pero ninguno corresponde al tipo de brandeo ({}) para semana {} en {} - {}", 
+                        calculosGuardados.size(), brandeo, semana, pais, ciudad);
+                    return BigDecimal.ZERO;
+                }
             } else {
-                ubicacion = "Lima";
-                garantizado = calcularGarantizadoLima(viajes, boSemAct, horasTrabajadas);
+                // No se encontraron valores guardados - retornar 0
+                log.warn("⚠️ [ExternalApiService] No se encontraron valores guardados para semana {} en {} - {}", semana, pais, ciudad);
+                return BigDecimal.ZERO;
             }
-            
-            log.info("📍 [ExternalApiService] {} - Garantizado: S/.{}", ubicacion, garantizado);
-            
-            // Conversión para Colombia
-            if (!esFlotaPeruana(parkId)) {
-                return garantizado.multiply(new BigDecimal("1.00"));
-            }
-            
-            return garantizado;
             
         } catch (Exception e) {
             log.error("❌ [ExternalApiService] Error calculando garantizado: {}", e.getMessage());
@@ -185,94 +235,92 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         }
     }
     
-    
-    private boolean esFlotaPeruana(String parkId) {
-        // Flotas peruanas según los comentarios en FlotaServiceImpl
-        return "56e4607dfc354e0a9cde4f0aa7973003".equals(parkId) || // Yego Arequipa
-                "08e20910d81d42658d4334d3f6d10ac0".equals(parkId) || // Yego 
-               "c054c8b5dfe14e75b882943b2a252706".equals(parkId) || // Yego Black
-               "c58110bc70244430a70a8126fc69f22c".equals(parkId) || // Yego Líderes
-               "5921e55cc5d042d28747dd722608955a".equals(parkId) || // Yego Prime
-               "ff424287c4bd4cbba6066962951a121f".equals(parkId) || // Yego Promi
-               "851e30755bba4d298e2e837f571b4ab8".equals(parkId) || // Yego Trujillo
-               "ae57aaedeacd41eb9fdbe1ff7a89a3f2".equals(parkId) || // Yego,
-               "2e39f6699c854bc49cc75197431fe25c".equals(parkId);   // Yego.
-    }
-    
-    private boolean esFlotaTrujillo(String parkId) {
-        return "851e30755bba4d298e2e837f571b4ab8".equals(parkId); // Yego Trujillo
-    }
-    
-    private boolean esFlotaArequipa(String parkId) {
-        return "56e4607dfc354e0a9cde4f0aa7973003".equals(parkId); // Yego Arequipa
-    }
-    
     /**
-     * Calcula garantizado para Trujillo
-     * Horas mínimas: 65 viajes=30h, 95 viajes=40h, 125 viajes=50h, 155 viajes=60h, 195 viajes=72h
+     * Calcula el garantizado usando los valores guardados desde el frontend
+     * Compara viajes, bono y horas actuales vs guardadas para determinar cuál usar
+     * Si brandeo=true, solo compara con conBrandeo; si brandeo=false, solo con sinBrandeo
      */
-    private BigDecimal calcularGarantizadoTrujillo(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas) {
-        int bono = boSemAct.intValue();
+    private BigDecimal calcularGarantizadoDesdeValoresGuardados(Integer viajes, BigDecimal bono, Integer horasTrabajadas, boolean brandeo,
+            Integer viajesConBrandeo, BigDecimal bonoConBrandeo, BigDecimal garantizadoConBrandeo, Integer horasConBrandeo,
+            Integer viajesSinBrandeo, BigDecimal bonoSinBrandeo, BigDecimal garantizadoSinBrandeo, Integer horasSinBrandeo) {
         
-        if (viajes >= 195 && bono >= 350 && horasTrabajadas >= 72) {
-            return new BigDecimal("1350.00");
-        } else if (viajes >= 155 && bono >= 280 && horasTrabajadas >= 60) {
-            return new BigDecimal("1125.00");
-        } else if (viajes >= 125 && bono >= 235 && horasTrabajadas >= 50) {
-            return new BigDecimal("875.00");
-        } else if (viajes >= 95 && bono >= 185 && horasTrabajadas >= 40) {
-            return new BigDecimal("675.00");
-        } else if (viajes >= 65 && bono >= 130 && horasTrabajadas >= 30) {
-            return new BigDecimal("475.00");
+        log.info("📊 [ExternalApiService] Comparando valores actuales vs guardados (Brandeo: {}):", brandeo);
+        log.info("📊   Actual: Viajes={}, Bono={}, Horas={}", viajes, bono, horasTrabajadas);
+        log.info("📊   ConBrandeo: Viajes={}, Bono={}, Horas={}, Garantizado={}", 
+            viajesConBrandeo, bonoConBrandeo, horasConBrandeo, garantizadoConBrandeo);
+        log.info("📊   SinBrandeo: Viajes={}, Bono={}, Horas={}, Garantizado={}", 
+            viajesSinBrandeo, bonoSinBrandeo, horasSinBrandeo, garantizadoSinBrandeo);
+        
+        // Verificar si cumple criterios de conBrandeo
+        boolean cumpleConBrandeo = viajesConBrandeo != null && viajesConBrandeo > 0 &&
+                viajes >= viajesConBrandeo && 
+                bono.compareTo(bonoConBrandeo) >= 0 && 
+                horasTrabajadas >= (horasConBrandeo != null ? horasConBrandeo : 0);
+        
+        // Verificar si cumple criterios de sinBrandeo
+        boolean cumpleSinBrandeo = viajesSinBrandeo != null && viajesSinBrandeo > 0 &&
+                viajes >= viajesSinBrandeo && 
+                bono.compareTo(bonoSinBrandeo) >= 0 && 
+                horasTrabajadas >= (horasSinBrandeo != null ? horasSinBrandeo : 0);
+        
+        // Si tiene brandeo, solo verifica conBrandeo
+        if (brandeo) {
+            if (cumpleConBrandeo) {
+                log.info("✅ [ExternalApiService] Con brandeo, cumple criterios: S/.{}", garantizadoConBrandeo);
+                return garantizadoConBrandeo;
+            } else {
+                log.warn("⚠️ [ExternalApiService] Con brandeo pero no cumple criterios, retornando 0");
+                return BigDecimal.ZERO;
+            }
         } else {
-            log.warn("⚠️ [Trujillo] No cumple criterios - Viajes: {}, Bono: S/.{}, Horas: {}", viajes, bono, horasTrabajadas);
-            return BigDecimal.ZERO;
+            // Si NO tiene brandeo, solo verifica sinBrandeo
+            if (cumpleSinBrandeo) {
+                log.info("✅ [ExternalApiService] Sin brandeo, cumple criterios: S/.{}", garantizadoSinBrandeo);
+                return garantizadoSinBrandeo;
+            } else {
+                log.warn("⚠️ [ExternalApiService] Sin brandeo pero no cumple criterios, retornando 0");
+                return BigDecimal.ZERO;
+            }
         }
     }
     
     /**
-     * Calcula garantizado para Arequipa
-     * Horas mínimas: 50 viajes=20h, 75 viajes=30h, 100 viajes=40h, 125 viajes=50h, 155 viajes=60h
+     * Obtiene país y ciudad desde el parkId (flota)
+     * Retorna null si no se puede obtener (MEJOR PRÁCTICA: no usar fallback)
      */
-    private BigDecimal calcularGarantizadoArequipa(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas) {
-        int bono = boSemAct.intValue();
-        
-        if (viajes >= 155 && bono >= 350 && horasTrabajadas >= 60) {
-            return new BigDecimal("1450.00");
-        } else if (viajes >= 125 && bono >= 290 && horasTrabajadas >= 50) {
-            return new BigDecimal("1075.00");
-        } else if (viajes >= 100 && bono >= 235 && horasTrabajadas >= 40) {
-            return new BigDecimal("950.00");
-        } else if (viajes >= 75 && bono >= 180 && horasTrabajadas >= 30) {
-            return new BigDecimal("675.00");
-        } else if (viajes >= 50 && bono >= 125 && horasTrabajadas >= 20) {
-            return new BigDecimal("475.00");
-        } else {
-            log.warn("⚠️ [Arequipa] No cumple criterios - Viajes: {}, Bono: S/.{}, Horas: {}", viajes, bono, horasTrabajadas);
-            return BigDecimal.ZERO;
+    private String[] obtenerPaisYCiudadDesdeFlota(String parkId) {
+        try {
+            List<FlotaResponse> flotas = flotaService.obtenerFlotas();
+            for (FlotaResponse flota : flotas) {
+                if (flota.getId().equals(parkId)) {
+                    String city = flota.getCity();
+                    if (city != null && !city.isEmpty()) {
+                        // Mapear city a pais según reglas conocidas
+                        String pais = determinarPaisDesdeCiudad(city);
+                        // Normalizar a minúsculas para coincidir con los valores guardados
+                        log.info("🌍 [ExternalApiService] Flota: {}, Ciudad: {}, País: {}", parkId, city.toLowerCase(), pais);
+                        return new String[]{pais, city.toLowerCase()};
+                    }
+                }
+            }
+            log.error("❌ [ExternalApiService] No se encontró flota con parkId: {}", parkId);
+            return null;
+        } catch (Exception e) {
+            log.error("❌ [ExternalApiService] Error obteniendo ciudad desde flota: {}", e.getMessage());
+            return null;
         }
     }
     
     /**
-     * Calcula garantizado para Lima
-     * Horas mínimas: 50 viajes=20h, 70 viajes=30h, 90 viajes=42h, 110 viajes=50h, 140 viajes=60h
+     * Determina país desde la ciudad
      */
-    private BigDecimal calcularGarantizadoLima(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas) {
-        int bono = boSemAct.intValue();
-        
-        if (viajes >= 140 && bono >= 520 && horasTrabajadas >= 60) {
-            return new BigDecimal("1450.00");
-        } else if (viajes >= 110 && bono >= 415 && horasTrabajadas >= 50) {
-            return new BigDecimal("1225.00");
-        } else if (viajes >= 90 && bono >= 340 && horasTrabajadas >= 42) {
-            return new BigDecimal("1050.00");
-        } else if (viajes >= 70 && bono >= 265 && horasTrabajadas >= 30) {
-            return new BigDecimal("825.00");
-        } else if (viajes >= 50 && bono >= 190 && horasTrabajadas >= 20) {
-            return new BigDecimal("600.00");
+    private String determinarPaisDesdeCiudad(String ciudad) {
+        String ciudadLower = ciudad.toLowerCase();
+        if (ciudadLower.contains("cali") || ciudadLower.contains("barranquilla") || 
+            ciudadLower.contains("bogota") || ciudadLower.contains("bucaramanga")) {
+            return "colombia";
         } else {
-            log.warn("⚠️ [Lima] No cumple criterios - Viajes: {}, Bono: S/.{}, Horas: {}", viajes, bono, horasTrabajadas);
-            return BigDecimal.ZERO;
+            return "peru";
         }
     }
 
@@ -360,114 +408,4 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         }
     }
     
-    /**
-     * Determina el motivo específico del rechazo basado en los criterios de garantizado
-     */
-    private String determinarMotivoRechazo(GarantizadoRequest apiResponse, String parkId, BigDecimal garantizado, BigDecimal total) {
-        try {
-            Integer viajes = apiResponse.getViajes();
-            BigDecimal boSemAct = new BigDecimal(apiResponse.getBoSemAct());
-            Integer horasTrabajadas = apiResponse.getHorasTrabajadasEntero();
-            
-            // Verificar criterios específicos según la ubicación
-            if (esFlotaTrujillo(parkId)) {
-                return determinarMotivoRechazoTrujillo(viajes, boSemAct, horasTrabajadas, garantizado, total);
-            } else if (esFlotaArequipa(parkId)) {
-                return determinarMotivoRechazoArequipa(viajes, boSemAct, horasTrabajadas, garantizado, total);
-            } else {
-                return determinarMotivoRechazoLima(viajes, boSemAct, horasTrabajadas, garantizado, total);
-            }
-            
-        } catch (Exception e) {
-            log.error("❌ [ExternalApiService] Error determinando motivo de rechazo: {}", e.getMessage());
-            return "Error al determinar motivo de rechazo";
-        }
-    }
-    
-    /**
-     * Determina motivo de rechazo para Lima
-     */
-    private String determinarMotivoRechazoLima(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas, BigDecimal garantizado, BigDecimal total) {
-        StringBuilder motivo = new StringBuilder();
-        
-        // Verificar horas mínimas
-        if (horasTrabajadas < 40) {
-            motivo.append("Horas insuficientes (").append(horasTrabajadas).append("/40). ");
-        }
-        
-        // Verificar viajes mínimos
-        if (viajes < 50) {
-            motivo.append("Viajes insuficientes (").append(viajes).append("/50). ");
-        }
-        
-        // Verificar bono según tabla de Lima
-        if (boSemAct.compareTo(new BigDecimal("600")) < 0) {
-            motivo.append("Bono insuficiente (S/.").append(boSemAct).append("/S/.600). ");
-        }
-        
-        // Si no hay motivo específico, indicar que el total supera el garantizado
-        if (motivo.length() == 0) {
-            motivo.append("Total supera garantizado (S/.").append(total).append(" > S/.").append(garantizado).append(")");
-        }
-        
-        return motivo.toString().trim();
-    }
-    
-    /**
-     * Determina motivo de rechazo para Trujillo
-     */
-    private String determinarMotivoRechazoTrujillo(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas, BigDecimal garantizado, BigDecimal total) {
-        StringBuilder motivo = new StringBuilder();
-        
-        // Verificar horas mínimas para Trujillo
-        if (horasTrabajadas < 40) {
-            motivo.append("Horas insuficientes (").append(horasTrabajadas).append("/40). ");
-        }
-        
-        // Verificar viajes mínimos
-        if (viajes < 50) {
-            motivo.append("Viajes insuficientes (").append(viajes).append("/50). ");
-        }
-        
-        // Verificar bono según tabla de Trujillo
-        if (boSemAct.compareTo(new BigDecimal("600")) < 0) {
-            motivo.append("Bono insuficiente (S/.").append(boSemAct).append("/S/.600). ");
-        }
-        
-        // Si no hay motivo específico, indicar que el total supera el garantizado
-        if (motivo.length() == 0) {
-            motivo.append("Total supera garantizado (S/.").append(total).append(" > S/.").append(garantizado).append(")");
-        }
-        
-        return motivo.toString().trim();
-    }
-    
-    /**
-     * Determina motivo de rechazo para Arequipa
-     */
-    private String determinarMotivoRechazoArequipa(Integer viajes, BigDecimal boSemAct, Integer horasTrabajadas, BigDecimal garantizado, BigDecimal total) {
-        StringBuilder motivo = new StringBuilder();
-        
-        // Verificar horas mínimas para Arequipa
-        if (horasTrabajadas < 40) {
-            motivo.append("Horas insuficientes (").append(horasTrabajadas).append("/40). ");
-        }
-        
-        // Verificar viajes mínimos
-        if (viajes < 50) {
-            motivo.append("Viajes insuficientes (").append(viajes).append("/50). ");
-        }
-        
-        // Verificar bono según tabla de Arequipa
-        if (boSemAct.compareTo(new BigDecimal("600")) < 0) {
-            motivo.append("Bono insuficiente (S/.").append(boSemAct).append("/S/.600). ");
-        }
-        
-        // Si no hay motivo específico, indicar que el total supera el garantizado
-        if (motivo.length() == 0) {
-            motivo.append("Total supera garantizado (S/.").append(total).append(" > S/.").append(garantizado).append(")");
-        }
-        
-        return motivo.toString().trim();
-    }
 }

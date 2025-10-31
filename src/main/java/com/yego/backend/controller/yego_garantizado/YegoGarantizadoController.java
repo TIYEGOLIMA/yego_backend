@@ -21,17 +21,40 @@ public class YegoGarantizadoController {
 
     private final YegoGarantizadoRegistroService yegoGarantizadoRegistroService;
 
-    @GetMapping("/procesar-semana-anterior")
-    public ResponseEntity<GarantizadoListResponse> procesarSemanaAnterior() {
-        log.info(" [YegoGarantizadoController] Recibida solicitud para consultar semana anterior");
+    /**
+     * CONSULTAR semana anterior (ya procesada)
+     * GET /api/garantizado/listar-semana-anterior
+     */
+    @GetMapping("/listar-semana-anterior")
+    public ResponseEntity<GarantizadoListResponse> consultarSemanaAnterior() {
+        log.info("📋 [YegoGarantizadoController] Recibida solicitud para CONSULTAR semana anterior");
         
         try {
-            // Solo consultar datos ya procesados por el scheduler
+            // Solo consultar datos ya procesados
             GarantizadoListResponse response = yegoGarantizadoRegistroService.listarGarantizadosSemanaAnterior();
-            log.info(" [YegoGarantizadoController] Consultados {} conductores de la semana anterior", response.getConductores().size());
+            log.info("✅ [YegoGarantizadoController] Consultados {} conductores de la semana anterior", response.getConductores().size());
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error(" [YegoGarantizadoController] Error consultando semana anterior: {}", e.getMessage());
+            log.error("❌ [YegoGarantizadoController] Error consultando semana anterior: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    /**
+     * PROCESAR semana anterior (crear/procesar datos)
+     * POST /api/garantizado/procesar-semana-anterior
+     */
+    @PostMapping("/procesar-semana-anterior")
+    public ResponseEntity<GarantizadoListResponse> procesarSemanaAnterior() {
+        log.info("🔄 [YegoGarantizadoController] Recibida solicitud para PROCESAR semana anterior");
+        
+        try {
+            // Procesar conductores de la semana anterior
+            GarantizadoListResponse response = yegoGarantizadoRegistroService.procesarYDevolverSemanaAnterior();
+            log.info("✅ [YegoGarantizadoController] Procesados {} conductores de la semana anterior", response.getConductores().size());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoController] Error procesando semana anterior: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
