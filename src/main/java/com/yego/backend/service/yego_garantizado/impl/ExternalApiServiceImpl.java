@@ -91,6 +91,14 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         // PRIMERO intenta usar valores guardados del frontend, si no usa cálculo automático
         BigDecimal garantizado = calcularGarantizadoSegunBoSemAct(apiResponse, parkId, semana);
         
+        // Si el garantizado es 0, significa que NO cumple con los criterios (viajes, bono, horas)
+        // Omitir completamente el procesamiento - NO guardar en la base de datos
+        if (garantizado == null || garantizado.compareTo(BigDecimal.ZERO) <= 0) {
+            log.info("⏭️ [ExternalApiService] Conductor OMITIDO - No cumple criterios mínimos (garantizado: {}) - Licencia: {}", 
+                garantizado, apiResponse.getLicencia());
+            return null; // NO procesar ni guardar
+        }
+        
         // Calcular diferencia (garantizado - total)
         BigDecimal diferencia = garantizado.subtract(total);
         
@@ -189,38 +197,61 @@ public class ExternalApiServiceImpl implements ExternalApiService {
                     .findAllByPaisAndCiudadAndSemana(pais.toLowerCase(), ciudad.toLowerCase(), semana);
             
             if (!calculosGuardados.isEmpty()) {
-                // Buscar el registro correcto según el tipo de brandeo
-                CalculoGarantizado calculoCorrecto = null;
+                log.info("📋 [ExternalApiService] Se encontraron {} registros de cálculo para {} - {} - {}", 
+                    calculosGuardados.size(), pais, ciudad, semana);
+                
+                // Filtrar registros según el tipo de brandeo y evaluar TODOS para encontrar el que el conductor cumple
+                List<CalculoGarantizado> registrosFiltrados;
                 
                 if (brandeo) {
-                    // Si tiene brandeo, buscar el registro donde viajesConBrandeo > 0
-                    calculoCorrecto = calculosGuardados.stream()
+                    // Si tiene brandeo, filtrar registros donde viajesConBrandeo > 0
+                    registrosFiltrados = calculosGuardados.stream()
                             .filter(c -> c.getViajesConBrandeo() != null && c.getViajesConBrandeo() > 0)
-                            .findFirst()
-                            .orElse(null);
+                            .collect(java.util.stream.Collectors.toList());
+                    log.info("📊 [ExternalApiService] Filtrando {} registros CON BRANDEO de {} totales", registrosFiltrados.size(), calculosGuardados.size());
                 } else {
-                    // Si NO tiene brandeo, buscar el registro donde viajesSinBrandeo > 0
-                    calculoCorrecto = calculosGuardados.stream()
+                    // Si NO tiene brandeo, filtrar registros donde viajesSinBrandeo > 0
+                    registrosFiltrados = calculosGuardados.stream()
                             .filter(c -> c.getViajesSinBrandeo() != null && c.getViajesSinBrandeo() > 0)
-                            .findFirst()
-                            .orElse(null);
+                            .collect(java.util.stream.Collectors.toList());
+                    log.info("📊 [ExternalApiService] Filtrando {} registros SIN BRANDEO de {} totales", registrosFiltrados.size(), calculosGuardados.size());
                 }
                 
-                if (calculoCorrecto != null) {
-                    // Usar valores guardados del frontend
-                    BigDecimal garantizadoGuardado = calcularGarantizadoDesdeValoresGuardados(
-                        viajes, boSemAct, horasTrabajadas, brandeo, 
-                        calculoCorrecto.getViajesConBrandeo(), calculoCorrecto.getBonoConBrandeo(), 
-                        calculoCorrecto.getGarantizadoConBrandeo(), calculoCorrecto.getHorasConBrandeo(), 
-                        calculoCorrecto.getViajesSinBrandeo(), calculoCorrecto.getBonoSinBrandeo(), 
-                        calculoCorrecto.getGarantizadoSinBrandeo(), calculoCorrecto.getHorasSinBrandeo()
-                    );
-                    log.info("✅ [ExternalApiService] Usando garantizado guardado de semana {} (Brandeo: {}): S/.{}", 
-                        semana, brandeo, garantizadoGuardado);
-                    return garantizadoGuardado;
-                } else {
+                if (registrosFiltrados.isEmpty()) {
                     log.warn("⚠️ [ExternalApiService] Se encontraron {} registros pero ninguno corresponde al tipo de brandeo ({}) para semana {} en {} - {}", 
                         calculosGuardados.size(), brandeo, semana, pais, ciudad);
+                    return BigDecimal.ZERO;
+                }
+                
+                // Evaluar TODOS los registros filtrados para encontrar el que el conductor cumple
+                BigDecimal mejorGarantizado = BigDecimal.ZERO;
+                CalculoGarantizado calculoQueCumple = null;
+                
+                for (CalculoGarantizado calculo : registrosFiltrados) {
+                    // Evaluar si este registro cumple los criterios
+                    BigDecimal garantizadoEvaluado = calcularGarantizadoDesdeValoresGuardados(
+                        viajes, boSemAct, horasTrabajadas, brandeo, 
+                        calculo.getViajesConBrandeo(), calculo.getBonoConBrandeo(), 
+                        calculo.getGarantizadoConBrandeo(), calculo.getHorasConBrandeo(), 
+                        calculo.getViajesSinBrandeo(), calculo.getBonoSinBrandeo(), 
+                        calculo.getGarantizadoSinBrandeo(), calculo.getHorasSinBrandeo()
+                    );
+                    
+                    // Si este registro cumple los criterios y tiene un garantizado mayor
+                    if (garantizadoEvaluado.compareTo(BigDecimal.ZERO) > 0 && 
+                        garantizadoEvaluado.compareTo(mejorGarantizado) > 0) {
+                        mejorGarantizado = garantizadoEvaluado;
+                        calculoQueCumple = calculo;
+                    }
+                }
+                
+                if (calculoQueCumple != null && mejorGarantizado.compareTo(BigDecimal.ZERO) > 0) {
+                    log.info("✅ [ExternalApiService] Usando garantizado guardado de semana {} (Brandeo: {}): S/.{}", 
+                        semana, brandeo, mejorGarantizado);
+                    return mejorGarantizado;
+                } else {
+                    log.warn("⚠️ [ExternalApiService] Se encontraron {} registros {} pero el conductor NO cumple criterios de ninguno", 
+                        registrosFiltrados.size(), brandeo ? "CON BRANDEO" : "SIN BRANDEO");
                     return BigDecimal.ZERO;
                 }
             } else {
@@ -251,34 +282,60 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         log.info("📊   SinBrandeo: Viajes={}, Bono={}, Horas={}, Garantizado={}", 
             viajesSinBrandeo, bonoSinBrandeo, horasSinBrandeo, garantizadoSinBrandeo);
         
-        // Verificar si cumple criterios de conBrandeo
-        boolean cumpleConBrandeo = viajesConBrandeo != null && viajesConBrandeo > 0 &&
-                viajes >= viajesConBrandeo && 
-                bono.compareTo(bonoConBrandeo) >= 0 && 
-                horasTrabajadas >= (horasConBrandeo != null ? horasConBrandeo : 0);
+        // Verificar si cumple criterios de conBrandeo (con logs detallados)
+        boolean cumpleConBrandeo = false;
+        String motivoNoCumpleConBrandeo = "";
         
-        // Verificar si cumple criterios de sinBrandeo
-        boolean cumpleSinBrandeo = viajesSinBrandeo != null && viajesSinBrandeo > 0 &&
-                viajes >= viajesSinBrandeo && 
-                bono.compareTo(bonoSinBrandeo) >= 0 && 
-                horasTrabajadas >= (horasSinBrandeo != null ? horasSinBrandeo : 0);
+        if (viajesConBrandeo == null || viajesConBrandeo <= 0) {
+            motivoNoCumpleConBrandeo = "No hay configuración de viajes con brandeo";
+        } else if (viajes < viajesConBrandeo) {
+            motivoNoCumpleConBrandeo = String.format("Viajes insuficientes: %d < %d (requiere mínimo %d viajes)", 
+                viajes, viajesConBrandeo, viajesConBrandeo);
+        } else if (bono.compareTo(bonoConBrandeo) < 0) {
+            motivoNoCumpleConBrandeo = String.format("Bono insuficiente: %.2f < %.2f (requiere mínimo %.2f)", 
+                bono.doubleValue(), bonoConBrandeo.doubleValue(), bonoConBrandeo.doubleValue());
+        } else if (horasTrabajadas < (horasConBrandeo != null ? horasConBrandeo : 0)) {
+            motivoNoCumpleConBrandeo = String.format("Horas insuficientes: %d < %d (requiere mínimo %d horas)", 
+                horasTrabajadas, horasConBrandeo != null ? horasConBrandeo : 0, horasConBrandeo != null ? horasConBrandeo : 0);
+        } else {
+            cumpleConBrandeo = true;
+        }
+        
+        // Verificar si cumple criterios de sinBrandeo (con logs detallados)
+        boolean cumpleSinBrandeo = false;
+        String motivoNoCumpleSinBrandeo = "";
+        
+        if (viajesSinBrandeo == null || viajesSinBrandeo <= 0) {
+            motivoNoCumpleSinBrandeo = "No hay configuración de viajes sin brandeo";
+        } else if (viajes < viajesSinBrandeo) {
+            motivoNoCumpleSinBrandeo = String.format("Viajes insuficientes: %d < %d (requiere mínimo %d viajes)", 
+                viajes, viajesSinBrandeo, viajesSinBrandeo);
+        } else if (bono.compareTo(bonoSinBrandeo) < 0) {
+            motivoNoCumpleSinBrandeo = String.format("Bono insuficiente: %.2f < %.2f (requiere mínimo %.2f)", 
+                bono.doubleValue(), bonoSinBrandeo.doubleValue(), bonoSinBrandeo.doubleValue());
+        } else if (horasTrabajadas < (horasSinBrandeo != null ? horasSinBrandeo : 0)) {
+            motivoNoCumpleSinBrandeo = String.format("Horas insuficientes: %d < %d (requiere mínimo %d horas)", 
+                horasTrabajadas, horasSinBrandeo != null ? horasSinBrandeo : 0, horasSinBrandeo != null ? horasSinBrandeo : 0);
+        } else {
+            cumpleSinBrandeo = true;
+        }
         
         // Si tiene brandeo, solo verifica conBrandeo
         if (brandeo) {
             if (cumpleConBrandeo) {
-                log.info("✅ [ExternalApiService] Con brandeo, cumple criterios: S/.{}", garantizadoConBrandeo);
+                log.info("✅ [ExternalApiService] Con brandeo, cumple TODOS los criterios: S/.{}", garantizadoConBrandeo);
                 return garantizadoConBrandeo;
             } else {
-                log.warn("⚠️ [ExternalApiService] Con brandeo pero no cumple criterios, retornando 0");
+                log.warn("⚠️ [ExternalApiService] Con brandeo pero NO cumple criterios: {}", motivoNoCumpleConBrandeo);
                 return BigDecimal.ZERO;
             }
         } else {
             // Si NO tiene brandeo, solo verifica sinBrandeo
             if (cumpleSinBrandeo) {
-                log.info("✅ [ExternalApiService] Sin brandeo, cumple criterios: S/.{}", garantizadoSinBrandeo);
+                log.info("✅ [ExternalApiService] Sin brandeo, cumple TODOS los criterios: S/.{}", garantizadoSinBrandeo);
                 return garantizadoSinBrandeo;
             } else {
-                log.warn("⚠️ [ExternalApiService] Sin brandeo pero no cumple criterios, retornando 0");
+                log.warn("⚠️ [ExternalApiService] Sin brandeo pero NO cumple criterios: {}", motivoNoCumpleSinBrandeo);
                 return BigDecimal.ZERO;
             }
         }

@@ -129,8 +129,10 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
             procesarConductoresPorSemana(semanaAnterior);
 
             // Luego obtener solo los garantizados de la semana anterior
+            // FILTRAR: Solo aquellos que tienen garantizado > 0 (cumplen criterios)
             List<YegoGarantizado> garantizados = yegoGarantizadoRepository.findBySemanaAndActivoTrue(semanaAnterior);
             List<GarantizadoResponse> conductores = garantizados.stream()
+                    .filter(g -> g.getGarantizado() != null && g.getGarantizado().compareTo(BigDecimal.ZERO) > 0)
                     .map(this::convertirAGarantizadoResponse)
                     .collect(Collectors.toList());
             
