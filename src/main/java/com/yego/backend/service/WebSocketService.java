@@ -365,4 +365,26 @@ public class WebSocketService {
         log.info("✅ [WebSocket] Actualización de registros de hoy enviada - Usuario: {}, Total: {}", userId, registrosHoy.size());
     }
     
+    /**
+     * Enviar estado del procesamiento de garantizado (bloqueado/desbloqueado)
+     */
+    public void enviarEstadoProcesoGarantizado(boolean bloqueado, String mensaje) {
+        log.info("🔒 [WebSocket] Enviando estado del procesamiento - Bloqueado: {}", bloqueado);
+        
+        Map<String, Object> evento = Map.of(
+            "type", bloqueado ? "GARANTIZADO_BUTTON_BLOCKED" : "GARANTIZADO_BUTTON_UNBLOCKED",
+            "bloqueado", bloqueado,
+            "mensaje", mensaje,
+            "timestamp", LocalDateTime.now().toString()
+        );
+        
+        // Enviar a topic de garantizado
+        messagingTemplate.convertAndSend("/topic/garantizado", evento);
+        
+        // También enviar al topic del sistema
+        messagingTemplate.convertAndSend("/topic/system", evento);
+        
+        log.info("✅ [WebSocket] Estado del procesamiento enviado - Bloqueado: {}", bloqueado);
+    }
+    
 }

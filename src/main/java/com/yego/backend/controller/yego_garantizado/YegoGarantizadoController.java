@@ -1,7 +1,9 @@
 package com.yego.backend.controller.yego_garantizado;
 
+import com.yego.backend.entity.yego_garantizado.api.response.EstadoProcesoResponse;
 import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoListResponse;
 import com.yego.backend.entity.yego_garantizado.api.response.RegistroCompletoResponse;
+import com.yego.backend.service.yego_garantizado.ProcesoGarantizadoEstadoService;
 import com.yego.backend.service.yego_garantizado.YegoGarantizadoRegistroService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +22,7 @@ import java.util.List;
 public class YegoGarantizadoController {
 
     private final YegoGarantizadoRegistroService yegoGarantizadoRegistroService;
+    private final ProcesoGarantizadoEstadoService procesoEstadoService;
 
     /**
      * CONSULTAR semana anterior (ya procesada)
@@ -49,8 +52,9 @@ public class YegoGarantizadoController {
         log.info("🔄 [YegoGarantizadoController] Recibida solicitud para PROCESAR semana anterior");
         
         try {
-            // Procesar conductores de la semana anterior
+            // Procesar conductores de la semana anterior (el servicio maneja WebSocket y registro)
             GarantizadoListResponse response = yegoGarantizadoRegistroService.procesarYDevolverSemanaAnterior();
+            
             log.info("✅ [YegoGarantizadoController] Procesados {} conductores de la semana anterior", response.getConductores().size());
             return ResponseEntity.ok(response);
         } catch (Exception e) {
@@ -134,6 +138,24 @@ public class YegoGarantizadoController {
         } catch (Exception e) {
             log.error("❌ [YegoGarantizadoController] Error: {}", e.getMessage());
             return ResponseEntity.internalServerError().body("Error interno del servidor");
+        }
+    }
+
+    /**
+     * Obtener el estado del botón de procesamiento
+     * GET /api/garantizado/estado-proceso
+     */
+    @GetMapping("/estado-proceso")
+    public ResponseEntity<EstadoProcesoResponse> obtenerEstadoProceso() {
+        log.info("🔍 [YegoGarantizadoController] Recibida solicitud para obtener estado del procesamiento");
+        
+        try {
+            EstadoProcesoResponse estado = procesoEstadoService.obtenerEstadoProceso();
+            log.info("✅ [YegoGarantizadoController] Estado obtenido - Bloqueado: {}", estado.getBloqueado());
+            return ResponseEntity.ok(estado);
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoController] Error obteniendo estado: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
         }
     }
 

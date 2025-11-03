@@ -27,6 +27,7 @@ public class CalculoGarantizadoServiceImpl implements CalculoGarantizadoService 
     private final CalculoGarantizadoRepository calculoRepository;
     private final YegoGarantizadoRegistroService yegoGarantizadoRegistroService;
     private final WebSocketService webSocketService;
+    private final com.yego.backend.service.yego_garantizado.ProcesoGarantizadoEstadoService procesoEstadoService;
 
     @Override
     @Transactional
@@ -213,6 +214,9 @@ public class CalculoGarantizadoServiceImpl implements CalculoGarantizadoService 
         log.info("✅ [CalculoGarantizadoService] Configuraciones guardadas Y {} conductores procesados", 
             resultado.getConductores().size());
         
+        // 🔒 REGISTRAR EL PROCESAMIENTO (BLOQUEA EL BOTÓN HASTA EL PRÓXIMO LUNES)
+        procesoEstadoService.registrarProcesamiento();
+        
         // 📡 ENVIAR POR WEBSOCKET PARA ACTUALIZAR LA TABLA
         webSocketService.enviarDatosCompletosGarantizado(
             resultado.getConductores(),
@@ -221,11 +225,14 @@ public class CalculoGarantizadoServiceImpl implements CalculoGarantizadoService 
         
         // 🎉 ENVIAR NOTIFICACIÓN DE ÉXITO
         webSocketService.sendSystemEvent("GARANTIZADO_PROCESS_SUCCESS", Map.of(
-            "message", "✅ Proceso completado exitosamente",
+            "message", "✅ Proceso completado exitosamente. El botón estará bloqueado hasta el próximo lunes.",
             "totalConductores", resultado.getConductores().size(),
             "semana", resultado.getSemanaAnterior(),
             "autoReload", true
         ));
+        
+        // 🔒 ENVIAR EVENTO DE BLOQUEO DEL BOTÓN
+        webSocketService.enviarEstadoProcesoGarantizado(true, "El botón está bloqueado hasta el próximo lunes");
         
         return resultado;
     }
