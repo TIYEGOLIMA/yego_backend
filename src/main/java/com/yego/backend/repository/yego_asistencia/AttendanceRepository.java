@@ -107,5 +107,21 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, Lo
     List<Object[]> findByDateRangeAndRole(@Param("fechaInicio") LocalDate fechaInicio, 
                                           @Param("fechaFin") LocalDate fechaFin, 
                                           @Param("rol") String rol);
+    
+    /**
+     * Obtener todas las marcaciones por rango de fechas sin filtrar por rol (para TODOS)
+     * Excluye los roles: TABLET1, TABLET2, PRINCIPAL
+     */
+    @Query(value = "SELECT ar.id, ar.user_id, ar.attendance_type, ar.recorded_date, ar.recorded_time, ar.recorded_at, " +
+                   "COALESCE(CONCAT(u.name, ' ', u.last_name), 'Usuario ' || ar.user_id) as full_name, " +
+                   "u.email, r.name as role_name " +
+                   "FROM module_attendance_records ar " +
+                   "LEFT JOIN users u ON ar.user_id = u.id " +
+                   "LEFT JOIN roles r ON u.role = r.id " +
+                   "WHERE ar.recorded_date BETWEEN :fechaInicio AND :fechaFin " +
+                   "AND LOWER(r.name) NOT IN ('tablet1', 'tablet2', 'principal') " +
+                   "ORDER BY u.name ASC, ar.recorded_at ASC", nativeQuery = true)
+    List<Object[]> findByDateRangeAllRoles(@Param("fechaInicio") LocalDate fechaInicio, 
+                                            @Param("fechaFin") LocalDate fechaFin);
 }
 

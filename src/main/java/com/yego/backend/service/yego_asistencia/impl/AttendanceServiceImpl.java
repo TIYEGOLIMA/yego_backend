@@ -803,7 +803,14 @@ public class AttendanceServiceImpl implements AttendanceService {
         
         try {
             // Obtener marcaciones por rango de fechas y rol
-            List<Object[]> recordsWithNames = attendanceRepository.findByDateRangeAndRole(fechaConsultaInicio, fechaConsultaFin, rol);
+            // Si el rol es "TODOS", obtener todas las marcaciones sin filtrar por rol
+            List<Object[]> recordsWithNames;
+            if (rol != null && rol.equalsIgnoreCase("TODOS")) {
+                log.info("📊 [AttendanceService] Rol es TODOS - Obteniendo marcaciones de todos los roles");
+                recordsWithNames = attendanceRepository.findByDateRangeAllRoles(fechaConsultaInicio, fechaConsultaFin);
+            } else {
+                recordsWithNames = attendanceRepository.findByDateRangeAndRole(fechaConsultaInicio, fechaConsultaFin, rol);
+            }
             
             log.info("📊 [AttendanceService] Marcaciones encontradas: {}", recordsWithNames.size());
             
@@ -884,7 +891,8 @@ public class AttendanceServiceImpl implements AttendanceService {
             infoRow2.setHeightInPoints(18);
             infoRow2.createCell(0).setCellValue("Rol Consultado:");
             infoRow2.getCell(0).setCellStyle(infoStyle);
-            infoRow2.createCell(1).setCellValue(rol.toUpperCase());
+            String rolDisplay = (rol != null && rol.equalsIgnoreCase("TODOS")) ? "TODOS LOS ROLES" : rol.toUpperCase();
+            infoRow2.createCell(1).setCellValue(rolDisplay);
             infoRow2.getCell(1).setCellStyle(infoValueStyle);
             
             // Fila 3 de información compacta

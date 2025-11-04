@@ -21,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -119,8 +120,21 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         String nombreCompleto = datosConductor[0];
         String telefono = datosConductor[1];
         
-        // Guardar en la tabla yego_garantizado
-        YegoGarantizado yegoGarantizado = new YegoGarantizado();
+        // Buscar si ya existe un registro para esta licencia, flota y semana
+        Optional<YegoGarantizado> existenteOpt = yegoGarantizadoRepository.findByNumeroLicenciaAndFlotaIdAndSemana(
+            apiResponse.getLicencia(), parkId, semana);
+        
+        YegoGarantizado yegoGarantizado;
+        if (existenteOpt.isPresent()) {
+            // Actualizar registro existente
+            yegoGarantizado = existenteOpt.get();
+            log.info("🔄 [ExternalApiService] Actualizando registro existente - ID: {}, Licencia: {}", 
+                yegoGarantizado.getId(), apiResponse.getLicencia());
+        } else {
+            // Crear nuevo registro
+            yegoGarantizado = new YegoGarantizado();
+            log.info("✨ [ExternalApiService] Creando nuevo registro - Licencia: {}", apiResponse.getLicencia());
+        }
         yegoGarantizado.setNombreCompleto(nombreCompleto);
         yegoGarantizado.setNumeroLicencia(apiResponse.getLicencia());
         yegoGarantizado.setTelefono(telefono);
