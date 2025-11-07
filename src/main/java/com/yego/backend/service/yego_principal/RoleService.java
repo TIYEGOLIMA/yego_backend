@@ -48,16 +48,6 @@ public interface RoleService {
     void remove(Long id);
     
     /**
-     * Obtener roles por defecto
-     */
-    List<RoleResponseDto> getDefaultRoles();
-    
-    /**
-     * Inicializar roles por defecto
-     */
-    void initializeDefaultRoles();
-    
-    /**
      * Obtener cantidad de usuarios por rol
      */
     Long getUserCountByRole(String roleName);

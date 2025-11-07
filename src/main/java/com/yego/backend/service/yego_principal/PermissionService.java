@@ -53,11 +53,6 @@ public interface PermissionService {
     void remove(Long id);
     
     /**
-     * Inicializar permisos por defecto
-     */
-    void initializeDefaultPermissions();
-    
-    /**
      * Verificar si un usuario tiene un permiso específico
      */
     boolean checkPermission(Long userId, String permissionName);

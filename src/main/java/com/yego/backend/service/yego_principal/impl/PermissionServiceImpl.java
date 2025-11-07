@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityNotFoundException;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -143,27 +142,6 @@ public class PermissionServiceImpl implements PermissionService {
     }
     
     @Override
-    @Transactional
-    public void initializeDefaultPermissions() {
-        List<DefaultPermissionData> defaultPermissions = getDefaultPermissionsData();
-        
-        for (DefaultPermissionData defaultPermission : defaultPermissions) {
-            if (!permissionRepository.existsByName(defaultPermission.name)) {
-                CreatePermissionDto createPermissionDto = CreatePermissionDto.builder()
-                        .name(defaultPermission.name)
-                        .description(defaultPermission.description)
-                        .module(defaultPermission.module)
-                        .action(defaultPermission.action)
-                        .active(true)
-                        .build();
-                
-                create(createPermissionDto);
-                log.info("⚙️ Permiso por defecto YEGO Principal creado: {}", defaultPermission.name);
-            }
-        }
-    }
-    
-    @Override
     public boolean checkPermission(Long userId, String permissionName) {
         // Implementación básica - en una implementación completa se verificaría
         // contra los roles del usuario y sus permisos asociados
@@ -186,69 +164,6 @@ public class PermissionServiceImpl implements PermissionService {
                 .created_at(permission.getCreatedAt())
                 .updated_at(permission.getUpdatedAt())
                 .build();
-    }
-    
-    private List<DefaultPermissionData> getDefaultPermissionsData() {
-        return Arrays.asList(
-                // Users module
-                new DefaultPermissionData("users.create", "Crear usuarios", "users", "create"),
-                new DefaultPermissionData("users.read", "Ver usuarios", "users", "read"),
-                new DefaultPermissionData("users.update", "Actualizar usuarios", "users", "update"),
-                new DefaultPermissionData("users.delete", "Eliminar usuarios", "users", "delete"),
-                
-                // Roles module
-                new DefaultPermissionData("roles.create", "Crear roles", "roles", "create"),
-                new DefaultPermissionData("roles.read", "Ver roles", "roles", "read"),
-                new DefaultPermissionData("roles.update", "Actualizar roles", "roles", "update"),
-                new DefaultPermissionData("roles.delete", "Eliminar roles", "roles", "delete"),
-                
-                // Permissions module
-                new DefaultPermissionData("permissions.create", "Crear permisos", "permissions", "create"),
-                new DefaultPermissionData("permissions.read", "Ver permisos", "permissions", "read"),
-                new DefaultPermissionData("permissions.update", "Actualizar permisos", "permissions", "update"),
-                new DefaultPermissionData("permissions.delete", "Eliminar permisos", "permissions", "delete"),
-                
-                // Modules module
-                new DefaultPermissionData("modules.create", "Crear módulos", "modules", "create"),
-                new DefaultPermissionData("modules.read", "Ver módulos", "modules", "read"),
-                new DefaultPermissionData("modules.update", "Actualizar módulos", "modules", "update"),
-                new DefaultPermissionData("modules.delete", "Eliminar módulos", "modules", "delete"),
-                
-                // Imports module
-                new DefaultPermissionData("imports.create", "Crear importaciones", "imports", "create"),
-                new DefaultPermissionData("imports.read", "Ver importaciones", "imports", "read"),
-                new DefaultPermissionData("imports.update", "Actualizar importaciones", "imports", "update"),
-                new DefaultPermissionData("imports.delete", "Eliminar importaciones", "imports", "delete"),
-                
-                // Audit module
-                new DefaultPermissionData("audit.read", "Ver logs de auditoría", "audit", "read"),
-                
-                // Configuration module
-                new DefaultPermissionData("configuration.read", "Ver configuración", "configuration", "read"),
-                new DefaultPermissionData("configuration.update", "Actualizar configuración", "configuration", "update"),
-                
-                // Sessions module
-                new DefaultPermissionData("sessions.read", "Ver sesiones", "sessions", "read"),
-                new DefaultPermissionData("sessions.delete", "Cerrar sesiones", "sessions", "delete"),
-                
-                // Reports module
-                new DefaultPermissionData("reports.read", "Ver reportes", "reports", "read"),
-                new DefaultPermissionData("reports.export", "Exportar reportes", "reports", "export")
-        );
-    }
-    
-    private static class DefaultPermissionData {
-        final String name;
-        final String description;
-        final String module;
-        final String action;
-        
-        DefaultPermissionData(String name, String description, String module, String action) {
-            this.name = name;
-            this.description = description;
-            this.module = module;
-            this.action = action;
-        }
     }
 }
 

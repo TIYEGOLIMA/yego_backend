@@ -184,38 +184,6 @@ public class RoleServiceImpl implements RoleService {
     }
     
     @Override
-    public List<RoleResponseDto> getDefaultRoles() {
-        List<String> defaultRoleNames = Arrays.asList(
-                "superadmin", "admin", "supervisor", "operador", "conductor", "agent"
-        );
-        
-        List<Role> defaultRoles = roleRepository.findByNameIn(defaultRoleNames);
-        
-        return defaultRoles.stream()
-                .map(this::mapToResponseDto)
-                .collect(Collectors.toList());
-    }
-    
-    @Override
-    @Transactional
-    public void initializeDefaultRoles() {
-        List<DefaultRoleData> defaultRoles = getDefaultRolesData();
-        
-        for (DefaultRoleData defaultRole : defaultRoles) {
-            if (!roleRepository.existsByName(defaultRole.name)) {
-                CreateRoleDto createRoleDto = CreateRoleDto.builder()
-                        .name(defaultRole.name)
-                        .description(defaultRole.description)
-                        .permissions(defaultRole.permissions)
-                        .build();
-                
-                create(createRoleDto);
-                log.info("⚙️ Rol por defecto YEGO Principal creado: {}", defaultRole.name);
-            }
-        }
-    }
-    
-    @Override
     public Long getUserCountByRole(String roleName) {
         return userRepository.countActiveUsers(); // Simplificado por ahora
         // En una implementación completa sería:
@@ -242,58 +210,6 @@ public class RoleServiceImpl implements RoleService {
                 .id(role.getId())
                 .name(role.getName())
                 .build();
-    }
-    
-    private List<DefaultRoleData> getDefaultRolesData() {
-        return Arrays.asList(
-                new DefaultRoleData("superadmin", "Super Administrador del Sistema", 
-                        Map.of("all", true)),
-                
-                new DefaultRoleData("admin", "Administrador", 
-                        Map.of(
-                                "users", Arrays.asList("read", "write", "delete"),
-                                "roles", Arrays.asList("read", "write"),
-                                "modules", Arrays.asList("read", "write"),
-                                "imports", Arrays.asList("read", "write"),
-                                "audit", Arrays.asList("read"),
-                                "configuration", Arrays.asList("read", "write")
-                        )),
-                
-                new DefaultRoleData("supervisor", "Supervisor", 
-                        Map.of(
-                                "users", Arrays.asList("read"),
-                                "imports", Arrays.asList("read", "write"),
-                                "audit", Arrays.asList("read")
-                        )),
-                
-                new DefaultRoleData("operador", "Operador", 
-                        Map.of(
-                                "imports", Arrays.asList("read", "write"),
-                                "tickets", Arrays.asList("read", "write")
-                        )),
-                
-                new DefaultRoleData("conductor", "Conductor", 
-                        Map.of(
-                                "profile", Arrays.asList("read", "write")
-                        )),
-                
-                new DefaultRoleData("agent", "Agente de Soporte", 
-                        Map.of(
-                                "tickets", Arrays.asList("read", "write")
-                        ))
-        );
-    }
-    
-    private static class DefaultRoleData {
-        final String name;
-        final String description;
-        final Map<String, Object> permissions;
-        
-        DefaultRoleData(String name, String description, Map<String, Object> permissions) {
-            this.name = name;
-            this.description = description;
-            this.permissions = permissions;
-        }
     }
     
     @Override

@@ -299,7 +299,6 @@ public class ConfigurationServiceImpl implements ConfigurationService {
                 new DefaultConfigData("max_login_attempts", "5", "Máximo intentos de login", "security", "number"),
                 new DefaultConfigData("password_min_length", "8", "Longitud mínima de contraseña", "security", "number"),
                 new DefaultConfigData("enable_audit_logs", "true", "Habilitar logs de auditoría", "audit", "boolean"),
-                new DefaultConfigData("import_max_file_size", "10485760", "Tamaño máximo de archivo de importación (10MB)", "imports", "number"),
                 new DefaultConfigData("default_language", "es", "Idioma por defecto", "system", "string"),
                 new DefaultConfigData("theme_default", "light", "Tema por defecto", "ui", "string")
         );

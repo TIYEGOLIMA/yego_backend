@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -32,18 +31,15 @@ public class ReportServiceImpl implements ReportService {
     private final PermissionRepository permissionRepository;
     private final SessionRepository sessionRepository;
     private final AuditLogRepository auditLogRepository;
-    // private final ImportRepository importRepository; // TODO: Implementar cuando esté disponible
     
     @Override
     public SystemStatsDto getSystemStats(Integer days) {
-        LocalDateTime startDate = LocalDateTime.now().minusDays(days);
-        
         // Obtener estadísticas básicas
         Long totalUsers = userRepository.count();
         Long activeUsers = userRepository.countActiveUsers();
         Long totalRoles = roleRepository.count();
         Long totalPermissions = permissionRepository.count();
-        Long totalImports = 0L; // TODO: importRepository.count();
+        Long totalImports = 0L;
         Long activeSessions = sessionRepository.countActiveSessions();
         
         return SystemStatsDto.builder()
@@ -58,18 +54,14 @@ public class ReportServiceImpl implements ReportService {
     
     @Override
     public DashboardDataDto getDashboardData() {
-        LocalDateTime today = LocalDate.now().atStartOfDay();
-        LocalDateTime todayEnd = today.plusDays(1).minusNanos(1);
-        LocalDateTime yesterday = today.minusDays(1);
-        LocalDateTime yesterdayEnd = yesterday.plusDays(1).minusNanos(1);
         LocalDateTime weekAgo = LocalDateTime.now().minusDays(7);
         
         // Obtener estadísticas del sistema
         SystemStatsDto systemStats = getSystemStats(30);
         
-        // Importaciones de hoy y ayer (simulado por ahora)
-        Long importsToday = 0L; // TODO: importRepository.countByCreatedAtBetween(today, todayEnd);
-        Long importsYesterday = 0L; // TODO: importRepository.countByCreatedAtBetween(yesterday, yesterdayEnd);
+        // Importaciones de hoy y ayer
+        Long importsToday = 0L;
+        Long importsYesterday = 0L;
         
         // Actividad reciente
         List<AuditLog> recentAuditLogs = auditLogRepository.findTop10ByOrderByCreatedAtDesc();
@@ -139,7 +131,7 @@ public class ReportServiceImpl implements ReportService {
         LocalDateTime weekAgo = LocalDateTime.now().minusDays(7);
         
         Long newUsers = userRepository.countByCreatedAtAfter(weekAgo);
-        Long weeklyImports = 0L; // TODO: importRepository.countByCreatedAtAfter(weekAgo);
+        Long weeklyImports = 0L;
         Long weeklyActivity = auditLogRepository.countByCreatedAtAfter(weekAgo);
         
         return WeeklyStatsDto.builder()
