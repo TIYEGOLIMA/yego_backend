@@ -6,6 +6,8 @@ import java.util.List;
 
 public interface DriverMonthlyStatsService {
 
-    List<DriverMonthlyStatsResponse> obtenerEstadisticas();
+    List<DriverMonthlyStatsResponse> procesarYListarActivos();
+
+    List<DriverMonthlyStatsResponse> listarActivos();
 }
 

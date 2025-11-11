@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Immutable;
 
+import java.time.LocalDate;
+
 /**
  * Entidad de solo lectura para la tabla drivers
  * No se usa para guardar, solo para consultas
@@ -39,5 +41,8 @@ public class Driver {
 
     @Column(name = "license_number")
     private String licenseNumber;
+
+    @Column(name = "hire_date")
+    private LocalDate hireDate;
 }
 

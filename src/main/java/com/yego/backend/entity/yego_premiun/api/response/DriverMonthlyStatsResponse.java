@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Value;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Value
@@ -41,5 +42,7 @@ public class DriverMonthlyStatsResponse {
     String licenseNumber;
     Boolean categorySynced;
     LocalDateTime categorySyncedAt;
+    String categoryDetail;
+    LocalDate hireDate;
 }
 
