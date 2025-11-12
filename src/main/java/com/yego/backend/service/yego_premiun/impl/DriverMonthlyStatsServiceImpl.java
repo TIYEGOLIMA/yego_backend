@@ -204,19 +204,12 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
         activo.setCountOrdersCancelledByClient(stat.getCountOrdersCancelledByClient());
         activo.setCountOrdersCancelledByDriver(stat.getCountOrdersCancelledByDriver());
         activo.setCountOrdersPlatform(stat.getCountOrdersPlatform());
-        activo.setCountActiveDrivers(stat.getCountActiveDrivers());
-        activo.setCountDrivers(stat.getCountDrivers());
-        activo.setAcceptanceRate(stat.getAcceptanceRate());
-        activo.setCompletionRate(stat.getCompletionRate());
-        activo.setSumDistance(stat.getSumDistance());
-        activo.setSumOrdersCompleted(stat.getSumOrdersCompleted());
         activo.setSumPriceCash(stat.getSumPriceCash());
         activo.setSumPriceCashless(stat.getSumPriceCashless());
         activo.setSumPriceOtherGas(stat.getSumPriceOtherGas());
         activo.setSumPriceParkCommission(stat.getSumPriceParkCommission());
         activo.setSumPricePlatformCommission(stat.getSumPricePlatformCommission());
         activo.setSumWorkTimeSeconds(stat.getSumWorkTimeSeconds());
-        activo.setTripsPerHour(stat.getTripsPerHour());
     }
 
     private List<DriverMonthlyStatsResponse> construirRespuestas(List<DriverActiveList> activos) {
@@ -256,19 +249,12 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
                 .countOrdersCancelledByClient(activo.getCountOrdersCancelledByClient())
                 .countOrdersCancelledByDriver(activo.getCountOrdersCancelledByDriver())
                 .countOrdersPlatform(activo.getCountOrdersPlatform())
-                .countActiveDrivers(activo.getCountActiveDrivers())
-                .countDrivers(activo.getCountDrivers())
-                .acceptanceRate(activo.getAcceptanceRate())
-                .completionRate(activo.getCompletionRate())
-                .sumDistance(activo.getSumDistance())
-                .sumOrdersCompleted(activo.getSumOrdersCompleted())
                 .sumPriceCash(activo.getSumPriceCash())
                 .sumPriceCashless(activo.getSumPriceCashless())
                 .sumPriceOtherGas(activo.getSumPriceOtherGas())
                 .sumPriceParkCommission(activo.getSumPriceParkCommission())
                 .sumPricePlatformCommission(activo.getSumPricePlatformCommission())
                 .sumWorkTimeSeconds(activo.getSumWorkTimeSeconds())
-                .tripsPerHour(activo.getTripsPerHour())
                 .createdAt(activo.getCreatedAt())
                 .fullName(driver != null ? driver.getFullName() : null)
                 .phone(driver != null ? driver.getPhone() : null)

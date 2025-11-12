@@ -67,24 +67,6 @@ public class DriverActiveList {
     @Column(name = "count_orders_platform")
     private Integer countOrdersPlatform;
 
-    @Column(name = "count_active_drivers")
-    private Integer countActiveDrivers;
-
-    @Column(name = "count_drivers")
-    private Integer countDrivers;
-
-    @Column(name = "acceptance_rate", precision = 10, scale = 6)
-    private BigDecimal acceptanceRate;
-
-    @Column(name = "completion_rate", precision = 10, scale = 6)
-    private BigDecimal completionRate;
-
-    @Column(name = "sum_distance", precision = 15, scale = 6)
-    private BigDecimal sumDistance;
-
-    @Column(name = "sum_orders_completed")
-    private Integer sumOrdersCompleted;
-
     @Column(name = "sum_price_cash", precision = 10, scale = 2)
     private BigDecimal sumPriceCash;
 
@@ -102,9 +84,6 @@ public class DriverActiveList {
 
     @Column(name = "sum_work_time_seconds")
     private Long sumWorkTimeSeconds;
-
-    @Column(name = "trips_per_hour", precision = 10, scale = 6)
-    private BigDecimal tripsPerHour;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
