@@ -3,6 +3,7 @@ package com.yego.backend.service.yego_garantizado.impl;
 import com.yego.backend.entity.yego_garantizado.api.response.EstadoProcesoResponse;
 import com.yego.backend.entity.yego_garantizado.entities.ProcesoGarantizadoEstado;
 import com.yego.backend.repository.yego_garantizado.ProcesoGarantizadoEstadoRepository;
+import com.yego.backend.service.WebSocketService;
 import com.yego.backend.service.yego_garantizado.ProcesoGarantizadoEstadoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ import java.util.Optional;
 public class ProcesoGarantizadoEstadoServiceImpl implements ProcesoGarantizadoEstadoService {
 
     private final ProcesoGarantizadoEstadoRepository repository;
+    private final WebSocketService webSocketService;
 
     @Override
     @Transactional(readOnly = true)
@@ -124,7 +126,28 @@ public class ProcesoGarantizadoEstadoServiceImpl implements ProcesoGarantizadoEs
         
         repository.save(estado);
         
+        // 📡 NOTIFICAR POR WEBSOCKET QUE EL BOTÓN FUE BLOQUEADO
+        webSocketService.enviarEstadoProcesoGarantizado(true, "Procesamiento completado. El botón estará disponible el próximo lunes a las 9:00 AM");
+        
         log.info("✅ [ProcesoGarantizadoEstadoService] Procesamiento registrado - Bloqueado hasta el próximo lunes (ID: {})", estado.getId());
+    }
+    
+    /**
+     * Notifica el estado actual del botón por WebSocket
+     * Útil para notificar cuando la aplicación inicia o cuando se requiere actualizar el frontend
+     */
+    @Override
+    public void notificarEstadoActual() {
+        try {
+            EstadoProcesoResponse estado = obtenerEstadoProceso();
+            webSocketService.enviarEstadoProcesoGarantizado(
+                estado.getBloqueado(), 
+                estado.getMensaje() != null ? estado.getMensaje() : "Estado actualizado"
+            );
+            log.info("📡 [ProcesoGarantizadoEstadoService] Estado actual notificado por WebSocket - Bloqueado: {}", estado.getBloqueado());
+        } catch (Exception e) {
+            log.error("❌ [ProcesoGarantizadoEstadoService] Error notificando estado actual: {}", e.getMessage(), e);
+        }
     }
     
     /**

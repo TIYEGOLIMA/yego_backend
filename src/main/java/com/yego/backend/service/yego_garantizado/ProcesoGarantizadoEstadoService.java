@@ -18,5 +18,11 @@ public interface ProcesoGarantizadoEstadoService {
      * Esto bloquea el botón hasta el próximo lunes
      */
     void registrarProcesamiento();
+    
+    /**
+     * Notifica el estado actual del botón por WebSocket
+     * Útil para notificar cuando la aplicación inicia o cuando se requiere actualizar el frontend
+     */
+    void notificarEstadoActual();
 }
 

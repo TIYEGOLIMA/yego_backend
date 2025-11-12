@@ -2,17 +2,15 @@ package com.yego.backend.config.yego_garantizado;
 
 import com.yego.backend.handler.yego_garantizado.SystemNotificationHandler;
 import com.yego.backend.service.yego_garantizado.CalculoGarantizadoService;
+import com.yego.backend.service.yego_garantizado.ProcesoGarantizadoEstadoService;
 import com.yego.backend.service.yego_garantizado.SystemStatusService;
+import com.yego.backend.service.yego_garantizado.YegoGarantizadoRegistroService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
-
-import java.time.DayOfWeek;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
 
 /**
  * Configuración de tareas programadas para el sistema de garantizado.
@@ -26,19 +24,27 @@ public class SchedulerConfig {
     private final SystemStatusService systemStatusService;
     private final SystemNotificationHandler systemNotificationHandler;
     private final CalculoGarantizadoService calculoGarantizadoService;
+    private final ProcesoGarantizadoEstadoService procesoGarantizadoEstadoService;
+    private final YegoGarantizadoRegistroService yegoGarantizadoRegistroService;
 
     /**
      * Constructor para inyección de dependencias.
      * @param systemStatusService Servicio para gestionar el estado del sistema.
      * @param systemNotificationHandler Handler para notificaciones WebSocket.
      * @param calculoGarantizadoService Servicio para gestionar cálculos de garantizado.
+     * @param procesoGarantizadoEstadoService Servicio para gestionar el estado del botón de procesamiento.
+     * @param yegoGarantizadoRegistroService Servicio para procesar conductores garantizados.
      */
     public SchedulerConfig(SystemStatusService systemStatusService, 
                           SystemNotificationHandler systemNotificationHandler,
-                          CalculoGarantizadoService calculoGarantizadoService) {
+                          CalculoGarantizadoService calculoGarantizadoService,
+                          ProcesoGarantizadoEstadoService procesoGarantizadoEstadoService,
+                          YegoGarantizadoRegistroService yegoGarantizadoRegistroService) {
         this.systemStatusService = systemStatusService;
         this.systemNotificationHandler = systemNotificationHandler;
         this.calculoGarantizadoService = calculoGarantizadoService;
+        this.procesoGarantizadoEstadoService = procesoGarantizadoEstadoService;
+        this.yegoGarantizadoRegistroService = yegoGarantizadoRegistroService;
     }
 
     /**
@@ -91,38 +97,57 @@ public class SchedulerConfig {
     }
 
     /**
-     * Copia automáticamente las configuraciones de la semana anterior a la semana actual
-     * todos los lunes desde las 8:00 AM hasta las 8:50 AM (cada 10 minutos)
-     * Solo se ejecuta si no existen configuraciones para la semana actual
-     * Cron: 0 0,10,20,30,40,50 8 * * MON (segundo minuto hora día mes día_semana)
+     * Notifica que el botón de procesamiento está disponible
+     * Se ejecuta todos los lunes a las 9:00 AM (hora de Lima)
+     * Desbloquea el botón y notifica al frontend
+     * Cron: 0 0 9 * * MON (segundo minuto hora día mes día_semana)
      */
-    @Scheduled(cron = "0 0,10,20,30,40,50 8 * * MON", zone = "America/Lima")
-    public void copiarConfiguracionesAutomaticamenteLunes() {
+    @Scheduled(cron = "0 0 9 * * MON", zone = "America/Lima")
+    public void notificarBotónDisponible() {
         try {
-            LocalDateTime ahora = LocalDateTime.now();
-            DayOfWeek diaActual = ahora.getDayOfWeek();
-            LocalTime horaActual = ahora.toLocalTime();
+            log.info("🔔 [SchedulerConfig] Ejecutando notificación de botón disponible - Lunes 9:00 AM");
             
-            // Verificar que sea lunes y esté entre las 8:00 AM y las 8:50 AM
-            if (diaActual != DayOfWeek.MONDAY) {
-                log.debug("⏭️ [SchedulerConfig] No es lunes, omitiendo copia automática de configuraciones");
-                return;
-            }
+            // Notificar el estado actual (debería estar desbloqueado si es lunes 9 AM)
+            procesoGarantizadoEstadoService.notificarEstadoActual();
             
-            if (horaActual.isBefore(LocalTime.of(8, 0)) || horaActual.isAfter(LocalTime.of(8, 50))) {
-                log.debug("⏭️ [SchedulerConfig] Fuera del horario permitido (8:00-8:50 AM), omitiendo copia automática");
-                return;
-            }
-            
-            log.info("🔄 [SchedulerConfig] Ejecutando copia automática de configuraciones de semana anterior (Lunes {} - {})", 
-                horaActual.toString(), ahora.toLocalDate().toString());
-            
-            calculoGarantizadoService.copiarConfiguracionesAutomaticamente();
-            
-            log.info("✅ [SchedulerConfig] Copia automática de configuraciones completada");
+            log.info("✅ [SchedulerConfig] Notificación de botón disponible enviada");
             
         } catch (Exception e) {
-            log.error("❌ [SchedulerConfig] Error ejecutando copia automática de configuraciones: {}", e.getMessage(), e);
+            log.error("❌ [SchedulerConfig] Error notificando botón disponible: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Procesamiento automático de garantizado
+     * Se ejecuta todos los lunes a las 11:00 AM (hora de Lima)
+     * FLUJO:
+     * 1. Bloquear el botón PRIMERO
+     * 2. Copiar configuraciones de la semana anterior
+     * 3. Ejecutar el procesamiento automático
+     * Cron: 0 0 11 * * MON (segundo minuto hora día mes día_semana)
+     */
+    @Scheduled(cron = "0 0 11 * * MON", zone = "America/Lima")
+    public void procesamientoAutomaticoGarantizado() {
+        try {
+            log.info("🔄 [SchedulerConfig] ===== INICIANDO PROCESAMIENTO AUTOMÁTICO DE GARANTIZADO - Lunes 11:00 AM =====");
+            
+            // PASO 1: Bloquear el botón PRIMERO (antes de procesar)
+            log.info("🔒 [SchedulerConfig] PASO 1: Bloqueando botón de procesamiento...");
+            procesoGarantizadoEstadoService.registrarProcesamiento();
+            log.info("✅ [SchedulerConfig] Botón bloqueado exitosamente");
+            
+            // PASO 2: Copiar configuraciones de la semana anterior a la semana actual
+            log.info("📋 [SchedulerConfig] PASO 2: Copiando configuraciones de semana anterior...");
+            calculoGarantizadoService.copiarConfiguracionesAutomaticamente();
+            log.info("✅ [SchedulerConfig] Configuraciones copiadas exitosamente");
+            
+            // PASO 3: Ejecutar el procesamiento automático de la semana anterior
+            log.info("🚀 [SchedulerConfig] PASO 3: Iniciando procesamiento automático de semana anterior...");
+            yegoGarantizadoRegistroService.procesarYDevolverSemanaAnterior();
+            log.info("✅ [SchedulerConfig] ===== PROCESAMIENTO AUTOMÁTICO COMPLETADO EXITOSAMENTE =====");
+            
+        } catch (Exception e) {
+            log.error("❌ [SchedulerConfig] Error ejecutando procesamiento automático: {}", e.getMessage(), e);
         }
     }
 }
