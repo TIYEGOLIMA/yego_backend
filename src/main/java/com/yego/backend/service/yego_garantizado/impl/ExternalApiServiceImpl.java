@@ -90,29 +90,44 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         
         // Calcular garantizado basado en VIAJES, BONO y HORAS MÍNIMAS según tabla
         // PRIMERO intenta usar valores guardados del frontend, si no usa cálculo automático
-        BigDecimal garantizado = calcularGarantizadoSegunBoSemAct(apiResponse, parkId, semana);
-        
-        // Si el garantizado es 0, significa que NO cumple con los criterios (viajes, bono, horas)
-        // Omitir completamente el procesamiento - NO guardar en la base de datos
-        if (garantizado == null || garantizado.compareTo(BigDecimal.ZERO) <= 0) {
-            log.info("⏭️ [ExternalApiService] Conductor OMITIDO - No cumple criterios mínimos (garantizado: {}) - Licencia: {}", 
-                garantizado, apiResponse.getLicencia());
-            return null; // NO procesar ni guardar
-        }
+        // Retorna ResultadoGarantizado con garantizado calculado y flag cumpleHoras
+        ResultadoGarantizado resultado = calcularGarantizadoSegunBoSemAct(apiResponse, parkId, semana);
+        BigDecimal garantizado = resultado.getGarantizado();
+        String motivoRechazoPorHoras = resultado.getMotivoRechazo();
+        boolean cumpleHoras = resultado.isCumpleHoras();
         
         // Calcular diferencia (garantizado - total)
         BigDecimal diferencia = garantizado.subtract(total);
         
         // Determinar valor de garantizado y motivo de rechazo
+        // CRITERIO: Si NO cumple horas, NO se otorga el garantizado aunque esté calculado
         String garantizadoValor;
         String motivoRechazo;
         
-        if (diferencia.compareTo(BigDecimal.ZERO) >= 0) {
+        if (garantizado == null || garantizado.compareTo(BigDecimal.ZERO) <= 0) {
+            // Si el garantizado es 0 (no cumple viajes o bono), usar el motivo de rechazo
+            garantizadoValor = "No Garantizado";
+            motivoRechazo = motivoRechazoPorHoras != null ? motivoRechazoPorHoras : "No cumple los criterios mínimos (viajes o bono)";
+            log.warn("⚠️ [ExternalApiService] Conductor NO garantizado - Motivo: {} - Licencia: {}", 
+                motivoRechazo, apiResponse.getLicencia());
+        } else if (!cumpleHoras) {
+            // Si NO cumple horas (pero cumple viajes y bono), el garantizado se calcula pero NO se otorga
+            garantizadoValor = "No Garantizado";
+            motivoRechazo = motivoRechazoPorHoras != null ? motivoRechazoPorHoras : "No cumplió las horas establecidas";
+            log.warn("⚠️ [ExternalApiService] Conductor NO garantizado - Garantizado calculado: S/.{} pero NO se otorga - Motivo: {} - Licencia: {}", 
+                garantizado, motivoRechazo, apiResponse.getLicencia());
+        } else if (diferencia.compareTo(BigDecimal.ZERO) >= 0) {
+            // Si cumple todos los criterios (viajes, bono y horas) y el total no supera el garantizado
             garantizadoValor = "Garantizado";
             motivoRechazo = "No hay motivo";
+            log.info("✅ [ExternalApiService] Conductor GARANTIZADO - Viajes: {}, Horas: {}, Garantizado: S/.{} - Licencia: {}", 
+                apiResponse.getViajes(), apiResponse.getHorasTrabajadasEntero(), garantizado, apiResponse.getLicencia());
         } else {
+            // Si cumple todos los criterios (viajes, bono y horas) pero el total supera el garantizado
             garantizadoValor = "No Garantizado";
             motivoRechazo = "Total supera garantizado (S/." + total + " > S/." + garantizado + ")";
+            log.warn("⚠️ [ExternalApiService] Conductor NO garantizado - Total supera garantizado - Motivo: {} - Licencia: {}", 
+                motivoRechazo, apiResponse.getLicencia());
         }
         
         // Obtener datos del conductor desde la tabla drivers
@@ -180,8 +195,9 @@ public class ExternalApiServiceImpl implements ExternalApiService {
     /**
      * Calcula el garantizado basado en VIAJES, BONO y HORAS MÍNIMAS según tabla
      * PRIMERO intenta buscar valores guardados desde el frontend, si no existen usa cálculo automático
+     * Retorna ResultadoGarantizado con el garantizado y el motivo de rechazo (si no cumple horas)
      */
-    private BigDecimal calcularGarantizadoSegunBoSemAct(GarantizadoRequest apiResponse, String parkId, String semana) {
+    private ResultadoGarantizado calcularGarantizadoSegunBoSemAct(GarantizadoRequest apiResponse, String parkId, String semana) {
         try {
             Integer viajes = apiResponse.getViajes();
             BigDecimal boSemAct = new BigDecimal(apiResponse.getBoSemAct());
@@ -197,7 +213,7 @@ public class ExternalApiServiceImpl implements ExternalApiService {
             // Validar que se pudo obtener país y ciudad
             if (paisYCiudad == null || paisYCiudad.length < 2) {
                 log.error("❌ [ExternalApiService] No se pudo obtener país/ciudad para parkId: {}", parkId);
-                return BigDecimal.ZERO;
+                return new ResultadoGarantizado(BigDecimal.ZERO, "No se pudo obtener país/ciudad para la flota", false);
             }
             
             String pais = paisYCiudad[0];
@@ -234,16 +250,16 @@ public class ExternalApiServiceImpl implements ExternalApiService {
                 if (registrosFiltrados.isEmpty()) {
                     log.warn("⚠️ [ExternalApiService] Se encontraron {} registros pero ninguno corresponde al tipo de brandeo ({}) para semana {} en {} - {}", 
                         calculosGuardados.size(), brandeo, semana, pais, ciudad);
-                    return BigDecimal.ZERO;
+                    return new ResultadoGarantizado(BigDecimal.ZERO, "No hay configuración para el tipo de brandeo", false);
                 }
                 
                 // Evaluar TODOS los registros filtrados para encontrar el que el conductor cumple
-                BigDecimal mejorGarantizado = BigDecimal.ZERO;
+                ResultadoGarantizado mejorResultado = new ResultadoGarantizado(BigDecimal.ZERO, null, false);
                 CalculoGarantizado calculoQueCumple = null;
                 
                 for (CalculoGarantizado calculo : registrosFiltrados) {
-                    // Evaluar si este registro cumple los criterios
-                    BigDecimal garantizadoEvaluado = calcularGarantizadoDesdeValoresGuardados(
+                    // Evaluar si este registro cumple los criterios (PRIMERO viajes, LUEGO bono, LUEGO calcula garantizado, FINALMENTE valida horas)
+                    ResultadoGarantizado resultadoEvaluado = calcularGarantizadoDesdeValoresGuardados(
                         viajes, boSemAct, horasTrabajadas, brandeo, 
                         calculo.getViajesConBrandeo(), calculo.getBonoConBrandeo(), 
                         calculo.getGarantizadoConBrandeo(), calculo.getHorasConBrandeo(), 
@@ -251,32 +267,255 @@ public class ExternalApiServiceImpl implements ExternalApiService {
                         calculo.getGarantizadoSinBrandeo(), calculo.getHorasSinBrandeo()
                     );
                     
-                    // Si este registro cumple los criterios y tiene un garantizado mayor
-                    if (garantizadoEvaluado.compareTo(BigDecimal.ZERO) > 0 && 
-                        garantizadoEvaluado.compareTo(mejorGarantizado) > 0) {
-                        mejorGarantizado = garantizadoEvaluado;
-                        calculoQueCumple = calculo;
+                    // Priorizar resultados que cumplan horas y tengan garantizado mayor
+                    if (resultadoEvaluado.isCumpleHoras() && 
+                        resultadoEvaluado.getGarantizado().compareTo(BigDecimal.ZERO) > 0) {
+                        // Si cumple horas y tiene garantizado, priorizar el mayor
+                        if (resultadoEvaluado.getGarantizado().compareTo(mejorResultado.getGarantizado()) > 0) {
+                            mejorResultado = resultadoEvaluado;
+                            calculoQueCumple = calculo;
+                        }
+                    } else if (!mejorResultado.isCumpleHoras() && 
+                               resultadoEvaluado.getGarantizado().compareTo(BigDecimal.ZERO) > 0 &&
+                               resultadoEvaluado.getMotivoRechazo() != null &&
+                               resultadoEvaluado.getMotivoRechazo().contains("horas establecidas")) {
+                        // Si ningún registro cumple horas, guardar el que tiene garantizado calculado pero no cumple horas
+                        if (mejorResultado.getGarantizado().compareTo(BigDecimal.ZERO) == 0 ||
+                            resultadoEvaluado.getGarantizado().compareTo(mejorResultado.getGarantizado()) > 0) {
+                            mejorResultado = resultadoEvaluado;
+                        }
+                    } else if (mejorResultado.getGarantizado().compareTo(BigDecimal.ZERO) == 0 &&
+                               resultadoEvaluado.getGarantizado().compareTo(BigDecimal.ZERO) > 0) {
+                        // Si no hay resultado mejor, usar este
+                        mejorResultado = resultadoEvaluado;
                     }
                 }
                 
-                if (calculoQueCumple != null && mejorGarantizado.compareTo(BigDecimal.ZERO) > 0) {
+                // Retornar el mejor resultado encontrado
+                if (calculoQueCumple != null && mejorResultado.isCumpleHoras() && 
+                    mejorResultado.getGarantizado().compareTo(BigDecimal.ZERO) > 0) {
                     log.info("✅ [ExternalApiService] Usando garantizado guardado de semana {} (Brandeo: {}): S/.{}", 
-                        semana, brandeo, mejorGarantizado);
-                    return mejorGarantizado;
+                        semana, brandeo, mejorResultado.getGarantizado());
+                    return mejorResultado;
+                } else if (mejorResultado.getGarantizado().compareTo(BigDecimal.ZERO) > 0 && 
+                           !mejorResultado.isCumpleHoras() &&
+                           mejorResultado.getMotivoRechazo() != null &&
+                           mejorResultado.getMotivoRechazo().contains("horas establecidas")) {
+                    // Si no cumple horas pero tiene garantizado calculado, retornar con motivo
+                    log.warn("⚠️ [ExternalApiService] Conductor NO cumple horas establecidas - Garantizado calculado: S/.{} - Motivo: {}", 
+                        mejorResultado.getGarantizado(), mejorResultado.getMotivoRechazo());
+                    return mejorResultado;
+                } else if (mejorResultado.getGarantizado().compareTo(BigDecimal.ZERO) > 0) {
+                    // Si tiene garantizado calculado pero no cumple horas (otro motivo)
+                    return mejorResultado;
                 } else {
                     log.warn("⚠️ [ExternalApiService] Se encontraron {} registros {} pero el conductor NO cumple criterios de ninguno", 
                         registrosFiltrados.size(), brandeo ? "CON BRANDEO" : "SIN BRANDEO");
-                    return BigDecimal.ZERO;
+                    return new ResultadoGarantizado(BigDecimal.ZERO, "No cumple los criterios de viajes o bono", false);
                 }
             } else {
-                // No se encontraron valores guardados - retornar 0
-                log.warn("⚠️ [ExternalApiService] No se encontraron valores guardados para semana {} en {} - {}", semana, pais, ciudad);
-                return BigDecimal.ZERO;
+                // No se encontraron valores guardados para la semana actual
+                // Buscar configuraciones de la semana anterior y copiarlas
+                log.warn("⚠️ [ExternalApiService] No se encontraron valores guardados para semana {} en {} - {}. Buscando semana anterior...", 
+                    semana, pais, ciudad);
+                
+                String semanaAnterior = obtenerSemanaAnterior(semana);
+                List<CalculoGarantizado> calculosSemanaAnterior = calculoGarantizadoRepository
+                        .findAllByPaisAndCiudadAndSemana(pais.toLowerCase(), ciudad.toLowerCase(), semanaAnterior);
+                
+                if (!calculosSemanaAnterior.isEmpty()) {
+                    log.info("✅ [ExternalApiService] Se encontraron {} configuraciones de la semana anterior ({}). Copiándolas a la semana actual ({}).", 
+                        calculosSemanaAnterior.size(), semanaAnterior, semana);
+                    
+                    // Copiar todas las configuraciones de la semana anterior a la semana actual
+                    copiarConfiguracionesDeSemanaAnterior(calculosSemanaAnterior, pais.toLowerCase(), ciudad.toLowerCase(), semana);
+                    
+                    // Ahora buscar las configuraciones copiadas para la semana actual
+                    List<CalculoGarantizado> calculosCopiados = calculoGarantizadoRepository
+                            .findAllByPaisAndCiudadAndSemana(pais.toLowerCase(), ciudad.toLowerCase(), semana);
+                    
+                    if (!calculosCopiados.isEmpty()) {
+                        log.info("📋 [ExternalApiService] Se copiaron {} configuraciones de semana {} a semana {}", 
+                            calculosCopiados.size(), semanaAnterior, semana);
+                        
+                        // Filtrar registros según el tipo de brandeo
+                        List<CalculoGarantizado> registrosFiltrados;
+                        
+                        if (brandeo) {
+                            registrosFiltrados = calculosCopiados.stream()
+                                    .filter(c -> c.getViajesConBrandeo() != null && c.getViajesConBrandeo() > 0)
+                                    .collect(java.util.stream.Collectors.toList());
+                        } else {
+                            registrosFiltrados = calculosCopiados.stream()
+                                    .filter(c -> c.getViajesSinBrandeo() != null && c.getViajesSinBrandeo() > 0)
+                                    .collect(java.util.stream.Collectors.toList());
+                        }
+                        
+                        if (!registrosFiltrados.isEmpty()) {
+                            // Evaluar TODOS los registros filtrados para encontrar el que el conductor cumple
+                            ResultadoGarantizado mejorResultado = new ResultadoGarantizado(BigDecimal.ZERO, null, false);
+                            CalculoGarantizado calculoQueCumple = null;
+                            
+                            for (CalculoGarantizado calculo : registrosFiltrados) {
+                                ResultadoGarantizado resultadoEvaluado = calcularGarantizadoDesdeValoresGuardados(
+                                    viajes, boSemAct, horasTrabajadas, brandeo, 
+                                    calculo.getViajesConBrandeo(), calculo.getBonoConBrandeo(), 
+                                    calculo.getGarantizadoConBrandeo(), calculo.getHorasConBrandeo(), 
+                                    calculo.getViajesSinBrandeo(), calculo.getBonoSinBrandeo(), 
+                                    calculo.getGarantizadoSinBrandeo(), calculo.getHorasSinBrandeo()
+                                );
+                                
+                                // Priorizar resultados que cumplan horas y tengan garantizado mayor
+                                if (resultadoEvaluado.isCumpleHoras() && 
+                                    resultadoEvaluado.getGarantizado().compareTo(BigDecimal.ZERO) > 0) {
+                                    // Si cumple horas y tiene garantizado, priorizar el mayor
+                                    if (resultadoEvaluado.getGarantizado().compareTo(mejorResultado.getGarantizado()) > 0) {
+                                        mejorResultado = resultadoEvaluado;
+                                        calculoQueCumple = calculo;
+                                    }
+                                } else if (!mejorResultado.isCumpleHoras() && 
+                                           resultadoEvaluado.getGarantizado().compareTo(BigDecimal.ZERO) > 0 &&
+                                           resultadoEvaluado.getMotivoRechazo() != null &&
+                                           resultadoEvaluado.getMotivoRechazo().contains("horas establecidas")) {
+                                    // Si ningún registro cumple horas, guardar el que tiene garantizado calculado pero no cumple horas
+                                    if (mejorResultado.getGarantizado().compareTo(BigDecimal.ZERO) == 0 ||
+                                        resultadoEvaluado.getGarantizado().compareTo(mejorResultado.getGarantizado()) > 0) {
+                                        mejorResultado = resultadoEvaluado;
+                                    }
+                                } else if (mejorResultado.getGarantizado().compareTo(BigDecimal.ZERO) == 0 &&
+                                           resultadoEvaluado.getGarantizado().compareTo(BigDecimal.ZERO) > 0) {
+                                    // Si no hay resultado mejor, usar este
+                                    mejorResultado = resultadoEvaluado;
+                                }
+                            }
+                            
+                            // Retornar el mejor resultado encontrado
+                            if (calculoQueCumple != null && mejorResultado.isCumpleHoras() && 
+                                mejorResultado.getGarantizado().compareTo(BigDecimal.ZERO) > 0) {
+                                log.info("✅ [ExternalApiService] Usando garantizado copiado de semana anterior {} para semana {} (Brandeo: {}): S/.{}", 
+                                    semanaAnterior, semana, brandeo, mejorResultado.getGarantizado());
+                                return mejorResultado;
+                            } else if (mejorResultado.getGarantizado().compareTo(BigDecimal.ZERO) > 0 && 
+                                       !mejorResultado.isCumpleHoras() &&
+                                       mejorResultado.getMotivoRechazo() != null &&
+                                       mejorResultado.getMotivoRechazo().contains("horas establecidas")) {
+                                // Si no cumple horas pero tiene garantizado calculado, retornar con motivo
+                                log.warn("⚠️ [ExternalApiService] Conductor NO cumple horas establecidas - Garantizado calculado: S/.{} - Motivo: {}", 
+                                    mejorResultado.getGarantizado(), mejorResultado.getMotivoRechazo());
+                                return mejorResultado;
+                            } else if (mejorResultado.getGarantizado().compareTo(BigDecimal.ZERO) > 0) {
+                                // Si tiene garantizado calculado pero no cumple horas (otro motivo)
+                                return mejorResultado;
+                            } else {
+                                log.warn("⚠️ [ExternalApiService] Se copiaron configuraciones pero el conductor NO cumple criterios de ninguna");
+                                return new ResultadoGarantizado(BigDecimal.ZERO, "No cumple los criterios de viajes o bono", false);
+                            }
+                        } else {
+                            log.warn("⚠️ [ExternalApiService] Se copiaron configuraciones pero ninguna corresponde al tipo de brandeo ({})", brandeo);
+                            return new ResultadoGarantizado(BigDecimal.ZERO, "No hay configuración para el tipo de brandeo", false);
+                        }
+                    } else {
+                        log.warn("⚠️ [ExternalApiService] No se pudieron copiar las configuraciones de semana anterior");
+                        return new ResultadoGarantizado(BigDecimal.ZERO, "No se pudieron copiar las configuraciones de semana anterior", false);
+                    }
+                } else {
+                    log.warn("⚠️ [ExternalApiService] No se encontraron configuraciones para la semana anterior {} en {} - {}", 
+                        semanaAnterior, pais, ciudad);
+                    return new ResultadoGarantizado(BigDecimal.ZERO, "No se encontraron configuraciones para la semana anterior", false);
+                }
             }
             
         } catch (Exception e) {
             log.error("❌ [ExternalApiService] Error calculando garantizado: {}", e.getMessage());
-            return BigDecimal.ZERO;
+            return new ResultadoGarantizado(BigDecimal.ZERO, "Error al calcular garantizado: " + e.getMessage(), false);
+        }
+    }
+    
+    /**
+     * Obtiene la semana anterior desde una semana específica
+     * Formato de entrada: "SEMANA45" -> "SEMANA44"
+     */
+    private String obtenerSemanaAnterior(String semana) {
+        try {
+            // Extraer el número de la semana (ej: "SEMANA45" -> 45)
+            String numeroSemanaStr = semana.replaceAll("SEMANA", "").replaceAll("[^0-9]", "");
+            int numeroSemana = Integer.parseInt(numeroSemanaStr);
+            
+            // Calcular semana anterior
+            int semanaAnterior = numeroSemana - 1;
+            
+            // Si estamos en la semana 1, la semana anterior es la última semana del año (52)
+            if (semanaAnterior <= 0) {
+                semanaAnterior = 52;
+            }
+            
+            return "SEMANA" + semanaAnterior;
+        } catch (Exception e) {
+            log.error("❌ [ExternalApiService] Error obteniendo semana anterior desde {}: {}", semana, e.getMessage());
+            // Fallback: retornar semana 1 si hay error
+            return "SEMANA1";
+        }
+    }
+    
+    /**
+     * Copia las configuraciones de la semana anterior a la semana actual
+     * Guarda las configuraciones copiadas en la base de datos
+     * Verifica si ya existen configuraciones para la semana actual antes de copiar
+     */
+    private void copiarConfiguracionesDeSemanaAnterior(List<CalculoGarantizado> configuracionesAnteriores, 
+                                                        String pais, String ciudad, String semanaActual) {
+        try {
+            log.info("📋 [ExternalApiService] Copiando {} configuraciones de semana anterior a semana {}", 
+                configuracionesAnteriores.size(), semanaActual);
+            
+            // Verificar si ya existen configuraciones para la semana actual
+            List<CalculoGarantizado> configuracionesExistentes = calculoGarantizadoRepository
+                    .findAllByPaisAndCiudadAndSemana(pais, ciudad, semanaActual);
+            
+            if (!configuracionesExistentes.isEmpty()) {
+                log.info("ℹ️ [ExternalApiService] Ya existen {} configuraciones para semana {} en {} - {}. No se copiarán.", 
+                    configuracionesExistentes.size(), semanaActual, pais, ciudad);
+                return;
+            }
+            
+            int configuracionesCopiadas = 0;
+            for (CalculoGarantizado configAnterior : configuracionesAnteriores) {
+                try {
+                    // Crear nueva configuración para la semana actual
+                    CalculoGarantizado configNueva = new CalculoGarantizado();
+                    configNueva.setPais(pais);
+                    configNueva.setCiudad(ciudad);
+                    configNueva.setSemana(semanaActual);
+                    
+                    // Copiar todos los valores de la configuración anterior
+                    configNueva.setViajesConBrandeo(configAnterior.getViajesConBrandeo());
+                    configNueva.setBonoConBrandeo(configAnterior.getBonoConBrandeo());
+                    configNueva.setGarantizadoConBrandeo(configAnterior.getGarantizadoConBrandeo());
+                    configNueva.setHorasConBrandeo(configAnterior.getHorasConBrandeo());
+                    
+                    configNueva.setViajesSinBrandeo(configAnterior.getViajesSinBrandeo());
+                    configNueva.setBonoSinBrandeo(configAnterior.getBonoSinBrandeo());
+                    configNueva.setGarantizadoSinBrandeo(configAnterior.getGarantizadoSinBrandeo());
+                    configNueva.setHorasSinBrandeo(configAnterior.getHorasSinBrandeo());
+                    
+                    configNueva.setActivo(true);
+                    
+                    // Guardar en la base de datos
+                    calculoGarantizadoRepository.save(configNueva);
+                    configuracionesCopiadas++;
+                    
+                    log.debug("✅ [ExternalApiService] Configuración copiada: {} - {} - {} (desde semana anterior)", 
+                        pais, ciudad, semanaActual);
+                } catch (Exception e) {
+                    log.error("❌ [ExternalApiService] Error copiando una configuración individual: {}", e.getMessage());
+                }
+            }
+            
+            log.info("✅ [ExternalApiService] Se copiaron {} de {} configuraciones de semana anterior a semana {}", 
+                configuracionesCopiadas, configuracionesAnteriores.size(), semanaActual);
+            
+        } catch (Exception e) {
+            log.error("❌ [ExternalApiService] Error copiando configuraciones de semana anterior: {}", e.getMessage());
         }
     }
     
@@ -285,7 +524,39 @@ public class ExternalApiServiceImpl implements ExternalApiService {
      * Compara viajes, bono y horas actuales vs guardadas para determinar cuál usar
      * Si brandeo=true, solo compara con conBrandeo; si brandeo=false, solo con sinBrandeo
      */
-    private BigDecimal calcularGarantizadoDesdeValoresGuardados(Integer viajes, BigDecimal bono, Integer horasTrabajadas, boolean brandeo,
+    /**
+     * Clase auxiliar para retornar el resultado del cálculo de garantizado
+     */
+    private static class ResultadoGarantizado {
+        private final BigDecimal garantizado;
+        private final String motivoRechazo;
+        private final boolean cumpleHoras; // Flag para indicar si cumple horas
+        
+        public ResultadoGarantizado(BigDecimal garantizado, String motivoRechazo, boolean cumpleHoras) {
+            this.garantizado = garantizado;
+            this.motivoRechazo = motivoRechazo;
+            this.cumpleHoras = cumpleHoras;
+        }
+        
+        public BigDecimal getGarantizado() {
+            return garantizado;
+        }
+        
+        public String getMotivoRechazo() {
+            return motivoRechazo;
+        }
+        
+        public boolean isCumpleHoras() {
+            return cumpleHoras;
+        }
+    }
+    
+    /**
+     * Calcula el garantizado validando PRIMERO viajes, LUEGO bono, y CALCULA el garantizado
+     * LUEGO valida horas - Si NO cumple horas, retorna el garantizado calculado pero con motivo "No cumplió las horas establecidas"
+     * CRITERIO: El garantizado se calcula basado en viajes y bono, pero si no cumple horas, NO se otorga (motivo de rechazo)
+     */
+    private ResultadoGarantizado calcularGarantizadoDesdeValoresGuardados(Integer viajes, BigDecimal bono, Integer horasTrabajadas, boolean brandeo,
             Integer viajesConBrandeo, BigDecimal bonoConBrandeo, BigDecimal garantizadoConBrandeo, Integer horasConBrandeo,
             Integer viajesSinBrandeo, BigDecimal bonoSinBrandeo, BigDecimal garantizadoSinBrandeo, Integer horasSinBrandeo) {
         
@@ -296,62 +567,96 @@ public class ExternalApiServiceImpl implements ExternalApiService {
         log.info("📊   SinBrandeo: Viajes={}, Bono={}, Horas={}, Garantizado={}", 
             viajesSinBrandeo, bonoSinBrandeo, horasSinBrandeo, garantizadoSinBrandeo);
         
-        // Verificar si cumple criterios de conBrandeo (con logs detallados)
-        boolean cumpleConBrandeo = false;
-        String motivoNoCumpleConBrandeo = "";
-        
-        if (viajesConBrandeo == null || viajesConBrandeo <= 0) {
-            motivoNoCumpleConBrandeo = "No hay configuración de viajes con brandeo";
-        } else if (viajes < viajesConBrandeo) {
-            motivoNoCumpleConBrandeo = String.format("Viajes insuficientes: %d < %d (requiere mínimo %d viajes)", 
-                viajes, viajesConBrandeo, viajesConBrandeo);
-        } else if (bono.compareTo(bonoConBrandeo) < 0) {
-            motivoNoCumpleConBrandeo = String.format("Bono insuficiente: %.2f < %.2f (requiere mínimo %.2f)", 
-                bono.doubleValue(), bonoConBrandeo.doubleValue(), bonoConBrandeo.doubleValue());
-        } else if (horasTrabajadas < (horasConBrandeo != null ? horasConBrandeo : 0)) {
-            motivoNoCumpleConBrandeo = String.format("Horas insuficientes: %d < %d (requiere mínimo %d horas)", 
-                horasTrabajadas, horasConBrandeo != null ? horasConBrandeo : 0, horasConBrandeo != null ? horasConBrandeo : 0);
-        } else {
-            cumpleConBrandeo = true;
-        }
-        
-        // Verificar si cumple criterios de sinBrandeo (con logs detallados)
-        boolean cumpleSinBrandeo = false;
-        String motivoNoCumpleSinBrandeo = "";
-        
-        if (viajesSinBrandeo == null || viajesSinBrandeo <= 0) {
-            motivoNoCumpleSinBrandeo = "No hay configuración de viajes sin brandeo";
-        } else if (viajes < viajesSinBrandeo) {
-            motivoNoCumpleSinBrandeo = String.format("Viajes insuficientes: %d < %d (requiere mínimo %d viajes)", 
-                viajes, viajesSinBrandeo, viajesSinBrandeo);
-        } else if (bono.compareTo(bonoSinBrandeo) < 0) {
-            motivoNoCumpleSinBrandeo = String.format("Bono insuficiente: %.2f < %.2f (requiere mínimo %.2f)", 
-                bono.doubleValue(), bonoSinBrandeo.doubleValue(), bonoSinBrandeo.doubleValue());
-        } else if (horasTrabajadas < (horasSinBrandeo != null ? horasSinBrandeo : 0)) {
-            motivoNoCumpleSinBrandeo = String.format("Horas insuficientes: %d < %d (requiere mínimo %d horas)", 
-                horasTrabajadas, horasSinBrandeo != null ? horasSinBrandeo : 0, horasSinBrandeo != null ? horasSinBrandeo : 0);
-        } else {
-            cumpleSinBrandeo = true;
-        }
-        
-        // Si tiene brandeo, solo verifica conBrandeo
+        // Validar según tipo de brandeo
         if (brandeo) {
-            if (cumpleConBrandeo) {
-                log.info("✅ [ExternalApiService] Con brandeo, cumple TODOS los criterios: S/.{}", garantizadoConBrandeo);
-                return garantizadoConBrandeo;
-            } else {
-                log.warn("⚠️ [ExternalApiService] Con brandeo pero NO cumple criterios: {}", motivoNoCumpleConBrandeo);
-                return BigDecimal.ZERO;
+            // Validar conBrandeo
+            if (viajesConBrandeo == null || viajesConBrandeo <= 0) {
+                log.warn("⚠️ [ExternalApiService] No hay configuración de viajes con brandeo");
+                return new ResultadoGarantizado(BigDecimal.ZERO, "No hay configuración de viajes con brandeo", false);
             }
+            
+            // PRIMERO: Validar viajes
+            if (viajes < viajesConBrandeo) {
+                String motivo = String.format("Viajes insuficientes: %d < %d (requiere mínimo %d viajes)", 
+                    viajes, viajesConBrandeo, viajesConBrandeo);
+                log.warn("⚠️ [ExternalApiService] Con brandeo - {}", motivo);
+                return new ResultadoGarantizado(BigDecimal.ZERO, motivo, false);
+            }
+            
+            // SEGUNDO: Validar bono (si cumple viajes, validar bono)
+            if (bono.compareTo(bonoConBrandeo) < 0) {
+                String motivo = String.format("Bono insuficiente: %.2f < %.2f (requiere mínimo %.2f)", 
+                    bono.doubleValue(), bonoConBrandeo.doubleValue(), bonoConBrandeo.doubleValue());
+                log.warn("⚠️ [ExternalApiService] Con brandeo - Cumple viajes pero NO cumple bono: {}", motivo);
+                return new ResultadoGarantizado(BigDecimal.ZERO, motivo, false);
+            }
+            
+            // TERCERO: Calcular garantizado (garantizado de la tabla + bono)
+            // El garantizado de la tabla ya incluye el cálculo basado en viajes y bono
+            BigDecimal garantizadoCalculado = garantizadoConBrandeo != null ? garantizadoConBrandeo : BigDecimal.ZERO;
+            
+            // CUARTO: Validar horas (CRITERIO PRINCIPAL - Si no cumple, NO se otorga el garantizado)
+            Integer horasRequeridas = horasConBrandeo != null ? horasConBrandeo : 0;
+            boolean cumpleHoras = horasTrabajadas != null && horasTrabajadas >= horasRequeridas;
+            
+            if (!cumpleHoras) {
+                String motivo = String.format("No cumplió las horas establecidas: %d < %d (requiere mínimo %d horas). El garantizado calculado es S/.%.2f pero no se otorga por no cumplir las horas mínimas.", 
+                    horasTrabajadas != null ? horasTrabajadas : 0, horasRequeridas, horasRequeridas, garantizadoCalculado.doubleValue());
+                log.warn("⚠️ [ExternalApiService] Con brandeo - Cumple viajes ({}) y bono ({}) pero NO cumple horas ({} < {}) - Garantizado calculado: S/.{} pero NO se otorga", 
+                    viajes, bono, horasTrabajadas != null ? horasTrabajadas : 0, horasRequeridas, garantizadoCalculado);
+                // Retornar el garantizado calculado pero con motivo de rechazo por horas
+                return new ResultadoGarantizado(garantizadoCalculado, motivo, false);
+            }
+            
+            // Si cumple TODOS los criterios (viajes, bono y horas)
+            log.info("✅ [ExternalApiService] Con brandeo, cumple TODOS los criterios (Viajes: {} >= {}, Bono: {} >= {}, Horas: {} >= {}): S/.{}", 
+                viajes, viajesConBrandeo, bono.doubleValue(), bonoConBrandeo.doubleValue(), horasTrabajadas, horasRequeridas, garantizadoCalculado);
+            return new ResultadoGarantizado(garantizadoCalculado, null, true);
+            
         } else {
-            // Si NO tiene brandeo, solo verifica sinBrandeo
-            if (cumpleSinBrandeo) {
-                log.info("✅ [ExternalApiService] Sin brandeo, cumple TODOS los criterios: S/.{}", garantizadoSinBrandeo);
-                return garantizadoSinBrandeo;
-            } else {
-                log.warn("⚠️ [ExternalApiService] Sin brandeo pero NO cumple criterios: {}", motivoNoCumpleSinBrandeo);
-                return BigDecimal.ZERO;
+            // Validar sinBrandeo
+            if (viajesSinBrandeo == null || viajesSinBrandeo <= 0) {
+                log.warn("⚠️ [ExternalApiService] No hay configuración de viajes sin brandeo");
+                return new ResultadoGarantizado(BigDecimal.ZERO, "No hay configuración de viajes sin brandeo", false);
             }
+            
+            // PRIMERO: Validar viajes
+            if (viajes < viajesSinBrandeo) {
+                String motivo = String.format("Viajes insuficientes: %d < %d (requiere mínimo %d viajes)", 
+                    viajes, viajesSinBrandeo, viajesSinBrandeo);
+                log.warn("⚠️ [ExternalApiService] Sin brandeo - {}", motivo);
+                return new ResultadoGarantizado(BigDecimal.ZERO, motivo, false);
+            }
+            
+            // SEGUNDO: Validar bono (si cumple viajes, validar bono)
+            if (bono.compareTo(bonoSinBrandeo) < 0) {
+                String motivo = String.format("Bono insuficiente: %.2f < %.2f (requiere mínimo %.2f)", 
+                    bono.doubleValue(), bonoSinBrandeo.doubleValue(), bonoSinBrandeo.doubleValue());
+                log.warn("⚠️ [ExternalApiService] Sin brandeo - Cumple viajes pero NO cumple bono: {}", motivo);
+                return new ResultadoGarantizado(BigDecimal.ZERO, motivo, false);
+            }
+            
+            // TERCERO: Calcular garantizado (garantizado de la tabla + bono)
+            // El garantizado de la tabla ya incluye el cálculo basado en viajes y bono
+            BigDecimal garantizadoCalculado = garantizadoSinBrandeo != null ? garantizadoSinBrandeo : BigDecimal.ZERO;
+            
+            // CUARTO: Validar horas (CRITERIO PRINCIPAL - Si no cumple, NO se otorga el garantizado)
+            Integer horasRequeridas = horasSinBrandeo != null ? horasSinBrandeo : 0;
+            boolean cumpleHoras = horasTrabajadas != null && horasTrabajadas >= horasRequeridas;
+            
+            if (!cumpleHoras) {
+                String motivo = String.format("No cumplió las horas establecidas: %d < %d (requiere mínimo %d horas). El garantizado calculado es S/.%.2f pero no se otorga por no cumplir las horas mínimas.", 
+                    horasTrabajadas != null ? horasTrabajadas : 0, horasRequeridas, horasRequeridas, garantizadoCalculado.doubleValue());
+                log.warn("⚠️ [ExternalApiService] Sin brandeo - Cumple viajes ({}) y bono ({}) pero NO cumple horas ({} < {}) - Garantizado calculado: S/.{} pero NO se otorga", 
+                    viajes, bono, horasTrabajadas != null ? horasTrabajadas : 0, horasRequeridas, garantizadoCalculado);
+                // Retornar el garantizado calculado pero con motivo de rechazo por horas
+                return new ResultadoGarantizado(garantizadoCalculado, motivo, false);
+            }
+            
+            // Si cumple TODOS los criterios (viajes, bono y horas)
+            log.info("✅ [ExternalApiService] Sin brandeo, cumple TODOS los criterios (Viajes: {} >= {}, Bono: {} >= {}, Horas: {} >= {}): S/.{}", 
+                viajes, viajesSinBrandeo, bono.doubleValue(), bonoSinBrandeo.doubleValue(), horasTrabajadas, horasRequeridas, garantizadoCalculado);
+            return new ResultadoGarantizado(garantizadoCalculado, null, true);
         }
     }
     

@@ -241,7 +241,8 @@ public class CalculoGarantizadoServiceImpl implements CalculoGarantizadoService 
      * Calcula la semana anterior del año
      */
     private String obtenerSemanaAnterior() {
-        java.time.LocalDateTime ahora = java.time.LocalDateTime.now();
+        java.time.ZoneId zonaLima = java.time.ZoneId.of("America/Lima");
+        java.time.LocalDateTime ahora = java.time.LocalDateTime.now(zonaLima);
         int semanaActual = ahora.get(java.time.temporal.WeekFields.ISO.weekOfYear());
         int semanaAnterior = semanaActual - 1;
         
@@ -251,6 +252,124 @@ public class CalculoGarantizadoServiceImpl implements CalculoGarantizadoService 
         }
         
         return "SEMANA" + semanaAnterior;
+    }
+    
+    /**
+     * Copia automáticamente todas las configuraciones de la semana anterior a la semana actual
+     * si no existen configuraciones para la semana actual
+     * Este método se ejecuta automáticamente todos los lunes antes de las 8:50 AM
+     */
+    @Transactional
+    public void copiarConfiguracionesAutomaticamente() {
+        try {
+            log.info("🔄 [CalculoGarantizadoService] Iniciando copia automática de configuraciones de semana anterior");
+            
+            // Obtener semana actual
+            String semanaActual = obtenerSemanaActual();
+            
+            // Obtener semana anterior
+            String semanaAnterior = obtenerSemanaAnterior();
+            
+            log.info("📅 [CalculoGarantizadoService] Semana actual: {}, Semana anterior: {}", semanaActual, semanaAnterior);
+            
+            // Obtener todas las combinaciones únicas de país/ciudad de la semana anterior
+            List<Object[]> combinaciones = calculoRepository.findDistinctPaisAndCiudadBySemana(semanaAnterior);
+            
+            if (combinaciones.isEmpty()) {
+                log.warn("⚠️ [CalculoGarantizadoService] No se encontraron configuraciones para la semana anterior {}", semanaAnterior);
+                return;
+            }
+            
+            log.info("📋 [CalculoGarantizadoService] Se encontraron {} combinaciones de país/ciudad en la semana anterior", combinaciones.size());
+            
+            int totalCopiadas = 0;
+            int totalOmitidas = 0;
+            
+            // Iterar sobre cada combinación país/ciudad
+            for (Object[] combinacion : combinaciones) {
+                try {
+                    String pais = (String) combinacion[0];
+                    String ciudad = (String) combinacion[1];
+                    
+                    // Verificar si ya existen configuraciones para la semana actual
+                    List<CalculoGarantizado> configuracionesExistentes = calculoRepository
+                            .findAllByPaisAndCiudadAndSemana(pais.toLowerCase(), ciudad.toLowerCase(), semanaActual);
+                    
+                    if (!configuracionesExistentes.isEmpty()) {
+                        log.debug("ℹ️ [CalculoGarantizadoService] Ya existen {} configuraciones para {} - {} - semana {}. Omitiendo.", 
+                            configuracionesExistentes.size(), pais, ciudad, semanaActual);
+                        totalOmitidas++;
+                        continue;
+                    }
+                    
+                    // Obtener todas las configuraciones de la semana anterior para este país/ciudad
+                    List<CalculoGarantizado> configuracionesAnteriores = calculoRepository
+                            .findAllByPaisAndCiudadAndSemana(pais.toLowerCase(), ciudad.toLowerCase(), semanaAnterior);
+                    
+                    if (configuracionesAnteriores.isEmpty()) {
+                        log.warn("⚠️ [CalculoGarantizadoService] No se encontraron configuraciones para {} - {} - semana {}", 
+                            pais, ciudad, semanaAnterior);
+                        continue;
+                    }
+                    
+                    // Copiar todas las configuraciones de la semana anterior a la semana actual
+                    int copiadas = 0;
+                    for (CalculoGarantizado configAnterior : configuracionesAnteriores) {
+                        try {
+                            CalculoGarantizado configNueva = new CalculoGarantizado();
+                            configNueva.setPais(pais.toLowerCase());
+                            configNueva.setCiudad(ciudad.toLowerCase());
+                            configNueva.setSemana(semanaActual);
+                            
+                            // Copiar todos los valores
+                            configNueva.setViajesConBrandeo(configAnterior.getViajesConBrandeo());
+                            configNueva.setBonoConBrandeo(configAnterior.getBonoConBrandeo());
+                            configNueva.setGarantizadoConBrandeo(configAnterior.getGarantizadoConBrandeo());
+                            configNueva.setHorasConBrandeo(configAnterior.getHorasConBrandeo());
+                            
+                            configNueva.setViajesSinBrandeo(configAnterior.getViajesSinBrandeo());
+                            configNueva.setBonoSinBrandeo(configAnterior.getBonoSinBrandeo());
+                            configNueva.setGarantizadoSinBrandeo(configAnterior.getGarantizadoSinBrandeo());
+                            configNueva.setHorasSinBrandeo(configAnterior.getHorasSinBrandeo());
+                            
+                            configNueva.setActivo(true);
+                            
+                            calculoRepository.save(configNueva);
+                            copiadas++;
+                            
+                        } catch (Exception e) {
+                            log.error("❌ [CalculoGarantizadoService] Error copiando una configuración individual para {} - {}: {}", 
+                                pais, ciudad, e.getMessage());
+                        }
+                    }
+                    
+                    if (copiadas > 0) {
+                        log.info("✅ [CalculoGarantizadoService] Se copiaron {} configuraciones para {} - {} de semana {} a semana {}", 
+                            copiadas, pais, ciudad, semanaAnterior, semanaActual);
+                        totalCopiadas += copiadas;
+                    }
+                    
+                } catch (Exception e) {
+                    log.error("❌ [CalculoGarantizadoService] Error procesando combinación país/ciudad: {}", e.getMessage());
+                }
+            }
+            
+            log.info("✅ [CalculoGarantizadoService] Copia automática completada: {} configuraciones copiadas, {} omitidas (ya existían)", 
+                totalCopiadas, totalOmitidas);
+            
+        } catch (Exception e) {
+            log.error("❌ [CalculoGarantizadoService] Error en copia automática de configuraciones: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Obtiene la semana actual
+     */
+    private String obtenerSemanaActual() {
+        java.time.ZoneId zonaLima = java.time.ZoneId.of("America/Lima");
+        java.time.LocalDateTime ahora = java.time.LocalDateTime.now(zonaLima);
+        int semanaActual = ahora.get(java.time.temporal.WeekFields.ISO.weekOfYear());
+        return "SEMANA" + semanaActual;
     }
 }
 

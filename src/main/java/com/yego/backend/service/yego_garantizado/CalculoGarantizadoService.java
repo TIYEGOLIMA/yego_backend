@@ -22,5 +22,12 @@ public interface CalculoGarantizadoService {
      * @return Lista de conductores procesados
      */
     GarantizadoListResponse guardarConfiguracionesYProcesar(CalcularGarantizadoRequest request);
+    
+    /**
+     * Copia automáticamente todas las configuraciones de la semana anterior a la semana actual
+     * si no existen configuraciones para la semana actual
+     * Este método se ejecuta automáticamente todos los lunes antes de las 8:50 AM
+     */
+    void copiarConfiguracionesAutomaticamente();
 }
 

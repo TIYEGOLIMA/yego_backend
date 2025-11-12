@@ -159,4 +159,29 @@ public class YegoGarantizadoController {
         }
     }
 
+    /**
+     * PROCESAR una semana específica (temporal para procesar semanas históricas)
+     * POST /api/garantizado/procesar-semana/{semana}
+     * Ejemplo: POST /api/garantizado/procesar-semana/SEMANA45
+     */
+    @PostMapping("/procesar-semana/{semana}")
+    public ResponseEntity<String> procesarSemanaEspecifica(@PathVariable String semana) {
+        log.info("🔄 [YegoGarantizadoController] Recibida solicitud para PROCESAR semana específica: {}", semana);
+        
+        try {
+            // Procesar conductores de la semana específica
+            List<com.yego.backend.entity.yego_garantizado.entities.YegoGarantizado> resultados = 
+                yegoGarantizadoRegistroService.procesarConductoresPorSemana(semana);
+            
+            String mensaje = String.format("✅ Procesamiento de %s completado. %d conductores procesados exitosamente", 
+                semana, resultados.size());
+            log.info("✅ [YegoGarantizadoController] {}", mensaje);
+            return ResponseEntity.ok(mensaje);
+        } catch (Exception e) {
+            log.error("❌ [YegoGarantizadoController] Error procesando semana {}: {}", semana, e.getMessage());
+            return ResponseEntity.internalServerError()
+                .body("Error procesando semana " + semana + ": " + e.getMessage());
+        }
+    }
+
 }
