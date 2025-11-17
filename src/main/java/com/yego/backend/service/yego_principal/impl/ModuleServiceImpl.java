@@ -153,6 +153,24 @@ public class ModuleServiceImpl implements ModuleService {
         
         // Verificación especial para superadmin - acceso completo a todos los módulos
         String roleName = user.getRole().getName();
+        
+        // PRIORIDAD 1: Para roles TABLET1 y TABLET2, si el usuario tiene un module_id asignado 
+        // directamente en la tabla users, devolver ese módulo (usuarios estáticos para encuestas)
+        if ((roleName != null && (roleName.toUpperCase().equals("TABLET1") || roleName.toUpperCase().equals("TABLET2"))) 
+                && user.getModuleId() != null) {
+            log.info("📱 [ModuleService] Usuario {} (rol: {}) tiene module_id {} asignado directamente en la tabla users", 
+                    userId, roleName, user.getModuleId());
+            try {
+                ModuleResponse moduloAsignado = obtenerPorId(user.getModuleId());
+                log.info("✅ [ModuleService] Módulo asignado encontrado: {} (ID: {})", 
+                        moduloAsignado.getNombre(), moduloAsignado.getId());
+                return Collections.singletonList(moduloAsignado);
+            } catch (Exception e) {
+                log.warn("⚠️ [ModuleService] El módulo ID {} asignado al usuario {} no existe o no está activo: {}", 
+                        user.getModuleId(), userId, e.getMessage());
+                // Continuar con la lógica de permisos si el módulo asignado no existe
+            }
+        }
         if (roleName != null && "superadmin".equalsIgnoreCase(roleName.trim())) {
             log.info("🔑 [ModuleService] ════════════════════════════════════════════");
             log.info("🔑 [ModuleService] USUARIO ES SUPERADMIN (rol: {})", roleName);
