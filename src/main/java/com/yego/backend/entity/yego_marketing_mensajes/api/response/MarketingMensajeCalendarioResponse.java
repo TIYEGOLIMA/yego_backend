@@ -20,6 +20,7 @@ public class MarketingMensajeCalendarioResponse {
 
     private Long id;
     private String titulo;
+    private String modo;
     private List<String> diasActivos;
     private String horasEspecificas; // JSON string: {"18:00":["Jue"],"17:00":["Vie"]}
 }

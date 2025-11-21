@@ -11,6 +11,14 @@ spring:
   main:
     allow-circular-references: true
 
+  # Configuración de tamaño máximo de archivos
+  servlet:
+    multipart:
+      max-file-size: 10MB  # Tamaño máximo por archivo (videos grandes)
+      max-request-size: 10MB  # Tamaño máximo total de la petición
+      enabled: true
+      file-size-threshold: 2KB
+
   datasource:
     url: jdbc:postgresql://${DB_HOST:168.119.226.236}:${DB_PORT:5432}/${DB_NAME:yego_integral_dev} #cambiar a yego_integral cuando este en produccion
     username: ${DB_USER:yego_user}

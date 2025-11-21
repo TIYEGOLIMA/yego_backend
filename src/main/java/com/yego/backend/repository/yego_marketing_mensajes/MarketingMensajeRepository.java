@@ -42,5 +42,11 @@ public interface MarketingMensajeRepository extends JpaRepository<MarketingMensa
      * @return true si existe, false si no
      */
     boolean existsByTitulo(String titulo);
+    
+    /**
+     * Busca mensajes activos con WhatsApp activado y horas específicas configuradas
+     * @return Lista de mensajes que pueden ser enviados programadamente
+     */
+    List<MarketingMensaje> findByActivoTrueAndWhatsappTrueAndHorasEspecificasIsNotNull();
 }
 

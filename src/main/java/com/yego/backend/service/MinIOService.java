@@ -90,5 +90,89 @@ public class MinIOService {
             return null;
         }
     }
+
+    /**
+     * Elimina un archivo de MinIO basado en su URL
+     * 
+     * @param fileUrl URL del archivo a eliminar
+     * @return true si se eliminó exitosamente, false en caso contrario
+     */
+    public boolean eliminarArchivo(String fileUrl) {
+        if (fileUrl == null || fileUrl.isEmpty()) {
+            log.warn("⚠️ [MinIOService] Intento de eliminar archivo con URL vacía o nula");
+            return false;
+        }
+
+        try {
+            log.info("🗑️ [MinIOService] Eliminando archivo: {}", fileUrl);
+
+            // Extraer el nombre del archivo de la URL
+            // Ejemplo: https://s3.yego.pro/yego-integral/archivo.pdf -> archivo.pdf
+            String fileName = extraerNombreArchivoDeUrl(fileUrl);
+            if (fileName == null || fileName.isEmpty()) {
+                log.warn("⚠️ [MinIOService] No se pudo extraer el nombre del archivo de la URL: {}", fileUrl);
+                return false;
+            }
+
+            // Preparar los headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            // Preparar el body
+            MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
+            body.add("bucket", bucketName);
+            body.add("fileName", fileName);
+
+            HttpEntity<MultiValueMap<String, String>> requestEntity = new HttpEntity<>(body, headers);
+
+            // Realizar la petición DELETE (o POST según la API de MinIO)
+            // Nota: Ajustar según la API real de MinIO
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    minioUrl + "/delete",  // Ajustar endpoint según la API
+                    HttpMethod.POST,  // O DELETE según la API
+                    requestEntity,
+                    new ParameterizedTypeReference<Map<String, Object>>() {}
+            );
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                log.info("✅ [MinIOService] Archivo eliminado exitosamente: {}", fileName);
+                return true;
+            } else {
+                log.error("❌ [MinIOService] Error eliminando archivo. Status: {}", response.getStatusCode());
+                return false;
+            }
+
+        } catch (Exception e) {
+            log.error("❌ [MinIOService] Error al eliminar archivo de MinIO: {}", e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * Extrae el nombre del archivo de una URL
+     */
+    private String extraerNombreArchivoDeUrl(String url) {
+        if (url == null || url.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            // Buscar la última parte después de la última barra
+            int lastSlash = url.lastIndexOf('/');
+            if (lastSlash >= 0 && lastSlash < url.length() - 1) {
+                String fileName = url.substring(lastSlash + 1);
+                // Eliminar parámetros de consulta si existen
+                int queryIndex = fileName.indexOf('?');
+                if (queryIndex > 0) {
+                    fileName = fileName.substring(0, queryIndex);
+                }
+                return fileName;
+            }
+        } catch (Exception e) {
+            log.warn("⚠️ [MinIOService] Error extrayendo nombre de archivo de URL: {}", e.getMessage());
+        }
+        
+        return null;
+    }
 }
 
