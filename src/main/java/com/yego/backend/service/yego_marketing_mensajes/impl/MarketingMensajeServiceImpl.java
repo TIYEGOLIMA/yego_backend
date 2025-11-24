@@ -146,16 +146,8 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
                     return new IllegalArgumentException("Mensaje con ID " + id + " no encontrado");
                 });
 
-        // Guardar valores antiguos para comparación
-        String tituloAnterior = mensaje.getTitulo();
-        String mensajeAnterior = mensaje.getMensaje();
-        String archivoAnterior = mensaje.getArchivo();
+        // Guardar valor anterior necesario para comparación
         String tipoAnterior = mensaje.getTipo();
-        String modoAnterior = mensaje.getModo();
-        Boolean whatsappAnterior = mensaje.getWhatsapp();
-        Boolean yandexAnterior = mensaje.getYandex();
-        String horasEspecificasAnterior = mensaje.getHorasEspecificas();
-        List<String> gruposAnteriores = convertirJsonALista(mensaje.getGrupos());
 
         // Validar que el nuevo título no esté en uso por otro mensaje
         if (request.getTitulo() != null && !request.getTitulo().equals(mensaje.getTitulo())) {
@@ -165,33 +157,19 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
             }
         }
 
-        // Detectar si hay un archivo nuevo
-        boolean archivoNuevo = false;
-        String nuevaUrlArchivo = null;
-        
+        // Manejar archivo nuevo si se proporciona
         if (archivo != null && !archivo.isEmpty()) {
             log.info("📤 [MarketingMensajeService] Subiendo nuevo archivo a MinIO: {}", archivo.getOriginalFilename());
-            nuevaUrlArchivo = minIOService.subirArchivo(archivo);
+            String nuevaUrlArchivo = minIOService.subirArchivo(archivo);
             if (nuevaUrlArchivo != null) {
                 log.info("✅ [MarketingMensajeService] Archivo subido exitosamente: {}", nuevaUrlArchivo);
-                // Comparar si es diferente al archivo anterior
-                if (!nuevaUrlArchivo.equals(archivoAnterior)) {
-                    archivoNuevo = true;
-                    mensaje.setArchivo(nuevaUrlArchivo);
-                    log.info("🔄 [MarketingMensajeService] Archivo nuevo detectado (diferente al anterior)");
-                } else {
-                    log.info("ℹ️ [MarketingMensajeService] Archivo es el mismo que el anterior");
-                }
+                mensaje.setArchivo(nuevaUrlArchivo);
             } else {
                 log.warn("⚠️ [MarketingMensajeService] No se pudo subir el archivo a MinIO, manteniendo el archivo anterior");
             }
         } else if (request.getArchivo() != null) {
-            // Si no hay archivo nuevo pero hay URL en el request, comparar
-            if (!request.getArchivo().equals(archivoAnterior)) {
-                archivoNuevo = true;
-                mensaje.setArchivo(request.getArchivo());
-                log.info("🔄 [MarketingMensajeService] URL de archivo cambiada");
-            }
+            // Si no hay archivo nuevo pero hay URL en el request, actualizar
+            mensaje.setArchivo(request.getArchivo());
         }
 
         // Actualizar solo los campos proporcionados
@@ -266,119 +244,12 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         MarketingMensaje mensajeActualizado = marketingMensajeRepository.save(mensaje);
         log.info("✅ [MarketingMensajeService] Mensaje actualizado exitosamente con ID: {}", mensajeActualizado.getId());
 
-        // Detectar cambios relevantes que requieren reenvío
-        boolean requiereReenvio = false;
-        List<String> cambiosDetectados = new ArrayList<>();
-
-        // Comparar título
-        String tituloNuevo = mensajeActualizado.getTitulo();
-        if ((tituloNuevo == null && tituloAnterior != null) || 
-            (tituloNuevo != null && !tituloNuevo.equals(tituloAnterior))) {
-            requiereReenvio = true;
-            cambiosDetectados.add("título");
-            log.info("🔄 [MarketingMensajeService] Cambio detectado: título");
-        }
-
-        // Comparar mensaje (texto)
-        String mensajeNuevo = mensajeActualizado.getMensaje();
-        if ((mensajeNuevo == null && mensajeAnterior != null) || 
-            (mensajeNuevo != null && !mensajeNuevo.equals(mensajeAnterior))) {
-            requiereReenvio = true;
-            cambiosDetectados.add("texto");
-            log.info("🔄 [MarketingMensajeService] Cambio detectado: texto del mensaje");
-        }
-
-        // Comparar grupos (destinatarios)
-        List<String> gruposNuevos = convertirJsonALista(mensajeActualizado.getGrupos());
-        if ((gruposNuevos == null && gruposAnteriores != null && !gruposAnteriores.isEmpty()) ||
-            (gruposNuevos != null && !gruposNuevos.isEmpty() && !gruposNuevos.equals(gruposAnteriores)) ||
-            (gruposAnteriores != null && !gruposAnteriores.isEmpty() && (gruposNuevos == null || gruposNuevos.isEmpty()))) {
-            requiereReenvio = true;
-            cambiosDetectados.add("destinatarios (grupos)");
-            log.info("🔄 [MarketingMensajeService] Cambio detectado: grupos/destinatarios");
-        }
-
-        // Comparar tipo
-        String tipoNuevo = mensajeActualizado.getTipo();
-        if ((tipoNuevo == null && tipoAnterior != null) || 
-            (tipoNuevo != null && !tipoNuevo.equals(tipoAnterior))) {
-            requiereReenvio = true;
-            cambiosDetectados.add("tipo");
-            log.info("🔄 [MarketingMensajeService] Cambio detectado: tipo");
-        }
-
-        // Comparar modo
-        String modoNuevo = mensajeActualizado.getModo();
-        if ((modoNuevo == null && modoAnterior != null) || 
-            (modoNuevo != null && !modoNuevo.equals(modoAnterior))) {
-            requiereReenvio = true;
-            cambiosDetectados.add("modo");
-            log.info("🔄 [MarketingMensajeService] Cambio detectado: modo");
-        }
-
-        // Comparar canales (whatsapp/yandex)
-        Boolean whatsappNuevo = mensajeActualizado.getWhatsapp();
-        Boolean yandexNuevo = mensajeActualizado.getYandex();
-        if ((whatsappNuevo == null && whatsappAnterior != null) ||
-            (whatsappNuevo != null && !whatsappNuevo.equals(whatsappAnterior)) ||
-            (yandexNuevo == null && yandexAnterior != null) ||
-            (yandexNuevo != null && !yandexNuevo.equals(yandexAnterior))) {
-            requiereReenvio = true;
-            cambiosDetectados.add("canales (whatsapp/yandex)");
-            log.info("🔄 [MarketingMensajeService] Cambio detectado: canales");
-        }
-
-        // Comparar horarios (horasEspecificas)
-        String horasEspecificasNueva = mensajeActualizado.getHorasEspecificas();
-        if ((horasEspecificasNueva == null && horasEspecificasAnterior != null && !horasEspecificasAnterior.trim().isEmpty()) ||
-            (horasEspecificasNueva != null && !horasEspecificasNueva.trim().isEmpty() && !horasEspecificasNueva.equals(horasEspecificasAnterior)) ||
-            (horasEspecificasAnterior != null && !horasEspecificasAnterior.trim().isEmpty() && (horasEspecificasNueva == null || horasEspecificasNueva.trim().isEmpty()))) {
-            requiereReenvio = true;
-            cambiosDetectados.add("horarios");
-            log.info("🔄 [MarketingMensajeService] Cambio detectado: horarios");
-        }
-
-        // Comparar archivo
-        if (archivoNuevo) {
-            requiereReenvio = true;
-            cambiosDetectados.add("archivo");
-            log.info("🔄 [MarketingMensajeService] Cambio detectado: archivo");
-        }
-
-        // Reenviar mensaje si hay cambios relevantes y hay grupos configurados
-        if (requiereReenvio) {
-            log.info("📤 [MarketingMensajeService] Cambios detectados que requieren reenvío: {}", cambiosDetectados);
-            
-            // Obtener grupos actualizados del mensaje guardado
-            List<String> gruposParaEnviar = convertirJsonALista(mensajeActualizado.getGrupos());
-            
-            if (gruposParaEnviar != null && !gruposParaEnviar.isEmpty() && 
-                mensajeActualizado.getWhatsapp() != null && mensajeActualizado.getWhatsapp()) {
-                log.info("📱 [MarketingMensajeService] Reenviando mensaje a {} grupos debido a cambios: {}", 
-                        gruposParaEnviar.size(), cambiosDetectados);
-                try {
-                    String mensajeTexto = mensajeActualizado.getMensaje();
-                    String archivoUrl = mensajeActualizado.getArchivo();
-                    // Obtener nombre del archivo original si está disponible (archivo nuevo subido)
-                    String nombreArchivoOriginal = (archivo != null && !archivo.isEmpty()) 
-                            ? archivo.getOriginalFilename() 
-                            : null;
-                    // Obtener el tipo de media del mensaje actualizado
-                    String tipoMedia = mensajeActualizado.getTipo();
-                    
-                    // Enviar a cada grupo de la lista, uno por uno
-                    whatsAppService.enviarAMultiplesGrupos(gruposParaEnviar, mensajeTexto, archivoUrl, nombreArchivoOriginal, tipoMedia);
-                    log.info("✅ [MarketingMensajeService] Mensaje reenviado exitosamente después de actualización");
-                } catch (Exception e) {
-                    log.error("❌ [MarketingMensajeService] Error reenviando mensajes a WhatsApp después de actualización: {}", 
-                            e.getMessage(), e);
-                    // No lanzamos excepción para no fallar la actualización del mensaje
-                }
-            } else {
-                log.info("ℹ️ [MarketingMensajeService] No se reenviará el mensaje - no hay grupos configurados o WhatsApp está desactivado");
-            }
+        // El envío de mensajes se realiza automáticamente por el scheduler según las horas programadas
+        // No se envía inmediatamente al actualizar el mensaje, se respeta la hora programada
+        if (mensajeActualizado.getHorasEspecificas() != null && !mensajeActualizado.getHorasEspecificas().trim().isEmpty()) {
+            log.info("⏰ [MarketingMensajeService] Mensaje actualizado - se enviará según las horas específicas configuradas por el scheduler");
         } else {
-            log.info("ℹ️ [MarketingMensajeService] No se detectaron cambios relevantes que requieran reenvío");
+            log.info("ℹ️ [MarketingMensajeService] Mensaje actualizado sin horas específicas - no se enviará automáticamente");
         }
 
         return convertirAResponse(mensajeActualizado, "Mensaje actualizado exitosamente");
