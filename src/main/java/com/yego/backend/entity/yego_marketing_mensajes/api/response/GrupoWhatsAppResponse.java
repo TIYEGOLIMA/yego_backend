@@ -18,5 +18,6 @@ public class GrupoWhatsAppResponse {
     
     private String id;
     private String subject;
+    private String pictureUrl;
 }
 

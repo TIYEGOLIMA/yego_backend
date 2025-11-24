@@ -8,16 +8,13 @@ import com.yego.backend.entity.yego_marketing_mensajes.api.response.MarketingMen
 import com.yego.backend.entity.yego_marketing_mensajes.api.response.MarketingMensajeCalendarioResponse;
 import com.yego.backend.entity.yego_marketing_mensajes.api.response.GrupoWhatsAppResponse;
 import com.yego.backend.entity.yego_marketing_mensajes.entities.MarketingMensaje;
+import com.yego.backend.entity.yego_marketing_mensajes.entities.ModuleMarketingGroup;
 import com.yego.backend.repository.yego_marketing_mensajes.MarketingMensajeRepository;
+import com.yego.backend.repository.yego_marketing_mensajes.ModuleMarketingGroupRepository;
 import com.yego.backend.service.MinIOService;
 import com.yego.backend.service.WhatsAppService;
 import com.yego.backend.service.yego_marketing_mensajes.MarketingMensajeService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -43,16 +40,19 @@ import java.util.stream.Collectors;
 public class MarketingMensajeServiceImpl implements MarketingMensajeService {
 
     private final MarketingMensajeRepository marketingMensajeRepository;
+    private final ModuleMarketingGroupRepository moduleMarketingGroupRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final MinIOService minIOService;
-    private final WhatsAppService whatsAppService;
 
-    public MarketingMensajeServiceImpl(MarketingMensajeRepository marketingMensajeRepository, RestTemplate restTemplate, MinIOService minIOService, WhatsAppService whatsAppService) {
+    public MarketingMensajeServiceImpl(MarketingMensajeRepository marketingMensajeRepository, 
+                                      ModuleMarketingGroupRepository moduleMarketingGroupRepository,
+                                      RestTemplate restTemplate, 
+                                      MinIOService minIOService) {
         this.marketingMensajeRepository = marketingMensajeRepository;
+        this.moduleMarketingGroupRepository = moduleMarketingGroupRepository;
         this.restTemplate = restTemplate;
         this.minIOService = minIOService;
-        this.whatsAppService = whatsAppService;
         this.objectMapper = new ObjectMapper();
     }
 
@@ -328,45 +328,26 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
 
     @Override
     public List<GrupoWhatsAppResponse> obtenerGrupos() {
-        log.info("📋 [MarketingMensajeService] Obteniendo grupos de WhatsApp");
+        log.info("📋 [MarketingMensajeService] Obteniendo grupos de WhatsApp desde la base de datos");
         
         try {
-            String url = "https://wsp.yego.pro/group/fetchAllGroups/TEAM_PERU?getParticipants=false";
-            String apiKey = "f81bd660c7c2a537b63fc1ecda476ae6";
+            List<ModuleMarketingGroup> gruposBD = moduleMarketingGroupRepository.findAll();
             
-            // Preparar headers
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("Apikey", apiKey);
+            List<GrupoWhatsAppResponse> grupos = gruposBD.stream()
+                    .map(grupo -> {
+                        GrupoWhatsAppResponse response = new GrupoWhatsAppResponse();
+                        response.setId(grupo.getGroupId());
+                        response.setSubject(grupo.getSubject());
+                        response.setPictureUrl(grupo.getPictureUrl());
+                        return response;
+                    })
+                    .collect(Collectors.toList());
             
-            HttpEntity<String> entity = new HttpEntity<>(headers);
-            
-            // Realizar petición GET
-            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
-                    url,
-                    HttpMethod.GET,
-                    entity,
-                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
-            );
-            
-            List<GrupoWhatsAppResponse> grupos = new ArrayList<>();
-            
-            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                List<Map<String, Object>> gruposData = response.getBody();
-                
-                for (Map<String, Object> grupoData : gruposData) {
-                    GrupoWhatsAppResponse grupo = new GrupoWhatsAppResponse();
-                    grupo.setId(grupoData.get("id") != null ? grupoData.get("id").toString() : null);
-                    grupo.setSubject(grupoData.get("subject") != null ? grupoData.get("subject").toString() : null);
-                    grupos.add(grupo);
-                    log.debug("✅ [MarketingMensajeService] Grupo agregado: {} - {}", grupo.getId(), grupo.getSubject());
-                }
-            }
-            
-            log.info("✅ [MarketingMensajeService] Se obtuvieron {} grupos de WhatsApp", grupos.size());
+            log.info("✅ [MarketingMensajeService] Se obtuvieron {} grupos de WhatsApp desde la BD", grupos.size());
             return grupos;
             
         } catch (Exception e) {
-            log.error("❌ [MarketingMensajeService] Error obteniendo grupos de WhatsApp: {}", e.getMessage(), e);
+            log.error("❌ [MarketingMensajeService] Error obteniendo grupos de WhatsApp desde la BD: {}", e.getMessage(), e);
             return Collections.emptyList();
         }
     }
@@ -563,5 +544,6 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
             return Collections.emptyList();
         }
     }
+
 }
 

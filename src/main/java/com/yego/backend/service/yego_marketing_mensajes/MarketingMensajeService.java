@@ -81,7 +81,7 @@ public interface MarketingMensajeService {
     List<?> obtenerHistoricoPorMensajeId(Long mensajeId);
     
     /**
-     * Obtiene los grupos disponibles de WhatsApp
+     * Obtiene los grupos disponibles de WhatsApp desde la base de datos
      * @return lista de grupos con id, subject y pictureUrl
      */
     List<GrupoWhatsAppResponse> obtenerGrupos();

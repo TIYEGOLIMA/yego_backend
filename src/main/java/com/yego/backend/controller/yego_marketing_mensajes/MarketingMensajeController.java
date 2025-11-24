@@ -184,7 +184,7 @@ public class MarketingMensajeController {
     }
 
     /**
-     * Obtiene los grupos disponibles de WhatsApp
+     * Obtiene los grupos disponibles de WhatsApp desde la base de datos
      * @return Lista de grupos con id, subject y pictureUrl
      */
     @GetMapping("/grupos")
