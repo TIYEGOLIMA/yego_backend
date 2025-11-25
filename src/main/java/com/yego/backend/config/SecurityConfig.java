@@ -109,6 +109,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/health").permitAll() // Health check
                 .requestMatchers("/api/yego-premiun/**").permitAll() // Driver active stats endpoints
                 .requestMatchers("/api/marketing-mensajes/**").permitAll() // Marketing mensajes endpoints
+                .requestMatchers("/api/GoBot/**").permitAll() // GoBot API externa endpoints
                 .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                 .requestMatchers("/actuator/**").permitAll() // Actuator endpoints
                 .requestMatchers("/error").permitAll() // Error endpoint
