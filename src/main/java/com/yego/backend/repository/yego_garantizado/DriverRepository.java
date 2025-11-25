@@ -2,6 +2,8 @@ package com.yego.backend.repository.yego_garantizado;
 
 import com.yego.backend.entity.yego_garantizado.entities.Driver;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -38,5 +40,16 @@ public interface DriverRepository extends JpaRepository<Driver, String> {
      * @return true si existe, false si no
      */
     boolean existsByLicenseNumber(String licenseNumber);
+    
+    
+    /**
+     * Busca un conductor por teléfono
+     * Retorna solo los campos necesarios para PPendientesResponse
+     * @param phone número de teléfono a buscar
+     * @return Lista de arrays de objetos con los campos necesarios
+     */
+    @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number " +
+                   "FROM drivers WHERE phone = :phone LIMIT 1", nativeQuery = true)
+    List<Object[]> findAllByPhoneAsDriverApiNative(@Param("phone") String phone);
 }
 

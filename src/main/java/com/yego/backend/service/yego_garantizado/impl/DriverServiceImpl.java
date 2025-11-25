@@ -5,7 +5,9 @@ import com.yego.backend.entity.yego_garantizado.api.response.DriverValidationRes
 import com.yego.backend.entity.yego_garantizado.api.response.FlotaDisponibleResponse;
 import com.yego.backend.entity.yego_garantizado.api.response.FlotaInfo;
 import com.yego.backend.entity.yego_garantizado.api.response.FlotaResponse;
+import com.yego.backend.entity.yego_api_externo.api.response.PPendientesResponse;
 import com.yego.backend.entity.yego_garantizado.entities.Driver;
+import com.yego.backend.entity.yego_api_externo.entities.DriverApi;
 import com.yego.backend.repository.yego_garantizado.DriverRepository;
 import com.yego.backend.service.yego_garantizado.DriverService;
 import com.yego.backend.service.yego_garantizado.FlotaService;
@@ -128,6 +130,102 @@ public class DriverServiceImpl implements DriverService {
                 .flotasDisponibles(flotasDisponibles)
                 .mensaje("Conductor encontrado con " + flotasDisponibles.size() + " flotas disponibles")
                 .build();
+    }
+    
+    @Override
+    public PPendientesResponse obtenerPendientes(String telefono) {
+        log.info("📋 [DriverService] Obteniendo pagos pendientes para GoBot - Teléfono: {}", telefono);
+        
+        // Limpiar espacios
+        String telefonoLimpio = telefono.trim();
+        
+        // Intentar búsqueda con diferentes formatos
+        List<Object[]> resultados;
+        
+        // 1. Intentar con el formato original
+        resultados = driverRepository.findAllByPhoneAsDriverApiNative(telefonoLimpio);
+        
+        // 2. Si no encuentra, normalizar y buscar
+        if (resultados.isEmpty()) {
+            String telefonoNormalizado;
+            if (telefonoLimpio.startsWith("+51")) {
+                telefonoNormalizado = telefonoLimpio;
+            } else if (telefonoLimpio.startsWith("51")) {
+                telefonoNormalizado = "+" + telefonoLimpio;
+            } else {
+                telefonoNormalizado = "+51" + telefonoLimpio;
+            }
+            
+            if (!telefonoNormalizado.equals(telefonoLimpio)) {
+                resultados = driverRepository.findAllByPhoneAsDriverApiNative(telefonoNormalizado);
+            }
+        }
+        
+        // 3. Si aún no encuentra, intentar sin el "+"
+        if (resultados.isEmpty() && telefonoLimpio.startsWith("+")) {
+            String telefonoSinMas = telefonoLimpio.substring(1);
+            resultados = driverRepository.findAllByPhoneAsDriverApiNative(telefonoSinMas);
+        }
+        
+        if (resultados.isEmpty()) {
+            return PPendientesResponse.builder()
+                    .nombre("").flota("").monto(0.0).pagos(0).license("").surnames("")
+                    .idcar("").placa("").iddriver("").telefonop(telefono).idyego(null)
+                    .idflota("").estatus(404).message("Conductor no encontrado").msystem("").build();
+        }
+        
+        DriverApi driver = mapearObjectArrayADriverApi(resultados.get(0));
+        
+        // Obtener nombre de flota
+        String nombreFlota = flotaService.obtenerFlotas().stream()
+                .filter(f -> f.getId().equals(driver.getParkId()))
+                .findFirst()
+                .map(FlotaResponse::getName)
+                .orElse("N/A");
+        
+        // Nombre y apellidos
+        String nombre = driver.getFirstName() != null ? driver.getFirstName() : 
+                       (driver.getFullName() != null ? driver.getFullName().split(" ", 2)[0] : "");
+        String surnames = driver.getFullName() != null ? driver.getFullName() : "";
+        
+        // Construir respuesta
+        return PPendientesResponse.builder()
+                .nombre(nombre)
+                .flota(nombreFlota)
+                .monto(0.0)
+                .pagos(0)
+                .license(driver.getLicenseNumber() != null ? driver.getLicenseNumber() : "")
+                .surnames(surnames)
+                .idcar(driver.getCarId() != null ? driver.getCarId() : "")
+                .placa(driver.getCarNumber() != null ? driver.getCarNumber() : "")
+                .iddriver(driver.getDriverId() != null ? driver.getDriverId() : "")
+                .telefonop(driver.getPhone() != null ? driver.getPhone() : "")
+                .idyego(null)
+                .idflota(driver.getParkId() != null ? driver.getParkId() : "")
+                .estatus(200)
+                .message("Se verifica que no tiene cuenta bancaria registrada.\n\n*Estado:* No cuenta con pagos pendientes\n")
+                .msystem("")
+                .build();
+    }
+    
+    /**
+     * Mapea un array de Object[] a DriverApi
+     * Solo mapea los campos necesarios: driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number
+     */
+    private DriverApi mapearObjectArrayADriverApi(Object[] row) {
+        DriverApi driver = new DriverApi();
+        int index = 0;
+        
+        driver.setDriverId(row[index++] != null ? row[index-1].toString() : null);
+        driver.setParkId(row[index++] != null ? row[index-1].toString() : null);
+        driver.setFirstName(row[index++] != null ? row[index-1].toString() : null);
+        driver.setFullName(row[index++] != null ? row[index-1].toString() : null);
+        driver.setPhone(row[index++] != null ? row[index-1].toString() : null);
+        driver.setLicenseNumber(row[index++] != null ? row[index-1].toString() : null);
+        driver.setCarId(row[index++] != null ? row[index-1].toString() : null);
+        driver.setCarNumber(row[index++] != null ? row[index-1].toString() : null);
+        
+        return driver;
     }
     
     private DriverInfo convertirADriverInfo(Driver driver) {

@@ -3,6 +3,7 @@ package com.yego.backend.service.yego_garantizado;
 import com.yego.backend.entity.yego_garantizado.api.response.DriverInfo;
 import com.yego.backend.entity.yego_garantizado.api.response.DriverValidationResponse;
 import com.yego.backend.entity.yego_garantizado.api.response.FlotaDisponibleResponse;
+import com.yego.backend.entity.yego_api_externo.api.response.PPendientesResponse;
 
 import java.util.Optional;
 
@@ -35,5 +36,12 @@ public interface DriverService {
      * @return Conductor con lista de flotas disponibles
      */
     FlotaDisponibleResponse obtenerConductorConFlotas(String licenseNumber);
+    
+    /**
+     * Obtiene información de pagos pendientes para GoBot
+     * @param telefono número de teléfono del conductor
+     * @return Respuesta con información de pagos pendientes
+     */
+    PPendientesResponse obtenerPendientes(String telefono);
 }
 
