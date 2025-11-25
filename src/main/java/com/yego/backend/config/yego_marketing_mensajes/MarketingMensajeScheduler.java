@@ -36,9 +36,9 @@ public class MarketingMensajeScheduler {
     // URL de la API de Yango
     private static final String YANGO_API_URL = "https://fleet.yango.com/api/fleet/communications/v2/mailings";
     
-    // Headers para la API de Yango
-    private static final String YANGO_COOKIE = "i=PSsBLgVrJpYnJ2+C+lS7y26viiqCUpy2WbUIgyUcFtABmXdLBimLbHRDxBwcqG4Ld1g9EZ9dSEYH/4lPLPP4oO1vzOA=; yandexuid=6319448971755539422; yashr=4577633351755539422; gdpr=0; _ym_uid=175269441917135422; _ym_d=1755539425; yp=2070899442.udn.cDpnaW9tYXJvcnRlZ2E%3D; L=dyJbeVNbRwUDZF5pWQB1c1RfQ3hdYXJ6MTsmVVQ2XQAyDSIU.1755539442.16252.380690.a38c48704c9060f72c19a8a74895912e; yandex_login=giomarortega; Session_id=3:1756824708.5.0.1755539442239:WbD9Jg:8b7b.1.2:1|2223153146.0.2.0:3.3:1755539442|60:11147555.299236.OWQHwoNzzJ1nBLc3-rcfhkPu4EM; sessar=1.1205.CiDhzz0LO9Eyn6IfEuzHmK4ql5cl2LAKy2S4u3lUMntEwA.13627qed3lFkVeQ7A2EN777bRR2QYAzWq6Hmt4Fbt2w; sessionid2=3:1756824708.5.0.1755539442239:WbD9Jg:8b7b.1.2:1|2223153146.0.2.0:3.3:1755539442|60:11147555.299236.fakesign0000000000000000000; park_id=08e20910d81d42658d4334d3f6d10ac0; yuidss=6319448971755539422; ymex=2076954182.yrts.1761594182; _ym_isad=2; _ym_visorc=b; _yasc=OmQBtTw8vSnInrmz+Igq9+EwmJy3O0OHgVaDjxzeX/dBcpP1EKPY8eWqSw/D2GQezo+f; bh=EkIiQ2hyb21pdW0iO3Y9IjE0MiIsICJNaWNyb3NvZnQgRWRnZSI7dj0iMTQyIiwgIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiINMTQyLjAuMzU5NS45NCoCPzA6CSJXaW5kb3dzIkIGMTkuMC4wSgI2NFJbIkNocm9taXVtIjt2PSIxNDIuMC43NDQ0LjE3NiIsIk1pY3Jvc29mdCBFZGdlIjt2PSIxNDIuMC4zNTk1Ljk0IiwiTm90X0EgQnJhbmQiO3Y9Ijk5LjAuMC4wImDYg5jJBmoh3Mrh/wiS2KGxA5/P4eoD+/rw5w3r//32D/iczIcI2egC";
-    private static final String YANGO_PARK_ID = "08e20910d81d42658d4334d3f6d10ac0";
+    // Cookie base para la API de Yango (sin park_id, se reemplazará dinámicamente)
+    private static final String YANGO_COOKIE_BASE = "i=PSsBLgVrJpYnJ2+C+lS7y26viiqCUpy2WbUIgyUcFtABmXdLBimLbHRDxBwcqG4Ld1g9EZ9dSEYH/4lPLPP4oO1vzOA=; yandexuid=6319448971755539422; yashr=4577633351755539422; gdpr=0; _ym_uid=175269441917135422; _ym_d=1755539425; yp=2070899442.udn.cDpnaW9tYXJvcnRlZ2E%3D; L=dyJbeVNbRwUDZF5pWQB1c1RfQ3hdYXJ6MTsmVVQ2XQAyDSIU.1755539442.16252.380690.a38c48704c9060f72c19a8a74895912e; yandex_login=giomarortega; Session_id=3:1756824708.5.0.1755539442239:WbD9Jg:8b7b.1.2:1|2223153146.0.2.0:3.3:1755539442|60:11147555.299236.OWQHwoNzzJ1nBLc3-rcfhkPu4EM; sessar=1.1205.CiDhzz0LO9Eyn6IfEuzHmK4ql5cl2LAKy2S4u3lUMntEwA.13627qed3lFkVeQ7A2EN777bRR2QYAzWq6Hmt4Fbt2w; sessionid2=3:1756824708.5.0.1755539442239:WbD9Jg:8b7b.1.2:1|2223153146.0.2.0:3.3:1755539442|60:11147555.299236.fakesign0000000000000000000; park_id=";
+    private static final String YANGO_COOKIE_SUFFIX = "; yuidss=6319448971755539422; ymex=2076954182.yrts.1761594182; _ym_isad=2; _ym_visorc=b; _yasc=OmQBtTw8vSnInrmz+Igq9+EwmJy3O0OHgVaDjxzeX/dBcpP1EKPY8eWqSw/D2GQezo+f; bh=EkIiQ2hyb21pdW0iO3Y9IjE0MiIsICJNaWNyb3NvZnQgRWRnZSI7dj0iMTQyIiwgIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiINMTQyLjAuMzU5NS45NCoCPzA6CSJXaW5kb3dzIkIGMTkuMC4wSgI2NFJbIkNocm9taXVtIjt2PSIxNDIuMC43NDQ0LjE3NiIsIk1pY3Jvc29mdCBFZGdlIjt2PSIxNDIuMC4zNTk1Ljk0IiwiTm90X0EgQnJhbmQiO3Y9Ijk5LjAuMC4wImDYg5jJBmoh3Mrh/wiS2KGxA5/P4eoD+/rw5w3r//32D/iczIcI2egC";
     
     // Mapa para evitar envíos duplicados en el mismo minuto
     private final Map<Long, String> ultimosEnvios = new HashMap<>();
@@ -276,38 +276,139 @@ public class MarketingMensajeScheduler {
      * Envía el mensaje a la API de Yango
      * Solo envía título y mensaje
      * Solo se ejecuta si el mensaje tiene flotas configuradas
+     * Envía un mensaje por cada flota con su respectivo park_id
      */
     private void enviarMensajeAYango(MarketingMensaje mensaje) {
         try {
             log.info("📤 [MarketingMensajeScheduler] Enviando mensaje a API Yango - Título: {}", mensaje.getTitulo());
             
-            // Preparar el body con solo título y mensaje
+            // Obtener flotas del mensaje
+            List<String> flotas = convertirJsonALista(mensaje.getFlotas());
+            if (flotas == null || flotas.isEmpty()) {
+                log.warn("⚠️ [MarketingMensajeScheduler] No hay flotas para enviar mensaje a Yango ID: {}", mensaje.getId());
+                return;
+            }
+            
+            // Obtener todos los park_ids únicos de las flotas
+            // Las flotas pueden venir como lista: ["96f5a1e493b6484e88d7fc2e3bb8cbdb", "08e20910d81d42658d4334d3f6d10ac0"]
+            // O como string separado por comas: "96f5a1e493b6484e88d7fc2e3bb8cbdb,08e20910d81d42658d4334d3f6d10ac0"
+            List<String> parkIds = obtenerTodosLosParkIds(flotas);
+            if (parkIds == null || parkIds.isEmpty()) {
+                log.warn("⚠️ [MarketingMensajeScheduler] No se pudieron extraer park_ids de las flotas para mensaje ID: {}", mensaje.getId());
+                return;
+            }
+            
+            log.info("🏢 [MarketingMensajeScheduler] Enviando mensaje a {} flota(s) - Park IDs: {}", parkIds.size(), parkIds);
+            
+            // Preparar el body con solo título y mensaje (es el mismo para todas las flotas)
             Map<String, String> requestBody = new HashMap<>();
             requestBody.put("titulo", mensaje.getTitulo());
             requestBody.put("mensaje", mensaje.getMensaje());
             
-            // Configurar headers con Cookie y x-park-id
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("Cookie", YANGO_COOKIE);
-            headers.set("x-park-id", YANGO_PARK_ID);
+            // Enviar un mensaje por cada park_id
+            int exitosos = 0;
+            int fallidos = 0;
             
-            HttpEntity<Map<String, String>> request = new HttpEntity<>(requestBody, headers);
+            for (int i = 0; i < parkIds.size(); i++) {
+                String parkId = parkIds.get(i);
+                try {
+                    log.info("📨 [MarketingMensajeScheduler] Enviando a flota con park_id: {} ({}/{})", 
+                            parkId, i + 1, parkIds.size());
+                    
+                    // Construir cookie dinámica con el park_id de la flota actual
+                    String cookieDinamica = YANGO_COOKIE_BASE + parkId + YANGO_COOKIE_SUFFIX;
+                    
+                    // Configurar headers con Cookie y x-park-id dinámicos
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setContentType(MediaType.APPLICATION_JSON);
+                    headers.set("Cookie", cookieDinamica);
+                    headers.set("x-park-id", parkId);
+                    
+                    HttpEntity<Map<String, String>> request = new HttpEntity<>(requestBody, headers);
+                    
+                    // Enviar POST a la API de Yango
+                    restTemplate.exchange(
+                        YANGO_API_URL,
+                        HttpMethod.POST,
+                        request,
+                        Void.class
+                    );
+                    
+                    exitosos++;
+                    log.info("✅ [MarketingMensajeScheduler] Mensaje enviado exitosamente a flota - Park ID: {}", parkId);
+                    
+                    // Agregar delay de 5 segundos entre cada envío (excepto después del último)
+                    if (i < parkIds.size() - 1) {
+                        log.info("⏳ [MarketingMensajeScheduler] Esperando 5 segundos antes del siguiente envío...");
+                        Thread.sleep(5000);
+                    }
+                    
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("❌ [MarketingMensajeScheduler] Interrupción durante el delay: {}", e.getMessage());
+                    fallidos++;
+                } catch (Exception e) {
+                    fallidos++;
+                    log.error("❌ [MarketingMensajeScheduler] Error enviando mensaje a flota con park_id {}: {}", 
+                            parkId, e.getMessage(), e);
+                    
+                    // Agregar delay incluso si falla (excepto después del último)
+                    if (i < parkIds.size() - 1) {
+                        try {
+                            Thread.sleep(5000);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            log.error("❌ [MarketingMensajeScheduler] Interrupción durante el delay después de error: {}", 
+                                    ie.getMessage());
+                        }
+                    }
+                }
+            }
             
-            // Enviar POST a la API de Yango
-            restTemplate.exchange(
-                YANGO_API_URL,
-                HttpMethod.POST,
-                request,
-                Void.class
-            );
-            
-            log.info("✅ [MarketingMensajeScheduler] Mensaje enviado exitosamente a API Yango - Título: {}", mensaje.getTitulo());
+            log.info("📊 [MarketingMensajeScheduler] Resumen de envíos a Yango - Exitosos: {}, Fallidos: {}, Total: {}", 
+                    exitosos, fallidos, parkIds.size());
             
         } catch (Exception e) {
             log.error("❌ [MarketingMensajeScheduler] Error enviando mensaje a API Yango ID {}: {}", 
                     mensaje.getId(), e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Extrae todos los park_ids únicos de la lista de flotas
+     * Si una flota contiene comas, separa cada parte como un park_id diferente
+     * Retorna una lista con todos los park_ids únicos
+     */
+    private List<String> obtenerTodosLosParkIds(List<String> flotas) {
+        if (flotas == null || flotas.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        Set<String> parkIdsUnicos = new HashSet<>();
+        
+        for (String flota : flotas) {
+            if (flota == null || flota.trim().isEmpty()) {
+                continue;
+            }
+            
+            String flotaTrim = flota.trim();
+            
+            // Si contiene comas, separar cada parte
+            if (flotaTrim.contains(",")) {
+                String[] partes = flotaTrim.split(",");
+                for (String parte : partes) {
+                    String parkId = parte.trim();
+                    if (!parkId.isEmpty()) {
+                        parkIdsUnicos.add(parkId);
+                    }
+                }
+            } else {
+                // Si no contiene comas, usar toda la flota como park_id
+                parkIdsUnicos.add(flotaTrim);
+            }
+        }
+        
+        return new ArrayList<>(parkIdsUnicos);
     }
 
     /**
