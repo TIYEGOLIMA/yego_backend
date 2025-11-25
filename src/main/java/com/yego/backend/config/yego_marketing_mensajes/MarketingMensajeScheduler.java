@@ -6,8 +6,13 @@ import com.yego.backend.entity.yego_marketing_mensajes.entities.MarketingMensaje
 import com.yego.backend.repository.yego_marketing_mensajes.MarketingMensajeRepository;
 import com.yego.backend.service.WhatsAppService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -26,6 +31,14 @@ public class MarketingMensajeScheduler {
     private final MarketingMensajeRepository marketingMensajeRepository;
     private final WhatsAppService whatsAppService;
     private final ObjectMapper objectMapper;
+    private final RestTemplate restTemplate;
+    
+    // URL de la API de Yango
+    private static final String YANGO_API_URL = "https://fleet.yango.com/api/fleet/communications/v2/mailings";
+    
+    // Headers para la API de Yango
+    private static final String YANGO_COOKIE = "i=PSsBLgVrJpYnJ2+C+lS7y26viiqCUpy2WbUIgyUcFtABmXdLBimLbHRDxBwcqG4Ld1g9EZ9dSEYH/4lPLPP4oO1vzOA=; yandexuid=6319448971755539422; yashr=4577633351755539422; gdpr=0; _ym_uid=175269441917135422; _ym_d=1755539425; yp=2070899442.udn.cDpnaW9tYXJvcnRlZ2E%3D; L=dyJbeVNbRwUDZF5pWQB1c1RfQ3hdYXJ6MTsmVVQ2XQAyDSIU.1755539442.16252.380690.a38c48704c9060f72c19a8a74895912e; yandex_login=giomarortega; Session_id=3:1756824708.5.0.1755539442239:WbD9Jg:8b7b.1.2:1|2223153146.0.2.0:3.3:1755539442|60:11147555.299236.OWQHwoNzzJ1nBLc3-rcfhkPu4EM; sessar=1.1205.CiDhzz0LO9Eyn6IfEuzHmK4ql5cl2LAKy2S4u3lUMntEwA.13627qed3lFkVeQ7A2EN777bRR2QYAzWq6Hmt4Fbt2w; sessionid2=3:1756824708.5.0.1755539442239:WbD9Jg:8b7b.1.2:1|2223153146.0.2.0:3.3:1755539442|60:11147555.299236.fakesign0000000000000000000; park_id=08e20910d81d42658d4334d3f6d10ac0; yuidss=6319448971755539422; ymex=2076954182.yrts.1761594182; _ym_isad=2; _ym_visorc=b; _yasc=OmQBtTw8vSnInrmz+Igq9+EwmJy3O0OHgVaDjxzeX/dBcpP1EKPY8eWqSw/D2GQezo+f; bh=EkIiQ2hyb21pdW0iO3Y9IjE0MiIsICJNaWNyb3NvZnQgRWRnZSI7dj0iMTQyIiwgIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiINMTQyLjAuMzU5NS45NCoCPzA6CSJXaW5kb3dzIkIGMTkuMC4wSgI2NFJbIkNocm9taXVtIjt2PSIxNDIuMC43NDQ0LjE3NiIsIk1pY3Jvc29mdCBFZGdlIjt2PSIxNDIuMC4zNTk1Ljk0IiwiTm90X0EgQnJhbmQiO3Y9Ijk5LjAuMC4wImDYg5jJBmoh3Mrh/wiS2KGxA5/P4eoD+/rw5w3r//32D/iczIcI2egC";
+    private static final String YANGO_PARK_ID = "08e20910d81d42658d4334d3f6d10ac0";
     
     // Mapa para evitar envíos duplicados en el mismo minuto
     private final Map<Long, String> ultimosEnvios = new HashMap<>();
@@ -52,10 +65,12 @@ public class MarketingMensajeScheduler {
 
     public MarketingMensajeScheduler(MarketingMensajeRepository marketingMensajeRepository,
                                      WhatsAppService whatsAppService,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     RestTemplate restTemplate) {
         this.marketingMensajeRepository = marketingMensajeRepository;
         this.whatsAppService = whatsAppService;
         this.objectMapper = objectMapper;
+        this.restTemplate = restTemplate;
     }
 
     /**
@@ -175,7 +190,7 @@ public class MarketingMensajeScheduler {
             // Obtener tipo de media
             String tipoMedia = mensaje.getTipo();
             
-            // Enviar mensaje
+            // Enviar mensaje a grupos de WhatsApp
             whatsAppService.enviarAMultiplesGrupos(
                 grupos,
                 mensaje.getMensaje(),
@@ -183,6 +198,14 @@ public class MarketingMensajeScheduler {
                 nombreArchivoOriginal,
                 tipoMedia
             );
+            
+            // Enviar mensaje a API de Yango solo si tiene flotas configuradas
+            List<String> flotas = convertirJsonALista(mensaje.getFlotas());
+            if (flotas != null && !flotas.isEmpty()) {
+                enviarMensajeAYango(mensaje);
+            } else {
+                log.debug("⏭️ [MarketingMensajeScheduler] Mensaje ID {} no tiene flotas configuradas, no se enviará a API Yango", mensaje.getId());
+            }
             
             log.info("✅ [MarketingMensajeScheduler] Mensaje programado enviado exitosamente ID: {}", mensaje.getId());
             
@@ -247,6 +270,44 @@ public class MarketingMensajeScheduler {
             log.warn("⚠️ [MarketingMensajeScheduler] Error extrayendo nombre de archivo: {}", e.getMessage());
         }
         return null;
+    }
+
+    /**
+     * Envía el mensaje a la API de Yango
+     * Solo envía título y mensaje
+     * Solo se ejecuta si el mensaje tiene flotas configuradas
+     */
+    private void enviarMensajeAYango(MarketingMensaje mensaje) {
+        try {
+            log.info("📤 [MarketingMensajeScheduler] Enviando mensaje a API Yango - Título: {}", mensaje.getTitulo());
+            
+            // Preparar el body con solo título y mensaje
+            Map<String, String> requestBody = new HashMap<>();
+            requestBody.put("titulo", mensaje.getTitulo());
+            requestBody.put("mensaje", mensaje.getMensaje());
+            
+            // Configurar headers con Cookie y x-park-id
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Cookie", YANGO_COOKIE);
+            headers.set("x-park-id", YANGO_PARK_ID);
+            
+            HttpEntity<Map<String, String>> request = new HttpEntity<>(requestBody, headers);
+            
+            // Enviar POST a la API de Yango
+            restTemplate.exchange(
+                YANGO_API_URL,
+                HttpMethod.POST,
+                request,
+                Void.class
+            );
+            
+            log.info("✅ [MarketingMensajeScheduler] Mensaje enviado exitosamente a API Yango - Título: {}", mensaje.getTitulo());
+            
+        } catch (Exception e) {
+            log.error("❌ [MarketingMensajeScheduler] Error enviando mensaje a API Yango ID {}: {}", 
+                    mensaje.getId(), e.getMessage(), e);
+        }
     }
 
     /**
