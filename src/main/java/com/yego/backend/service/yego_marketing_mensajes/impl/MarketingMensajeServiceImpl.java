@@ -61,12 +61,6 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
     public MarketingMensajeResponse crearMensaje(MarketingMensajeRequest request, MultipartFile archivo) {
         log.info("📝 [MarketingMensajeService] Creando nuevo mensaje: {}", request.getTitulo());
 
-        // Validar que no exista un mensaje con el mismo título
-        if (marketingMensajeRepository.existsByTitulo(request.getTitulo())) {
-            log.warn("⚠️ [MarketingMensajeService] Ya existe un mensaje con el título: {}", request.getTitulo());
-            throw new IllegalArgumentException("Ya existe un mensaje con el título: " + request.getTitulo());
-        }
-
         // Obtener el userId del contexto de seguridad
         Long userId = obtenerUserIdActual();
         log.info("👤 [MarketingMensajeService] Creando mensaje para usuario ID: {}", userId);
@@ -148,14 +142,6 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
 
         // Guardar valor anterior necesario para comparación
         String tipoAnterior = mensaje.getTipo();
-
-        // Validar que el nuevo título no esté en uso por otro mensaje
-        if (request.getTitulo() != null && !request.getTitulo().equals(mensaje.getTitulo())) {
-            if (marketingMensajeRepository.existsByTitulo(request.getTitulo())) {
-                log.warn("⚠️ [MarketingMensajeService] Ya existe un mensaje con el título: {}", request.getTitulo());
-                throw new IllegalArgumentException("Ya existe un mensaje con el título: " + request.getTitulo());
-            }
-        }
 
         // Manejar archivo nuevo si se proporciona
         if (archivo != null && !archivo.isEmpty()) {
