@@ -136,36 +136,14 @@ public class DriverServiceImpl implements DriverService {
     public PPendientesResponse obtenerPendientes(String telefono) {
         log.info("📋 [DriverService] Obteniendo pagos pendientes para GoBot - Teléfono: {}", telefono);
         
-        // Limpiar espacios
+        // Limpiar espacios y normalizar siempre con "+"
         String telefonoLimpio = telefono.trim();
+        String telefonoNormalizado = telefonoLimpio.startsWith("+") ? telefonoLimpio : "+" + telefonoLimpio;
         
-        // Intentar búsqueda con diferentes formatos
-        List<Object[]> resultados;
+        log.info("📱 [DriverService] Teléfono normalizado: {}", telefonoNormalizado);
         
-        // 1. Intentar con el formato original
-        resultados = driverRepository.findAllByPhoneAsDriverApiNative(telefonoLimpio);
-        
-        // 2. Si no encuentra, normalizar y buscar
-        if (resultados.isEmpty()) {
-            String telefonoNormalizado;
-            if (telefonoLimpio.startsWith("+51")) {
-                telefonoNormalizado = telefonoLimpio;
-            } else if (telefonoLimpio.startsWith("51")) {
-                telefonoNormalizado = "+" + telefonoLimpio;
-            } else {
-                telefonoNormalizado = "+51" + telefonoLimpio;
-            }
-            
-            if (!telefonoNormalizado.equals(telefonoLimpio)) {
-                resultados = driverRepository.findAllByPhoneAsDriverApiNative(telefonoNormalizado);
-            }
-        }
-        
-        // 3. Si aún no encuentra, intentar sin el "+"
-        if (resultados.isEmpty() && telefonoLimpio.startsWith("+")) {
-            String telefonoSinMas = telefonoLimpio.substring(1);
-            resultados = driverRepository.findAllByPhoneAsDriverApiNative(telefonoSinMas);
-        }
+        // Buscar siempre con el formato normalizado (con +)
+        List<Object[]> resultados = driverRepository.findAllByPhoneAsDriverApiNative(telefonoNormalizado);
         
         if (resultados.isEmpty()) {
             return PPendientesResponse.builder()
