@@ -171,7 +171,7 @@ public class DriverServiceImpl implements DriverService {
             return PPendientesResponse.builder()
                     .nombre("").flota("").monto(0.0).pagos(0).license("").surnames("")
                     .idcar("").placa("").iddriver("").telefonop(telefono).idyego(null)
-                    .idflota("").estatus(404).message("Conductor no encontrado").msystem("").build();
+                    .idflota("").estatus(400).message("Conductor no encontrado").msystem("").build();
         }
         
         DriverApi driver = mapearObjectArrayADriverApi(resultados.get(0));
