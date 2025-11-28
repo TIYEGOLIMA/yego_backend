@@ -139,8 +139,10 @@ public class DriverServiceImpl implements DriverService {
         // Limpiar espacios
         String telefonoLimpio = telefono.trim();
         
-        // Normalizar según reglas para búsqueda en BD (SIEMPRE CON prefijo):
+        // Normalizar según reglas para búsqueda en BD (SIEMPRE CON prefijo +51 o +57):
         // - Si ya tiene prefijo internacional (+51 o +57), mantenerlo
+        // - Si empieza con "51" o "57" (sin +), agregar el "+"
+        // - Si tiene solo "+" sin código de país, completar según el primer dígito
         // - Si no tiene prefijo y empieza con 9, agregar +51 (Perú)
         // - Si no tiene prefijo y no empieza con 9, agregar +57 (Colombia)
         String telefonoParaBuscar;
@@ -148,10 +150,24 @@ public class DriverServiceImpl implements DriverService {
             // Ya tiene prefijo internacional, usarlo tal cual
             telefonoParaBuscar = telefonoLimpio;
             log.info("📱 [DriverService] Teléfono ya tiene prefijo internacional: {}", telefonoParaBuscar);
+        } else if (telefonoLimpio.startsWith("51")) {
+            // Empieza con 51 (sin +), agregar el +
+            telefonoParaBuscar = "+" + telefonoLimpio;
+            log.info("📱 [DriverService] Teléfono empieza con 51, agregando '+': {}", telefonoParaBuscar);
+        } else if (telefonoLimpio.startsWith("57")) {
+            // Empieza con 57 (sin +), agregar el +
+            telefonoParaBuscar = "+" + telefonoLimpio;
+            log.info("📱 [DriverService] Teléfono empieza con 57, agregando '+': {}", telefonoParaBuscar);
         } else if (telefonoLimpio.startsWith("+")) {
-            // Tiene otro prefijo, mantenerlo como está
-            telefonoParaBuscar = telefonoLimpio;
-            log.info("📱 [DriverService] Teléfono tiene otro prefijo: {}", telefonoParaBuscar);
+            // Tiene "+" pero sin código de país, quitar el "+" y agregar código según el primer dígito
+            String telefonoSinPlus = telefonoLimpio.substring(1);
+            if (telefonoSinPlus.startsWith("9")) {
+                telefonoParaBuscar = "+51" + telefonoSinPlus;
+                log.info("📱 [DriverService] Teléfono con '+' empieza con 9, agregando prefijo +51 (Perú)");
+            } else {
+                telefonoParaBuscar = "+57" + telefonoSinPlus;
+                log.info("📱 [DriverService] Teléfono con '+' no empieza con 9, agregando prefijo +57 (Colombia)");
+            }
         } else {
             // No tiene prefijo, agregar según el primer dígito
             if (telefonoLimpio.startsWith("9")) {
