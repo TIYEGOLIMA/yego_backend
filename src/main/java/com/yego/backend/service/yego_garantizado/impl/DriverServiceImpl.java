@@ -136,14 +136,37 @@ public class DriverServiceImpl implements DriverService {
     public PPendientesResponse obtenerPendientes(String telefono) {
         log.info("📋 [DriverService] Obteniendo pagos pendientes para GoBot - Teléfono: {}", telefono);
         
-        // Limpiar espacios y normalizar siempre con "+"
+        // Limpiar espacios
         String telefonoLimpio = telefono.trim();
-        String telefonoNormalizado = telefonoLimpio.startsWith("+") ? telefonoLimpio : "+" + telefonoLimpio;
         
-        log.info("📱 [DriverService] Teléfono normalizado: {}", telefonoNormalizado);
+        // Normalizar según reglas para búsqueda en BD (SIEMPRE CON prefijo):
+        // - Si ya tiene prefijo internacional (+51 o +57), mantenerlo
+        // - Si no tiene prefijo y empieza con 9, agregar +51 (Perú)
+        // - Si no tiene prefijo y no empieza con 9, agregar +57 (Colombia)
+        String telefonoParaBuscar;
+        if (telefonoLimpio.startsWith("+51") || telefonoLimpio.startsWith("+57")) {
+            // Ya tiene prefijo internacional, usarlo tal cual
+            telefonoParaBuscar = telefonoLimpio;
+            log.info("📱 [DriverService] Teléfono ya tiene prefijo internacional: {}", telefonoParaBuscar);
+        } else if (telefonoLimpio.startsWith("+")) {
+            // Tiene otro prefijo, mantenerlo como está
+            telefonoParaBuscar = telefonoLimpio;
+            log.info("📱 [DriverService] Teléfono tiene otro prefijo: {}", telefonoParaBuscar);
+        } else {
+            // No tiene prefijo, agregar según el primer dígito
+            if (telefonoLimpio.startsWith("9")) {
+                telefonoParaBuscar = "+51" + telefonoLimpio;
+                log.info("📱 [DriverService] Teléfono empieza con 9, agregando prefijo +51 (Perú)");
+            } else {
+                telefonoParaBuscar = "+57" + telefonoLimpio;
+                log.info("📱 [DriverService] Teléfono no empieza con 9, agregando prefijo +57 (Colombia)");
+            }
+        }
         
-        // Buscar siempre con el formato normalizado (con +)
-        List<Object[]> resultados = driverRepository.findAllByPhoneAsDriverApiNative(telefonoNormalizado);
+        log.info("📱 [DriverService] Buscando en BD con prefijo: {}", telefonoParaBuscar);
+        
+        // Buscar en BD siempre CON prefijo
+        List<Object[]> resultados = driverRepository.findAllByPhoneAsDriverApiNative(telefonoParaBuscar);
         
         if (resultados.isEmpty()) {
             return PPendientesResponse.builder()
@@ -152,7 +175,24 @@ public class DriverServiceImpl implements DriverService {
                     .idflota("").estatus(400).message("Conductor no encontrado").msystem("").build();
         }
         
-        DriverApi driver = mapearObjectArrayADriverApi(resultados.get(0));
+        // La query ya ordena primero los que tienen park_id no nulo
+        // Solo necesitamos tomar el primero de la lista
+        Object[] resultadoSeleccionado = resultados.get(0);
+        
+        // Verificar si tiene park_id para logging
+        boolean tieneParkId = resultadoSeleccionado.length > 1 && 
+                             resultadoSeleccionado[1] != null && 
+                             !resultadoSeleccionado[1].toString().trim().isEmpty();
+        
+        if (tieneParkId) {
+            log.info("✅ [DriverService] Se seleccionó conductor con park_id: {} y driver_id: {}", 
+                    resultadoSeleccionado[1], resultadoSeleccionado[0]);
+        } else {
+            log.warn("⚠️ [DriverService] No se encontró conductor con park_id, usando el primero disponible con driver_id: {}", 
+                    resultadoSeleccionado[0]);
+        }
+        
+        DriverApi driver = mapearObjectArrayADriverApi(resultadoSeleccionado);
         
         // Obtener nombre de flota
         String nombreFlota = flotaService.obtenerFlotas().stream()
@@ -177,7 +217,7 @@ public class DriverServiceImpl implements DriverService {
                 .idcar(driver.getCarId() != null ? driver.getCarId() : "")
                 .placa(driver.getCarNumber() != null ? driver.getCarNumber() : "")
                 .iddriver(driver.getDriverId() != null ? driver.getDriverId() : "")
-                .telefonop(driver.getPhone() != null ? driver.getPhone() : "")
+                .telefonop(telefonoParaBuscar) // Usar el teléfono normalizado con prefijo
                 .idyego(null)
                 .idflota(driver.getParkId() != null ? driver.getParkId() : "")
                 .estatus(200)

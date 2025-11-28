@@ -3,9 +3,12 @@ package com.yego.backend.service.yego_principal.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_principal.api.request.ModuleRequest;
+import com.yego.backend.entity.yego_principal.api.response.GrupoResponse;
 import com.yego.backend.entity.yego_principal.api.response.ModuleResponse;
+import com.yego.backend.entity.yego_principal.entities.Grupo;
 import com.yego.backend.entity.yego_principal.entities.Module;
 import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.repository.yego_principal.GrupoRepository;
 import com.yego.backend.repository.yego_principal.ModuleRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_principal.ModuleService;
@@ -26,6 +29,7 @@ public class ModuleServiceImpl implements ModuleService {
 
     private final ModuleRepository moduleRepository;
     private final UserRepository userRepository;
+    private final GrupoRepository grupoRepository;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -73,11 +77,22 @@ public class ModuleServiceImpl implements ModuleService {
     @Transactional
     public ModuleResponse crear(ModuleRequest request) {
         log.info("📋 [ModuleService] Creando nuevo módulo: {}", request.getNombre());
+        
+        // Buscar grupo si se proporciona grupoId
+        Grupo grupo = null;
+        if (request.getGrupoId() != null) {
+            grupo = grupoRepository.findById(request.getGrupoId())
+                    .orElseThrow(() -> new RuntimeException("Grupo no encontrado con ID: " + request.getGrupoId()));
+            log.info("📋 [ModuleService] Grupo encontrado: {}", grupo.getNombre());
+        }
+        
         Module modulo = Module.builder()
                 .nombre(request.getNombre())
                 .descripcion(request.getDescripcion())
                 .url(request.getUrl())
                 .estado("activo")
+                .icono(request.getIcono())
+                .grupo(grupo)
                 .activo(true)
                 .fechaCreacion(LocalDateTime.now())
                 .fechaActualizacion(LocalDateTime.now())
@@ -95,10 +110,20 @@ public class ModuleServiceImpl implements ModuleService {
         Module modulo = moduleRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Módulo no encontrado con ID: " + id));
 
+        // Buscar grupo si se proporciona grupoId
+        Grupo grupo = null;
+        if (request.getGrupoId() != null) {
+            grupo = grupoRepository.findById(request.getGrupoId())
+                    .orElseThrow(() -> new RuntimeException("Grupo no encontrado con ID: " + request.getGrupoId()));
+            log.info("📋 [ModuleService] Grupo encontrado: {}", grupo.getNombre());
+        }
+
         modulo.setNombre(request.getNombre());
         modulo.setDescripcion(request.getDescripcion());
         modulo.setUrl(request.getUrl());
         modulo.setEstado(request.getEstado() != null ? request.getEstado() : "inactivo");
+        modulo.setIcono(request.getIcono());
+        modulo.setGrupo(grupo);
         modulo.setActivo(request.getActivo());
         modulo.setFechaActualizacion(LocalDateTime.now());
         modulo.setUltimoCheck(LocalDateTime.now()); // Actualizar ultimoCheck al actualizar
@@ -376,12 +401,27 @@ public class ModuleServiceImpl implements ModuleService {
                 modulo.getNombre(), url);
         }
         
+        // Convertir grupo a GrupoResponse si existe
+        GrupoResponse grupoResponse = null;
+        if (modulo.getGrupo() != null) {
+            Grupo grupo = modulo.getGrupo();
+            grupoResponse = GrupoResponse.builder()
+                    .id(grupo.getId())
+                    .nombre(grupo.getNombre())
+                    .icono(grupo.getIcono())
+                    .activo(grupo.getActivo())
+                    .fechaCreacion(grupo.getFechaCreacion())
+                    .build();
+        }
+        
         return ModuleResponse.builder()
                 .id(modulo.getId())
                 .nombre(modulo.getNombre())
                 .descripcion(modulo.getDescripcion())
                 .url(url)
                 .estado(modulo.getEstado())
+                .icono(modulo.getIcono())
+                .grupo(grupoResponse)
                 .ultimoCheck(modulo.getUltimoCheck())
                 .activo(modulo.getActivo())
                 .fechaCreacion(modulo.getFechaCreacion())

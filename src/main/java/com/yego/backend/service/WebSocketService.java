@@ -281,6 +281,29 @@ public class WebSocketService {
         log.info("✅ Notificación de bloqueo enviada para usuario: {}", username);
     }
     
+    /**
+     * Enviar notificación de desactivación de rol con logout automático
+     */
+    public void enviarDesactivacionRol(Long userId, String username, String roleName) {
+        log.info("🚨 Enviando notificación de desactivación de rol para usuario: {} (ID: {}), Rol: {}", username, userId, roleName);
+        
+        Map<String, Object> notification = Map.of(
+            "type", "ROLE_DEACTIVATED",
+            "message", "Tu rol '" + roleName + "' ha sido desactivado temporalmente. No tienes acceso al sistema en este momento.",
+            "userId", userId,
+            "username", username,
+            "roleName", roleName,
+            "autoLogoutDelay", 3000, // 3 segundos en milisegundos
+            "redirectToLogin", true,
+            "timestamp", LocalDateTime.now().toString()
+        );
+        
+        // Enviar SOLO al usuario específico afectado
+        messagingTemplate.convertAndSend("/topic/user/" + userId, notification);
+        
+        log.info("✅ Notificación de desactivación de rol enviada para usuario: {}", username);
+    }
+    
 
     /**
      * Enviar datos completos de garantizado para actualizar la tabla

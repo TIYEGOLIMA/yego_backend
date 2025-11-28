@@ -100,6 +100,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/permissions/**").permitAll() // Permisos endpoints
                 .requestMatchers("/api/registros/**").permitAll() // Registros endpoints
                 .requestMatchers("/api/modules/**").permitAll() // Módulos endpoints
+                .requestMatchers("/api/grupos/**").permitAll() // Grupos endpoints
                 .requestMatchers("/api/system/**").permitAll() // Sistema endpoints
                 .requestMatchers("/api/marcacion/**").permitAll() // Asistencia endpoints
                 .requestMatchers("/api/ticketera/**").permitAll() // Ticketera endpoints

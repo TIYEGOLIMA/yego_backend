@@ -40,6 +40,13 @@ public class Module {
     
     @Column(name = "yeg_sis_ext_activo", nullable = false)
     private Boolean activo = true;
+
+    @Column(name = "yeg_sis_ext_icons", nullable = false)
+    private String icono;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "yeg_sis_ext_grupo_id", nullable = true)
+    private Grupo grupo;
     
     @CreationTimestamp
     @Column(name = "yeg_sis_ext_created_at", nullable = false, updatable = false)

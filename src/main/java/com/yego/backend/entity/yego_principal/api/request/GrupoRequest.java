@@ -7,29 +7,20 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * DTO para crear módulos del sistema YEGO Principal
+ * DTO para crear/actualizar grupos del sistema YEGO Principal
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ModuleRequest {
+public class GrupoRequest {
     
     @NotBlank(message = "El nombre es obligatorio")
     private String nombre;
     
-    private String descripcion;
-    
-    @NotBlank(message = "La URL es obligatoria")
-    private String url;
-    
-    private String estado;
-    
-    @NotBlank(message = "El icono es obligatorio")
     private String icono;
-    
-    private Long grupoId;
     
     @Builder.Default
     private Boolean activo = true;
 }
+

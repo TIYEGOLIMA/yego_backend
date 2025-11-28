@@ -82,6 +82,17 @@ public class AuthServiceImpl implements AuthService {
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Usuario inactivo. Contacte al administrador del sistema");
                 }
                 
+                // Verificar si el rol del usuario está activo
+                if (user.getRole() != null && user.getRole().getActivo() != null && !user.getRole().getActivo()) {
+                    log.warn("Usuario con rol inactivo intentó iniciar sesión: {} (Rol: {})", 
+                        user.getUsername(), user.getRole().getName());
+                    String clientIp = getClientIpAddress(request);
+                    String userAgent = request.getHeader("User-Agent");
+                    auditService.logFailedLogin(username, clientIp, userAgent);
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                        "Tu rol '" + user.getRole().getName() + "' ha sido desactivado temporalmente. No tienes acceso al sistema en este momento. Contacte al administrador.");
+                }
+                
                 return mapToUserResponseDto(user);
             } else {
                 log.info("Contraseña incorrecta para usuario: {}", username);
@@ -121,6 +132,14 @@ public class AuthServiceImpl implements AuthService {
             }
             
             User user = userOpt.get();
+            
+            // Verificar si el rol del usuario está activo
+            if (user.getRole() != null && user.getRole().getActivo() != null && !user.getRole().getActivo()) {
+                log.warn("Usuario con rol inactivo intentó refrescar token: {} (Rol: {})", 
+                    user.getUsername(), user.getRole().getName());
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                    "Tu rol '" + user.getRole().getName() + "' ha sido desactivado temporalmente. No tienes acceso al sistema en este momento.");
+            }
             UserResponseDto userDto = mapToUserResponseDto(user);
             
             // Generar nuevo JWT token

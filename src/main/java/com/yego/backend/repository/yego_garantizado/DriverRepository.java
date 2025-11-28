@@ -45,11 +45,14 @@ public interface DriverRepository extends JpaRepository<Driver, String> {
     /**
      * Busca un conductor por teléfono
      * Retorna solo los campos necesarios para PPendientesResponse
+     * Prioriza los registros con park_id no nulo
      * @param phone número de teléfono a buscar
-     * @return Lista de arrays de objetos con los campos necesarios
+     * @return Lista de arrays de objetos con los campos necesarios, ordenados por park_id no nulo primero
      */
     @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number " +
-                   "FROM drivers WHERE phone = :phone LIMIT 1", nativeQuery = true)
+                   "FROM drivers WHERE phone = :phone " +
+                   "ORDER BY CASE WHEN park_id IS NOT NULL THEN 0 ELSE 1 END, driver_id " +
+                   "LIMIT 10", nativeQuery = true)
     List<Object[]> findAllByPhoneAsDriverApiNative(@Param("phone") String phone);
 }
 

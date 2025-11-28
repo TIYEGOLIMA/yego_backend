@@ -3,11 +3,14 @@ package com.yego.backend.service.yego_principal.impl;
 import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
 import com.yego.backend.entity.yego_principal.entities.Role;
+import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.repository.yego_principal.RoleRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_principal.RoleService;
 import com.yego.backend.service.yego_principal.ModuleService;
 import com.yego.backend.service.yego_principal.PermissionService;
+import com.yego.backend.service.yego_principal.SessionService;
+import com.yego.backend.service.WebSocketService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +35,8 @@ public class RoleServiceImpl implements RoleService {
     private final ObjectMapper objectMapper;
     private final ModuleService moduleService;
     private final PermissionService permissionService;
+    private final SessionService sessionService;
+    private final WebSocketService webSocketService;
     
     @Override
     @Transactional
@@ -179,6 +184,36 @@ public class RoleServiceImpl implements RoleService {
         
         String status = newStatus ? "activado" : "desactivado";
         log.info("🔄 Rol YEGO Principal {}: {}", status, savedRole.getName());
+        
+        // Si se desactivó el rol, cerrar sesiones de todos los usuarios con ese rol
+        if (!newStatus) {
+            log.info("🚨 Rol desactivado - Cerrando sesiones de usuarios con rol: {}", savedRole.getName());
+            List<User> usersWithRole = userRepository.findByRoleId(id);
+            
+            for (User user : usersWithRole) {
+                try {
+                    // Cerrar todas las sesiones del usuario
+                    sessionService.deactivateByUserId(user.getId(), 
+                        "Rol '" + savedRole.getName() + "' desactivado por administrador");
+                    
+                    // Enviar notificación por WebSocket
+                    webSocketService.enviarDesactivacionRol(
+                        user.getId(), 
+                        user.getUsername(), 
+                        savedRole.getName()
+                    );
+                    
+                    log.info("✅ Sesiones cerradas y notificación enviada para usuario: {} (ID: {})", 
+                        user.getUsername(), user.getId());
+                } catch (Exception e) {
+                    log.error("❌ Error al cerrar sesiones de usuario {} (ID: {}): {}", 
+                        user.getUsername(), user.getId(), e.getMessage());
+                }
+            }
+            
+            log.info("✅ Proceso completado: {} usuarios afectados por desactivación de rol '{}'", 
+                usersWithRole.size(), savedRole.getName());
+        }
         
         return mapToResponseDto(savedRole);
     }

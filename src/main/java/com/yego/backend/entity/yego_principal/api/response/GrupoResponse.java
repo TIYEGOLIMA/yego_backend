@@ -11,17 +11,12 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ModuleResponse {
+public class GrupoResponse {
     
     private Long id;
     private String nombre;
-    private String descripcion;
-    private String url;
-    private String estado;
     private String icono;
-    private GrupoResponse grupo;
-    private LocalDateTime ultimoCheck;
     private Boolean activo;
     private LocalDateTime fechaCreacion;
-    private LocalDateTime fechaActualizacion;
 }
+
