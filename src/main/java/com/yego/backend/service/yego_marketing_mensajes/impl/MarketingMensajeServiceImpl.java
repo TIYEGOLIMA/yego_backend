@@ -479,7 +479,7 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
 
     /**
      * Obtiene el ID del usuario autenticado desde el contexto de seguridad
-     */
+    */
     private Long obtenerUserIdActual() {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();

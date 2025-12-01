@@ -139,12 +139,6 @@ public class DriverServiceImpl implements DriverService {
         // Limpiar espacios
         String telefonoLimpio = telefono.trim();
         
-        // Normalizar según reglas para búsqueda en BD (SIEMPRE CON prefijo +51 o +57):
-        // - Si ya tiene prefijo internacional (+51 o +57), mantenerlo
-        // - Si empieza con "51" o "57" (sin +), agregar el "+"
-        // - Si tiene solo "+" sin código de país, completar según el primer dígito
-        // - Si no tiene prefijo y empieza con 9, agregar +51 (Perú)
-        // - Si no tiene prefijo y no empieza con 9, agregar +57 (Colombia)
         String telefonoParaBuscar;
         if (telefonoLimpio.startsWith("+51") || telefonoLimpio.startsWith("+57")) {
             // Ya tiene prefijo internacional, usarlo tal cual

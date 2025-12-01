@@ -48,5 +48,17 @@ public interface MarketingMensajeRepository extends JpaRepository<MarketingMensa
      * @return Lista de mensajes que pueden ser enviados programadamente
      */
     List<MarketingMensaje> findByActivoTrueAndWhatsappTrueAndHorasEspecificasIsNotNull();
+    
+    /**
+     * Busca mensajes activos con horas específicas configuradas y que tengan grupos o flotas
+     * @return Lista de mensajes que pueden ser enviados programadamente (WhatsApp o Fleet)
+     */
+    List<MarketingMensaje> findByActivoTrueAndHorasEspecificasIsNotNullAndFlotasIsNotNull();
+    
+    /**
+     * Busca mensajes activos con horas específicas configuradas
+     * @return Lista de mensajes programados
+     */
+    List<MarketingMensaje> findByActivoTrueAndHorasEspecificasIsNotNull();
 }
 

@@ -10,13 +10,18 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Scheduler para enviar mensajes de marketing a las horas programadas
@@ -37,8 +42,8 @@ public class MarketingMensajeScheduler {
     private static final String YANGO_API_URL = "https://fleet.yango.com/api/fleet/communications/v2/mailings";
     
     // Cookie base para la API de Yango (sin park_id, se reemplazará dinámicamente)
-    private static final String YANGO_COOKIE_BASE = "i=PSsBLgVrJpYnJ2+C+lS7y26viiqCUpy2WbUIgyUcFtABmXdLBimLbHRDxBwcqG4Ld1g9EZ9dSEYH/4lPLPP4oO1vzOA=; yandexuid=6319448971755539422; yashr=4577633351755539422; gdpr=0; _ym_uid=175269441917135422; _ym_d=1755539425; yp=2070899442.udn.cDpnaW9tYXJvcnRlZ2E%3D; L=dyJbeVNbRwUDZF5pWQB1c1RfQ3hdYXJ6MTsmVVQ2XQAyDSIU.1755539442.16252.380690.a38c48704c9060f72c19a8a74895912e; yandex_login=giomarortega; Session_id=3:1756824708.5.0.1755539442239:WbD9Jg:8b7b.1.2:1|2223153146.0.2.0:3.3:1755539442|60:11147555.299236.OWQHwoNzzJ1nBLc3-rcfhkPu4EM; sessar=1.1205.CiDhzz0LO9Eyn6IfEuzHmK4ql5cl2LAKy2S4u3lUMntEwA.13627qed3lFkVeQ7A2EN777bRR2QYAzWq6Hmt4Fbt2w; sessionid2=3:1756824708.5.0.1755539442239:WbD9Jg:8b7b.1.2:1|2223153146.0.2.0:3.3:1755539442|60:11147555.299236.fakesign0000000000000000000; park_id=";
-    private static final String YANGO_COOKIE_SUFFIX = "; yuidss=6319448971755539422; ymex=2076954182.yrts.1761594182; _ym_isad=2; _ym_visorc=b; _yasc=OmQBtTw8vSnInrmz+Igq9+EwmJy3O0OHgVaDjxzeX/dBcpP1EKPY8eWqSw/D2GQezo+f; bh=EkIiQ2hyb21pdW0iO3Y9IjE0MiIsICJNaWNyb3NvZnQgRWRnZSI7dj0iMTQyIiwgIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiINMTQyLjAuMzU5NS45NCoCPzA6CSJXaW5kb3dzIkIGMTkuMC4wSgI2NFJbIkNocm9taXVtIjt2PSIxNDIuMC43NDQ0LjE3NiIsIk1pY3Jvc29mdCBFZGdlIjt2PSIxNDIuMC4zNTk1Ljk0IiwiTm90X0EgQnJhbmQiO3Y9Ijk5LjAuMC4wImDYg5jJBmoh3Mrh/wiS2KGxA5/P4eoD+/rw5w3r//32D/iczIcI2egC";
+    private static final String YANGO_COOKIE_BASE = "i=x5tkbBS7C7HE+NXGcad3ZssQ3gf1F0rq356OWQvEx3ZB8N6sRw3Cgl6OxfwzvxG4EEjzwDu2xiGfC575M7+qz6ox3wc=; yandexuid=196877061764616562; yashr=2270601791764616562; yuidss=196877061764616562; ymex=2079976564.yrts.1764616564; receive-cookie-deprecation=1; gdpr=0; _ym_uid=1764616564116282218; _ym_d=1764616565; Session_id=3:1764616812.5.0.1764616812843:WbD9Jg:9933.1.2:1|2223153146.0.2.0:3.3:1764616812|60:11454337.136939.hHJxPhpQO1T97Iog_aHQCOuvpQo; sessar=1.1396519.CiCR_wLdjC3OTrDh2hgMr8--C-fwizMwlP9jW-dd6vGgRw.9KD2YMUjfA4ZbhzmsFVhHJOx2zEo94hMFlT83twWhyo; sessionid2=3:1764616812.5.0.1764616812843:WbD9Jg:9933.1.2:1|2223153146.0.2.0:3.3:1764616812|60:11454337.136939.fakesign0000000000000000000; yp=2079976812.udn.cDpnaW9tYXJvcnRlZ2E%3D; ys=udn.cDpnaW9tYXJvcnRlZ2E%3D; L=BBBBQ18BXmZ2XmtITlJ8VUBfcUBgeGFSPTgiLAs7KTUuNQkx.1764616812.1447419.396095.0920cd88815bbde83a0318732f9a8b82; yandex_login=giomarortega; _ym_isad=2; _ym_visorc=b; _yasc=BLz1Zp2FuQu62sL4fqfgxnMPji/mavv+nhDLwHSPyGGLL25AfVKePAzbWDV9SR0BrZb4; park_id=";
+    private static final String YANGO_COOKIE_SUFFIX = "; bh=EjkiQ2hyb21pdW0iO3Y9IjE0MiIsICJCcmF2ZSI7dj0iMTQyIiwgIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiIJMTQyLjAuMC4wKgI/MDoHIkxpbnV4IkIGNi4xNy40SgI2NFJJIkNocm9taXVtIjt2PSIxNDIuMC4wLjAiLCJCcmF2ZSI7dj0iMTQyLjAuMC4wIiwiTm90X0EgQnJhbmQiO3Y9Ijk5LjAuMC4wImDsw7jJBmoZ3MrpiA7yrLelC/v68OcN6//99g/4nMyHCA==";
     
     // Mapa para evitar envíos duplicados en el mismo minuto
     private final Map<Long, String> ultimosEnvios = new HashMap<>();
@@ -92,25 +97,24 @@ public class MarketingMensajeScheduler {
                 horasAVerificar.add(horaVerificar.format(HORA_FORMATTER));
             }
             
-            log.info("🕐 [MarketingMensajeScheduler] Verificando horas: {} - Día: {}", horasAVerificar, diaActual);
+            // Consulta: mensajes activos con horas específicas (pueden tener grupos O flotas)
+            List<MarketingMensaje> todosLosMensajesProgramados = marketingMensajeRepository
+                    .findByActivoTrueAndHorasEspecificasIsNotNull();
             
-            // Consulta optimizada: solo mensajes activos con WhatsApp activado y horas específicas
-            List<MarketingMensaje> mensajesProgramados = marketingMensajeRepository
-                    .findByActivoTrueAndWhatsappTrueAndHorasEspecificasIsNotNull();
+            // Filtrar solo los que tienen grupos O flotas configurados
+            List<MarketingMensaje> mensajesProgramados = todosLosMensajesProgramados.stream()
+                    .filter(mensaje -> {
+                        boolean tieneGrupos = mensaje.getGrupos() != null && !mensaje.getGrupos().trim().isEmpty();
+                        boolean tieneFlotas = mensaje.getFlotas() != null && !mensaje.getFlotas().trim().isEmpty();
+                        return tieneGrupos || tieneFlotas;
+                    })
+                    .collect(java.util.stream.Collectors.toList());
             
             if (mensajesProgramados.isEmpty()) {
-                log.info("ℹ️ [MarketingMensajeScheduler] No hay mensajes programados para verificar");
                 return;
             }
             
-            log.info("📋 [MarketingMensajeScheduler] Verificando {} mensajes programados", mensajesProgramados.size());
-            
             for (MarketingMensaje mensaje : mensajesProgramados) {
-                // Verificar que tenga grupos configurados
-                if (mensaje.getGrupos() == null || mensaje.getGrupos().trim().isEmpty()) {
-                    continue;
-                }
-                
                 // Parsear las horas específicas
                 try {
                     Map<String, List<String>> horasEspecificas = objectMapper.readValue(
@@ -118,7 +122,6 @@ public class MarketingMensajeScheduler {
                         new TypeReference<Map<String, List<String>>>() {}
                     );
                     
-                    // Verificar cada hora del rango (últimos 5 minutos)
                     for (String horaVerificar : horasAVerificar) {
                         if (horasEspecificas.containsKey(horaVerificar)) {
                             List<String> diasProgramados = horasEspecificas.get(horaVerificar);
@@ -130,13 +133,10 @@ public class MarketingMensajeScheduler {
                                                     diaActual.equals(dia) || 
                                                     normalizarDia(dia).equals(diaActual));
                             
-                            // Verificar si el día actual está en la lista de días programados
                             if (diaCoincide) {
                                 // Verificar que no se haya enviado ya para esta hora
                                 if (ultimosEnvios.containsKey(mensaje.getId()) && 
                                     ultimosEnvios.get(mensaje.getId()).equals(horaVerificar)) {
-                                    log.debug("⏭️ [MarketingMensajeScheduler] Mensaje {} ya enviado para hora {}", 
-                                            mensaje.getId(), horaVerificar);
                                     continue;
                                 }
                                 
@@ -170,44 +170,45 @@ public class MarketingMensajeScheduler {
      */
     private void enviarMensajeProgramado(MarketingMensaje mensaje) {
         try {
-            log.info("📤 [MarketingMensajeScheduler] Enviando mensaje programado ID: {} - Título: {}", 
-                    mensaje.getId(), mensaje.getTitulo());
+            log.info("📤 [MarketingMensajeScheduler] Enviando mensaje ID: {} - Título: {}", mensaje.getId(), mensaje.getTitulo());
             
             // Obtener grupos
             List<String> grupos = convertirJsonALista(mensaje.getGrupos());
-            if (grupos == null || grupos.isEmpty()) {
-                log.warn("⚠️ [MarketingMensajeScheduler] No hay grupos para enviar mensaje ID: {}", mensaje.getId());
+            boolean tieneGrupos = grupos != null && !grupos.isEmpty();
+            
+            // Obtener flotas
+            List<String> flotas = convertirJsonALista(mensaje.getFlotas());
+            boolean tieneFlotas = flotas != null && !flotas.isEmpty();
+            
+            if (!tieneGrupos && !tieneFlotas) {
+                log.warn("⚠️ [MarketingMensajeScheduler] Mensaje ID {} no tiene grupos ni flotas configurados", mensaje.getId());
                 return;
             }
             
             // Obtener nombre del archivo original si existe
             String nombreArchivoOriginal = null;
             if (mensaje.getArchivo() != null && !mensaje.getArchivo().isEmpty()) {
-                // Extraer nombre del archivo de la URL
                 nombreArchivoOriginal = extraerNombreArchivoDeUrl(mensaje.getArchivo());
             }
             
             // Obtener tipo de media
             String tipoMedia = mensaje.getTipo();
             
-            // Enviar mensaje a grupos de WhatsApp
-            whatsAppService.enviarAMultiplesGrupos(
-                grupos,
-                mensaje.getMensaje(),
-                mensaje.getArchivo(),
-                nombreArchivoOriginal,
-                tipoMedia
-            );
-            
-            // Enviar mensaje a API de Yango solo si tiene flotas configuradas
-            List<String> flotas = convertirJsonALista(mensaje.getFlotas());
-            if (flotas != null && !flotas.isEmpty()) {
-                enviarMensajeAYango(mensaje);
-            } else {
-                log.debug("⏭️ [MarketingMensajeScheduler] Mensaje ID {} no tiene flotas configuradas, no se enviará a API Yango", mensaje.getId());
+            // Enviar mensaje a grupos de WhatsApp si tiene grupos
+            if (tieneGrupos) {
+                whatsAppService.enviarAMultiplesGrupos(
+                    grupos,
+                    mensaje.getMensaje(),
+                    mensaje.getArchivo(),
+                    nombreArchivoOriginal,
+                    tipoMedia
+                );
             }
             
-            log.info("✅ [MarketingMensajeScheduler] Mensaje programado enviado exitosamente ID: {}", mensaje.getId());
+            // Enviar mensaje a API de Yango (Fleet) si tiene flotas configuradas
+            if (tieneFlotas) {
+                enviarMensajeAYango(mensaje);
+            }
             
         } catch (Exception e) {
             log.error("❌ [MarketingMensajeScheduler] Error enviando mensaje programado ID {}: {}", 
@@ -280,30 +281,28 @@ public class MarketingMensajeScheduler {
      */
     private void enviarMensajeAYango(MarketingMensaje mensaje) {
         try {
-            log.info("📤 [MarketingMensajeScheduler] Enviando mensaje a API Yango - Título: {}", mensaje.getTitulo());
-            
-            // Obtener flotas del mensaje
             List<String> flotas = convertirJsonALista(mensaje.getFlotas());
             if (flotas == null || flotas.isEmpty()) {
-                log.warn("⚠️ [MarketingMensajeScheduler] No hay flotas para enviar mensaje a Yango ID: {}", mensaje.getId());
                 return;
             }
             
-            // Obtener todos los park_ids únicos de las flotas
-            // Las flotas pueden venir como lista: ["96f5a1e493b6484e88d7fc2e3bb8cbdb", "08e20910d81d42658d4334d3f6d10ac0"]
-            // O como string separado por comas: "96f5a1e493b6484e88d7fc2e3bb8cbdb,08e20910d81d42658d4334d3f6d10ac0"
             List<String> parkIds = obtenerTodosLosParkIds(flotas);
             if (parkIds == null || parkIds.isEmpty()) {
-                log.warn("⚠️ [MarketingMensajeScheduler] No se pudieron extraer park_ids de las flotas para mensaje ID: {}", mensaje.getId());
                 return;
             }
             
-            log.info("🏢 [MarketingMensajeScheduler] Enviando mensaje a {} flota(s) - Park IDs: {}", parkIds.size(), parkIds);
+            // Preparar el body según la estructura de la API de Yango
+            // La API de Yango espera los campos en inglés y una estructura específica
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("type", "pro");  // Tipo de mensaje: "pro" para conductores profesionales
+            requestBody.put("title", mensaje.getTitulo());
+            requestBody.put("message", mensaje.getMensaje());
             
-            // Preparar el body con solo título y mensaje (es el mismo para todas las flotas)
-            Map<String, String> requestBody = new HashMap<>();
-            requestBody.put("titulo", mensaje.getTitulo());
-            requestBody.put("mensaje", mensaje.getMensaje());
+            // Estructura de recipients según el formato de la API
+            Map<String, Object> recipients = new HashMap<>();
+            Map<String, Object> recipientsFilters = new HashMap<>();
+            recipients.put("filters", recipientsFilters);
+            requestBody.put("recipients", recipients);
             
             // Enviar un mensaje por cada park_id
             int exitosos = 0;
@@ -312,34 +311,37 @@ public class MarketingMensajeScheduler {
             for (int i = 0; i < parkIds.size(); i++) {
                 String parkId = parkIds.get(i);
                 try {
-                    log.info("📨 [MarketingMensajeScheduler] Enviando a flota con park_id: {} ({}/{})", 
-                            parkId, i + 1, parkIds.size());
-                    
-                    // Construir cookie dinámica con el park_id de la flota actual
                     String cookieDinamica = YANGO_COOKIE_BASE + parkId + YANGO_COOKIE_SUFFIX;
+                    String idempotencyToken = UUID.randomUUID().toString();
                     
-                    // Configurar headers con Cookie y x-park-id dinámicos
                     HttpHeaders headers = new HttpHeaders();
                     headers.setContentType(MediaType.APPLICATION_JSON);
                     headers.set("Cookie", cookieDinamica);
                     headers.set("x-park-id", parkId);
+                    headers.set("X-Idempotency-Token", idempotencyToken);
                     
-                    HttpEntity<Map<String, String>> request = new HttpEntity<>(requestBody, headers);
+                    HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
                     
-                    // Enviar POST a la API de Yango
-                    restTemplate.exchange(
+                    ResponseEntity<Void> response = restTemplate.exchange(
                         YANGO_API_URL,
                         HttpMethod.POST,
                         request,
                         Void.class
                     );
                     
-                    exitosos++;
-                    log.info("✅ [MarketingMensajeScheduler] Mensaje enviado exitosamente a flota - Park ID: {}", parkId);
+                    int statusCodeValue = response.getStatusCode().value();
                     
-                    // Agregar delay de 5 segundos entre cada envío (excepto después del último)
+                    if (statusCodeValue >= 200 && statusCodeValue < 300) {
+                        exitosos++;
+                        log.info("✅ [MarketingMensajeScheduler] Mensaje enviado exitosamente a Fleet - Park ID: {} | Status: {}", 
+                                parkId, statusCodeValue);
+                    } else {
+                        fallidos++;
+                        log.error("❌ [MarketingMensajeScheduler] Fallo al enviar a Fleet - Park ID: {} | Status: {}", 
+                                parkId, statusCodeValue);
+                    }
+                    
                     if (i < parkIds.size() - 1) {
-                        log.info("⏳ [MarketingMensajeScheduler] Esperando 5 segundos antes del siguiente envío...");
                         Thread.sleep(5000);
                     }
                     
@@ -347,29 +349,38 @@ public class MarketingMensajeScheduler {
                     Thread.currentThread().interrupt();
                     log.error("❌ [MarketingMensajeScheduler] Interrupción durante el delay: {}", e.getMessage());
                     fallidos++;
+                } catch (HttpClientErrorException e) {
+                    fallidos++;
+                    int statusCodeValue = e.getStatusCode().value();
+                    log.error("❌ [MarketingMensajeScheduler] Error HTTP al enviar a Fleet - Park ID: {} | Status: {} | Error: {}", 
+                            parkId, statusCodeValue, e.getResponseBodyAsString());
+                } catch (HttpServerErrorException e) {
+                    fallidos++;
+                    int statusCodeValue = e.getStatusCode().value();
+                    log.error("❌ [MarketingMensajeScheduler] Error del servidor Fleet - Park ID: {} | Status: {} | Error: {}", 
+                            parkId, statusCodeValue, e.getResponseBodyAsString());
                 } catch (Exception e) {
                     fallidos++;
-                    log.error("❌ [MarketingMensajeScheduler] Error enviando mensaje a flota con park_id {}: {}", 
+                    log.error("❌ [MarketingMensajeScheduler] Error general al enviar a Fleet - Park ID: {} | Error: {}", 
                             parkId, e.getMessage(), e);
                     
-                    // Agregar delay incluso si falla (excepto después del último)
                     if (i < parkIds.size() - 1) {
                         try {
                             Thread.sleep(5000);
                         } catch (InterruptedException ie) {
                             Thread.currentThread().interrupt();
-                            log.error("❌ [MarketingMensajeScheduler] Interrupción durante el delay después de error: {}", 
-                                    ie.getMessage());
                         }
                     }
                 }
             }
             
-            log.info("📊 [MarketingMensajeScheduler] Resumen de envíos a Yango - Exitosos: {}, Fallidos: {}, Total: {}", 
-                    exitosos, fallidos, parkIds.size());
+            if (fallidos > 0 || exitosos > 0) {
+                log.info("📊 [MarketingMensajeScheduler] Resumen Fleet - Mensaje ID: {} | ✅ Exitosos: {} | ❌ Fallidos: {} | Total: {}", 
+                        mensaje.getId(), exitosos, fallidos, parkIds.size());
+            }
             
         } catch (Exception e) {
-            log.error("❌ [MarketingMensajeScheduler] Error enviando mensaje a API Yango ID {}: {}", 
+            log.error("❌ [MarketingMensajeScheduler] Error crítico enviando mensaje a Fleet - Mensaje ID: {} | Error: {}", 
                     mensaje.getId(), e.getMessage(), e);
         }
     }
