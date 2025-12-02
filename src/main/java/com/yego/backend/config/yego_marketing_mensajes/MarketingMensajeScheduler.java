@@ -42,8 +42,8 @@ public class MarketingMensajeScheduler {
     private static final String YANGO_API_URL = "https://fleet.yango.com/api/fleet/communications/v2/mailings";
     
     // Cookie base para la API de Yango (sin park_id, se reemplazará dinámicamente)
-    private static final String YANGO_COOKIE_BASE = "i=x5tkbBS7C7HE+NXGcad3ZssQ3gf1F0rq356OWQvEx3ZB8N6sRw3Cgl6OxfwzvxG4EEjzwDu2xiGfC575M7+qz6ox3wc=; yandexuid=196877061764616562; yashr=2270601791764616562; yuidss=196877061764616562; ymex=2079976564.yrts.1764616564; receive-cookie-deprecation=1; gdpr=0; _ym_uid=1764616564116282218; _ym_d=1764616565; Session_id=3:1764616812.5.0.1764616812843:WbD9Jg:9933.1.2:1|2223153146.0.2.0:3.3:1764616812|60:11454337.136939.hHJxPhpQO1T97Iog_aHQCOuvpQo; sessar=1.1396519.CiCR_wLdjC3OTrDh2hgMr8--C-fwizMwlP9jW-dd6vGgRw.9KD2YMUjfA4ZbhzmsFVhHJOx2zEo94hMFlT83twWhyo; sessionid2=3:1764616812.5.0.1764616812843:WbD9Jg:9933.1.2:1|2223153146.0.2.0:3.3:1764616812|60:11454337.136939.fakesign0000000000000000000; yp=2079976812.udn.cDpnaW9tYXJvcnRlZ2E%3D; ys=udn.cDpnaW9tYXJvcnRlZ2E%3D; L=BBBBQ18BXmZ2XmtITlJ8VUBfcUBgeGFSPTgiLAs7KTUuNQkx.1764616812.1447419.396095.0920cd88815bbde83a0318732f9a8b82; yandex_login=giomarortega; _ym_isad=2; _ym_visorc=b; _yasc=BLz1Zp2FuQu62sL4fqfgxnMPji/mavv+nhDLwHSPyGGLL25AfVKePAzbWDV9SR0BrZb4; park_id=";
-    private static final String YANGO_COOKIE_SUFFIX = "; bh=EjkiQ2hyb21pdW0iO3Y9IjE0MiIsICJCcmF2ZSI7dj0iMTQyIiwgIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiIJMTQyLjAuMC4wKgI/MDoHIkxpbnV4IkIGNi4xNy40SgI2NFJJIkNocm9taXVtIjt2PSIxNDIuMC4wLjAiLCJCcmF2ZSI7dj0iMTQyLjAuMC4wIiwiTm90X0EgQnJhbmQiO3Y9Ijk5LjAuMC4wImDsw7jJBmoZ3MrpiA7yrLelC/v68OcN6//99g/4nMyHCA==";
+    private static final String YANGO_COOKIE_BASE = "yandexuid=533847621761862983; yashr=8325443501761862983; yuidss=533847621761862983; receive-cookie-deprecation=1; gdpr=0; _ym_uid=1761862985776199037; _ym_d=1761862986; Session_id=3:1761863223.5.0.1761863223226:WbD9Jg:3d19.1.2:1|2221285626.0.2.0:3.3:1761863223|60:11339409.699332.GdXGpOBYpOnnZcYTZ7dcYF-82pA; sessar=1.1299404.CiC3-HIzjzrcG0mhrvBjFmS33BCYabv5Nxui2dHYBU7ACQ.IR31RZJy3UUfKy1r5-ke81MLxtC8XVUVjUGTsuOP9RE; sessionid2=3:1761863223.5.0.1761863223226:WbD9Jg:3d19.1.2:1|2221285626.0.2.0:3.3:1761863223|60:11339409.699332.fakesign0000000000000000000; L=aixqAFRza0t6X09UWwNYAEMDA3QLTQVxRFwzLQscVE0yLR8=.1761863223.1331947.373947.46780fe995d4ce4eb344e22909c5d32d; yandex_login=soporteyego; i=vv+8+MYJX99e3QjmOg6Pvlvw8JNxG0UcQXVy13YN66ChWMH34BZxMkPe+yvqzF8TGJkMuEjZpA2PkzWPTWHvBL5Ak/s=; park_id=";
+    private static final String YANGO_COOKIE_SUFFIX = "; _ym_isad=1; yp=2077223223.udn.cDpzb3BvcnRleWVnbw%3D%3D#1764711209.yu.533847621761862983; ymex=1767216809.oyu.533847621761862983#2077222984.yrts.1761862984; _ym_visorc=b; _yasc=CI0Ek99bdmeM57j1Ik1W3v2gFQGQ2ZjhycRn//t+kM/Tyk3T8N6SWMPGUayxI7ZaJh7o; bh=Ej8iQ2hyb21pdW0iO3Y9IjE0MiIsIkdvb2dsZSBDaHJvbWUiO3Y9IjE0MiIsIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiIOMTQyLjAuNzQ0NC4xNzYqAj8wOgVtYWNPU0IGMTUuNy4ySgI2NFJbIkNocm9taXVtIjt2PSIxNDIuMC43NDQ0LjE3NiIsIkdvb2dsZSBDaHJvbWUiO3Y9IjE0Mi4wLjc0NDQuMTc2IiwiTm90X0EgQnJhbmQiO3Y9Ijk5LjAuMC4wImCy27jJBmog3MrRtgG78Z+rBPrWhswI0tHt6wP8ua//B9/943PzgQI=";
     
     // Mapa para evitar envíos duplicados en el mismo minuto
     private final Map<Long, String> ultimosEnvios = new HashMap<>();
@@ -352,8 +352,12 @@ public class MarketingMensajeScheduler {
                 } catch (HttpClientErrorException e) {
                     fallidos++;
                     int statusCodeValue = e.getStatusCode().value();
-                    log.error("❌ [MarketingMensajeScheduler] Error HTTP al enviar a Fleet - Park ID: {} | Status: {} | Error: {}", 
-                            parkId, statusCodeValue, e.getResponseBodyAsString());
+                    if (statusCodeValue == 403) {
+                        log.warn("⚠️ [MarketingMensajeScheduler] Acceso denegado a flota - Park ID: {} | La cookie no tiene permisos para esta flota", parkId);
+                    } else {
+                        log.error("❌ [MarketingMensajeScheduler] Error HTTP al enviar a Fleet - Park ID: {} | Status: {} | Error: {}", 
+                                parkId, statusCodeValue, e.getResponseBodyAsString());
+                    }
                 } catch (HttpServerErrorException e) {
                     fallidos++;
                     int statusCodeValue = e.getStatusCode().value();
