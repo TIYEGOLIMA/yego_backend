@@ -196,13 +196,13 @@ public class MarketingMensajeScheduler {
             
             // Enviar mensaje a grupos de WhatsApp si tiene grupos
             if (tieneGrupos) {
-                whatsAppService.enviarAMultiplesGrupos(
-                    grupos,
-                    mensaje.getMensaje(),
-                    mensaje.getArchivo(),
-                    nombreArchivoOriginal,
-                    tipoMedia
-                );
+            whatsAppService.enviarAMultiplesGrupos(
+                grupos,
+                mensaje.getMensaje(),
+                mensaje.getArchivo(),
+                nombreArchivoOriginal,
+                tipoMedia
+            );
             }
             
             // Enviar mensaje a API de Yango (Fleet) si tiene flotas configuradas
@@ -332,7 +332,7 @@ public class MarketingMensajeScheduler {
                     int statusCodeValue = response.getStatusCode().value();
                     
                     if (statusCodeValue >= 200 && statusCodeValue < 300) {
-                        exitosos++;
+                    exitosos++;
                         log.info("✅ [MarketingMensajeScheduler] Mensaje enviado exitosamente a Fleet - Park ID: {} | Status: {}", 
                                 parkId, statusCodeValue);
                     } else {

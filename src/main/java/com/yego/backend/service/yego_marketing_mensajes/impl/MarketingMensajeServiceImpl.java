@@ -204,13 +204,22 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
             mensaje.setYandex(request.getYandex());
         }
         if (request.getDiasActivos() != null) {
-            mensaje.setDiasActivos(convertirListaAJson(request.getDiasActivos()));
+            List<String> diasLimpiados = limpiarListaDeJsonStrings(request.getDiasActivos());
+            mensaje.setDiasActivos(convertirListaAJson(diasLimpiados));
+            log.info("✅ [MarketingMensajeService] Días activos actualizados: {} -> {}", 
+                request.getDiasActivos(), diasLimpiados);
         }
         if (request.getGrupos() != null) {
-            mensaje.setGrupos(convertirListaAJson(request.getGrupos()));
+            List<String> gruposLimpiados = limpiarListaDeJsonStrings(request.getGrupos());
+            mensaje.setGrupos(convertirListaAJson(gruposLimpiados));
+            log.info("✅ [MarketingMensajeService] Grupos actualizados: {} -> {}", 
+                request.getGrupos(), gruposLimpiados);
         }
         if (request.getFlotas() != null) {
-            mensaje.setFlotas(convertirListaAJson(request.getFlotas()));
+            List<String> flotasLimpiadas = limpiarListaDeJsonStrings(request.getFlotas());
+            mensaje.setFlotas(convertirListaAJson(flotasLimpiadas));
+            log.info("✅ [MarketingMensajeService] Flotas actualizadas: {} -> {}", 
+                request.getFlotas(), flotasLimpiadas);
         }
         if (request.getHorasEspecificas() != null && !request.getHorasEspecificas().trim().isEmpty()) {
             // Validar que sea JSON válido
@@ -414,6 +423,7 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         response.setMensajeOperacion(mensajeOperacion);
         
         // Convertir JSON String a List<String> para campos JSON
+        // Limpiar antes de convertir para manejar datos mal serializados
         response.setDiasActivos(normalizarDiasActivos(convertirJsonALista(entity.getDiasActivos())));
         response.setGrupos(convertirJsonALista(entity.getGrupos()));
         response.setFlotas(convertirJsonALista(entity.getFlotas()));
@@ -518,17 +528,141 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
 
     /**
      * Convierte un JSON String a List<String>
+     * Maneja casos de doble/triple serialización limpiando los datos antes de parsear
      */
     private List<String> convertirJsonALista(String json) {
         if (json == null || json.trim().isEmpty()) {
             return Collections.emptyList();
         }
+        
+        String jsonLimpio = limpiarJsonString(json);
+        
         try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
+            List<String> resultado = objectMapper.readValue(jsonLimpio, new TypeReference<List<String>>() {});
+            
+            // Si el resultado contiene JSON strings, limpiarlos recursivamente
+            List<String> resultadoLimpio = new ArrayList<>();
+            for (String item : resultado) {
+                if (item != null && item.trim().startsWith("[") && item.trim().endsWith("]")) {
+                    // Es otro JSON string, parsearlo recursivamente
+                    List<String> subLista = convertirJsonALista(item);
+                    resultadoLimpio.addAll(subLista);
+                } else {
+                    resultadoLimpio.add(item);
+                }
+            }
+            
+            return resultadoLimpio;
         } catch (Exception e) {
-            log.error("❌ [MarketingMensajeService] Error convirtiendo JSON a lista: {}", e.getMessage());
+            log.warn("⚠️ [MarketingMensajeService] Error convirtiendo JSON a lista (intentando limpiar): {} | JSON: {}", 
+                e.getMessage(), json.substring(0, Math.min(100, json.length())));
             return Collections.emptyList();
         }
+    }
+    
+    /**
+     * Limpia un JSON string que puede estar múltiples veces serializado
+     * Intenta parsear recursivamente hasta obtener el JSON base
+     */
+    private String limpiarJsonString(String json) {
+        if (json == null || json.trim().isEmpty()) {
+            return json;
+        }
+        
+        String jsonLimpio = json.trim();
+        int intentos = 0;
+        final int MAX_INTENTOS = 5; // Evitar loops infinitos
+        
+        while (intentos < MAX_INTENTOS) {
+            try {
+                // Intentar parsear
+                Object parsed = objectMapper.readValue(jsonLimpio, Object.class);
+                
+                // Si es una lista con un solo elemento que es un string que parece JSON
+                if (parsed instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Object> lista = (List<Object>) parsed;
+                    
+                    if (lista.size() == 1 && lista.get(0) instanceof String) {
+                        String elemento = (String) lista.get(0);
+                        if ((elemento.trim().startsWith("[") && elemento.trim().endsWith("]")) ||
+                            (elemento.trim().startsWith("{") && elemento.trim().endsWith("}"))) {
+                            // Es otro JSON string anidado, continuar limpiando
+                            jsonLimpio = elemento;
+                            intentos++;
+                            continue;
+                        }
+                    }
+                }
+                
+                // Si llegamos aquí, el JSON está limpio
+                break;
+            } catch (Exception e) {
+                // No se puede parsear más, retornar el JSON actual
+                break;
+            }
+        }
+        
+        return jsonLimpio;
+    }
+    
+    /**
+     * Limpia una lista que puede contener JSON strings anidados
+     */
+    private List<String> limpiarListaDeJsonStrings(List<String> lista) {
+        if (lista == null || lista.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        List<String> resultado = new ArrayList<>();
+        
+        for (String item : lista) {
+            if (item == null || item.trim().isEmpty()) {
+                continue;
+            }
+            
+            String itemTrimmed = item.trim();
+            
+            // Si es un JSON string, parsearlo
+            if ((itemTrimmed.startsWith("[") && itemTrimmed.endsWith("]")) ||
+                (itemTrimmed.startsWith("{") && itemTrimmed.endsWith("}"))) {
+                try {
+                    Object parsed = objectMapper.readValue(itemTrimmed, Object.class);
+                    
+                    if (parsed instanceof List) {
+                        @SuppressWarnings("unchecked")
+                        List<Object> parsedList = (List<Object>) parsed;
+                        
+                        if (parsedList.isEmpty()) {
+                            // Array vacío, ignorar
+                            continue;
+                        }
+                        
+                        for (Object element : parsedList) {
+                            if (element != null) {
+                                String elementoStr = element.toString();
+                                // Si el elemento es otro JSON string, parsearlo recursivamente
+                                if (elementoStr.trim().startsWith("[") && elementoStr.trim().endsWith("]")) {
+                                    List<String> subLista = limpiarListaDeJsonStrings(Collections.singletonList(elementoStr));
+                                    resultado.addAll(subLista);
+                                } else {
+                                    resultado.add(elementoStr);
+                                }
+                            }
+                        }
+                    } else {
+                        resultado.add(item);
+                    }
+                } catch (Exception e) {
+                    log.debug("⚠️ [MarketingMensajeService] No se pudo parsear como JSON, usando valor original: {}", item);
+                    resultado.add(item);
+                }
+            } else {
+                resultado.add(item);
+            }
+        }
+        
+        return resultado;
     }
 
 }
