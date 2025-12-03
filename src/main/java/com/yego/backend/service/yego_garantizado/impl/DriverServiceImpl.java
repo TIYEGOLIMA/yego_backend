@@ -13,6 +13,7 @@ import com.yego.backend.service.yego_garantizado.DriverService;
 import com.yego.backend.service.yego_garantizado.FlotaService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -23,6 +24,7 @@ public class DriverServiceImpl implements DriverService {
 
     private final DriverRepository driverRepository;
     private final FlotaService flotaService;
+    private final RestTemplate restTemplate;
     
     // Park IDs permitidos (filtro)
     private static final Set<String> PARK_IDS_PERMITIDOS = Set.of(
@@ -39,9 +41,10 @@ public class DriverServiceImpl implements DriverService {
         "2e39f6699c854bc49cc75197431fe25c"  //Yego.
     );
 
-    public DriverServiceImpl(DriverRepository driverRepository, FlotaService flotaService) {
+    public DriverServiceImpl(DriverRepository driverRepository, FlotaService flotaService, RestTemplate restTemplate) {
         this.driverRepository = driverRepository;
         this.flotaService = flotaService;
+        this.restTemplate = restTemplate;
     }
 
     @Override
@@ -204,8 +207,8 @@ public class DriverServiceImpl implements DriverService {
         
         DriverApi driver = mapearObjectArrayADriverApi(resultadoSeleccionado);
         
-        // Obtener nombre de flota
-        String nombreFlota = flotaService.obtenerFlotas().stream()
+        // Obtener nombre de flota (sin restricción, todas las flotas)
+        String nombreFlota = obtenerFlotasPendientes().stream()
                 .filter(f -> f.getId().equals(driver.getParkId()))
                 .findFirst()
                 .map(FlotaResponse::getName)
@@ -254,6 +257,39 @@ public class DriverServiceImpl implements DriverService {
         driver.setCarNumber(row[index++] != null ? row[index-1].toString() : null);
         
         return driver;
+    }
+    
+    @Override
+    public List<FlotaResponse> obtenerFlotasPendientes() {
+        try {
+            log.info("🔍 Obteniendo todas las flotas desde API externa (sin filtrar)");
+            String url = "http://162.55.214.109:6000/v2/partners";
+            Map<String, Object> response = restTemplate.postForObject(url, null, Map.class);
+            
+            List<FlotaResponse> flotas = new ArrayList<>();
+            
+            if (response != null && response.containsKey("partners")) {
+                List<Map<String, Object>> partners = (List<Map<String, Object>>) response.get("partners");
+                
+                // Convertir TODAS las flotas sin filtrar
+                for (Map<String, Object> item : partners) {
+                    FlotaResponse flota = new FlotaResponse();
+                    flota.setId(item.get("id").toString());
+                    flota.setName(item.get("name").toString());
+                    flota.setCity(item.get("city") != null ? item.get("city").toString() : null);
+                    flota.setSpecifications((List<String>) item.get("specifications"));
+                    flotas.add(flota);
+                    log.info("✅ Flota agregada: {} - {}", flota.getId(), flota.getName());
+                }
+            }
+            
+            log.info("✅ Total de flotas obtenidas: {} (TODAS sin filtrar)", flotas.size());
+            return flotas;
+            
+        } catch (Exception e) {
+            log.error("❌ Error obteniendo flotas: {}", e.getMessage());
+            return new ArrayList<>();
+        }
     }
     
     private DriverInfo convertirADriverInfo(Driver driver) {
