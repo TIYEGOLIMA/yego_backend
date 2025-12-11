@@ -20,7 +20,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -36,12 +41,32 @@ public class SacStatsServiceImpl implements SacStatsService {
     
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+    private static final DateTimeFormatter ISO_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final ZoneId ZONE_ID = ZoneId.of("America/Lima");
     
     @Override
     @Transactional(readOnly = true)
-    public SacStatsResponse obtenerTodasLasEstadisticas() {
-        log.info("📊 Calculando estadísticas generales de SAC (optimizado)");
+    public SacStatsResponse obtenerTodasLasEstadisticas(String fechaInicio, String fechaFin) {
+        log.info("📊 Calculando estadísticas generales de SAC (optimizado) - Fecha inicio: {}, Fecha fin: {}", fechaInicio, fechaFin);
         long startTime = System.currentTimeMillis();
+        
+        // Parsear fechas si se proporcionan
+        LocalDateTime fechaInicioDT = null;
+        LocalDateTime fechaFinDT = null;
+        boolean tieneFiltroFecha = false;
+        
+        if (fechaInicio != null && !fechaInicio.isEmpty() && fechaFin != null && !fechaFin.isEmpty()) {
+            try {
+                LocalDate inicio = LocalDate.parse(fechaInicio, ISO_DATE_FORMATTER);
+                LocalDate fin = LocalDate.parse(fechaFin, ISO_DATE_FORMATTER);
+                fechaInicioDT = inicio.atStartOfDay().atZone(ZONE_ID).toLocalDateTime();
+                fechaFinDT = fin.atTime(LocalTime.MAX).atZone(ZONE_ID).toLocalDateTime();
+                tieneFiltroFecha = true;
+                log.info("📅 Filtro de fecha aplicado: {} a {}", fechaInicioDT, fechaFinDT);
+            } catch (DateTimeParseException e) {
+                log.warn("⚠️ Error parseando fechas: {}. Se usarán todos los datos.", e.getMessage());
+            }
+        }
         
         // 1. Obtener usuarios SAC (una sola query)
         List<User> sacUsers = obtenerUsuariosSac();
@@ -52,11 +77,26 @@ public class SacStatsServiceImpl implements SacStatsService {
         }
         
         // 2. Obtener estadísticas agregadas (consultas optimizadas)
-        long totalTickets = ticketRepository.count();
-        long totalRatings = queueRatingRepository.count();
+        long totalTickets;
+        long totalRatings;
+        Double averageRating;
         
-        // 3. Calcular promedio de calificaciones (una sola query agregada SQL)
-        Double averageRating = queueRatingRepository.getAverageRating();
+        if (tieneFiltroFecha) {
+            // Contar solo tickets en el rango de fechas
+            List<Long> userIds = sacUsers.stream().map(User::getId).collect(Collectors.toList());
+            List<Ticket> ticketsEnRango = ticketRepository.findByUserIdInAndCreatedAtBetween(userIds, fechaInicioDT, fechaFinDT);
+            totalTickets = ticketsEnRango.size();
+            
+            // Obtener estadísticas de ratings con filtro de fecha
+            totalRatings = queueRatingRepository.countByCreatedAtBetween(fechaInicioDT, fechaFinDT);
+            averageRating = queueRatingRepository.getAverageRatingByDateRange(fechaInicioDT, fechaFinDT);
+        } else {
+            // Sin filtro de fecha, obtener todos los datos
+            totalTickets = ticketRepository.count();
+            totalRatings = queueRatingRepository.count();
+            averageRating = queueRatingRepository.getAverageRating();
+        }
+        
         if (averageRating == null) {
             averageRating = 0.0;
         }
@@ -67,8 +107,13 @@ public class SacStatsServiceImpl implements SacStatsService {
         // 4. Obtener IDs de usuarios para consultas batch
         List<Long> userIds = sacUsers.stream().map(User::getId).collect(Collectors.toList());
         
-        // 5. Obtener todos los tickets de usuarios SAC en una sola query
-        List<Ticket> allSacTickets = ticketRepository.findByUserIdIn(userIds);
+        // 5. Obtener todos los tickets de usuarios SAC (con o sin filtro de fecha)
+        List<Ticket> allSacTickets;
+        if (tieneFiltroFecha) {
+            allSacTickets = ticketRepository.findByUserIdInAndCreatedAtBetween(userIds, fechaInicioDT, fechaFinDT);
+        } else {
+            allSacTickets = ticketRepository.findByUserIdIn(userIds);
+        }
         Map<Long, List<Ticket>> ticketsByUserId = allSacTickets.stream()
                 .collect(Collectors.groupingBy(Ticket::getUserId));
         
@@ -78,10 +123,16 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .map(Ticket::getId)
                 .collect(Collectors.toSet());
         
-        // 7. Obtener todas las calificaciones en una sola query batch
+        // 7. Obtener todas las calificaciones en una sola query batch (con o sin filtro de fecha)
         final Map<Long, List<QueueRating>> ratingsByTicketId;
         if (!allTicketIds.isEmpty()) {
-            List<QueueRating> allRatings = queueRatingRepository.findByTicketIdIn(new ArrayList<>(allTicketIds));
+            List<QueueRating> allRatings;
+            if (tieneFiltroFecha) {
+                allRatings = queueRatingRepository.findByTicketIdInAndCreatedAtBetween(
+                    new ArrayList<>(allTicketIds), fechaInicioDT, fechaFinDT);
+            } else {
+                allRatings = queueRatingRepository.findByTicketIdIn(new ArrayList<>(allTicketIds));
+            }
             ratingsByTicketId = allRatings.stream()
                     .collect(Collectors.groupingBy(QueueRating::getTicketId));
         } else {
@@ -104,9 +155,14 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .limit(3)
                 .collect(Collectors.toList());
         
-        // 10. Obtener calificaciones recientes (solo las últimas 10)
+        // 10. Obtener calificaciones recientes (solo las últimas 10, con o sin filtro de fecha)
         Pageable pageable = PageRequest.of(0, 10);
-        List<QueueRating> recentRatings = queueRatingRepository.findRecentRatings(pageable);
+        List<QueueRating> recentRatings;
+        if (tieneFiltroFecha) {
+            recentRatings = queueRatingRepository.findRecentRatingsByDateRange(pageable, fechaInicioDT, fechaFinDT);
+        } else {
+            recentRatings = queueRatingRepository.findRecentRatings(pageable);
+        }
         List<RecentRatingResponse> recentRatingsResponse = convertirARecentRatingsOptimizado(recentRatings);
         
         long endTime = System.currentTimeMillis();

@@ -22,21 +22,35 @@ public class SacStatsController {
     private final SacStatsExportService sacStatsExportService;
 
     @GetMapping
-    public ResponseEntity<SacStatsResponse> obtenerTodasLasEstadisticas() {
-        log.info("📊 [SacStats] Obteniendo TODAS las estadísticas de SAC");
-        SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas();
+    public ResponseEntity<SacStatsResponse> obtenerTodasLasEstadisticas(
+            @RequestParam(required = false) String fechaInicio,
+            @RequestParam(required = false) String fechaFin) {
+        log.info("📊 [SacStats] Obteniendo estadísticas de SAC - Fecha inicio: {}, Fecha fin: {}", fechaInicio, fechaFin);
+        SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin);
+        return ResponseEntity.ok(stats);
+    }
+        
+    @GetMapping("/all")
+    public ResponseEntity<SacStatsResponse> obtenerTodasLasEstadisticasSinFiltro() {
+        log.info("📊 [SacStats] Obteniendo TODAS las estadísticas de SAC (sin filtro de fecha)");
+        SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(null, null);
         return ResponseEntity.ok(stats);
     }
     
     @GetMapping("/export/excel")
-    public ResponseEntity<byte[]> exportarAExcel() {
-        log.info("📊 [SacStats] Exportando estadísticas a Excel");
-        return sacStatsExportService.exportarAExcel();
+    public ResponseEntity<byte[]> exportarAExcel(
+            @RequestParam(required = false) String fechaInicio,
+            @RequestParam(required = false) String fechaFin) {
+        log.info("📊 [SacStats] Exportando estadísticas a Excel - Fecha inicio: {}, Fecha fin: {}", fechaInicio, fechaFin);
+        return sacStatsExportService.exportarAExcel(fechaInicio, fechaFin);
     }
     
     @GetMapping("/export/image/{formato}")
-    public ResponseEntity<byte[]> exportarAImagen(@PathVariable String formato) {
-        log.info("📊 [SacStats] Exportando estadísticas a imagen: {}", formato);
-        return sacStatsExportService.exportarAImagen(formato);
+    public ResponseEntity<byte[]> exportarAImagen(
+            @PathVariable String formato,
+            @RequestParam(required = false) String fechaInicio,
+            @RequestParam(required = false) String fechaFin) {
+        log.info("📊 [SacStats] Exportando estadísticas a imagen: {} - Fecha inicio: {}, Fecha fin: {}", formato, fechaInicio, fechaFin);
+        return sacStatsExportService.exportarAImagen(formato, fechaInicio, fechaFin);
     }
 }

@@ -43,6 +43,28 @@ public interface QueueRatingRepository extends JpaRepository<QueueRating, Long> 
     @Query("SELECT AVG(qr.score) FROM QueueRating qr")
     Double getAverageRating();
     
+    // Consulta optimizada: Obtener promedio general con filtro de fecha
+    @Query("SELECT AVG(qr.score) FROM QueueRating qr WHERE qr.createdAt >= :fechaInicio AND qr.createdAt <= :fechaFin")
+    Double getAverageRatingByDateRange(@Param("fechaInicio") java.time.LocalDateTime fechaInicio, 
+                                       @Param("fechaFin") java.time.LocalDateTime fechaFin);
+    
+    // Consulta optimizada: Contar calificaciones con filtro de fecha
+    @Query("SELECT COUNT(qr) FROM QueueRating qr WHERE qr.createdAt >= :fechaInicio AND qr.createdAt <= :fechaFin")
+    long countByCreatedAtBetween(@Param("fechaInicio") java.time.LocalDateTime fechaInicio, 
+                                 @Param("fechaFin") java.time.LocalDateTime fechaFin);
+    
+    // Consulta optimizada: Obtener calificaciones por múltiples tickets con filtro de fecha
+    @Query("SELECT qr FROM QueueRating qr WHERE qr.ticketId IN :ticketIds AND qr.createdAt >= :fechaInicio AND qr.createdAt <= :fechaFin")
+    List<QueueRating> findByTicketIdInAndCreatedAtBetween(@Param("ticketIds") List<Long> ticketIds,
+                                                           @Param("fechaInicio") java.time.LocalDateTime fechaInicio,
+                                                           @Param("fechaFin") java.time.LocalDateTime fechaFin);
+    
+    // Consulta optimizada: Obtener calificaciones recientes con filtro de fecha
+    @Query("SELECT qr FROM QueueRating qr WHERE qr.createdAt >= :fechaInicio AND qr.createdAt <= :fechaFin ORDER BY qr.createdAt DESC")
+    List<QueueRating> findRecentRatingsByDateRange(org.springframework.data.domain.Pageable pageable,
+                                                    @Param("fechaInicio") java.time.LocalDateTime fechaInicio,
+                                                    @Param("fechaFin") java.time.LocalDateTime fechaFin);
+    
     // Consulta optimizada: Obtener calificaciones recientes con información de ticket y agente
     @Query(value = """
         SELECT qr.id, qr.score, qr.comment, qr.created_at, qr.ticket_id, qr.agent_id,

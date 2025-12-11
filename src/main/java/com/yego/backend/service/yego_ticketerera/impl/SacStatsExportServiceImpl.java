@@ -28,16 +28,17 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     private final SacStatsService sacStatsService;
     
     @Override
-    public ResponseEntity<byte[]> exportarAExcel() {
-        log.info("📊 Exportando estadísticas de SAC a Excel");
+    public ResponseEntity<byte[]> exportarAExcel(String fechaInicio, String fechaFin) {
+        log.info("📊 Exportando estadísticas de SAC a Excel - Fecha inicio: {}, Fecha fin: {}", fechaInicio, fechaFin);
         
         try {
-            SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas();
-            ByteArrayOutputStream excelData = generarExcel(stats);
+            // Obtener estadísticas con filtro de fecha (si se proporcionan)
+            SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin);
+            ByteArrayOutputStream excelData = generarExcel(stats, fechaInicio, fechaFin);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentDispositionFormData("attachment", obtenerNombreArchivoExcel());
+            headers.setContentDispositionFormData("attachment", obtenerNombreArchivoExcel(fechaInicio, fechaFin));
             
             log.info("✅ Exportación a Excel completada exitosamente");
             return ResponseEntity.ok()
@@ -51,8 +52,8 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     }
     
     @Override
-    public ResponseEntity<byte[]> exportarAImagen(String formato) {
-        log.info("📊 Exportando estadísticas de SAC a imagen: {}", formato);
+    public ResponseEntity<byte[]> exportarAImagen(String formato, String fechaInicio, String fechaFin) {
+        log.info("📊 Exportando estadísticas de SAC a imagen: {} - Fecha inicio: {}, Fecha fin: {}", formato, fechaInicio, fechaFin);
         
         try {
             // Validar formato
@@ -61,13 +62,14 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
                 return ResponseEntity.badRequest().build();
             }
             
-            SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas();
-            ByteArrayOutputStream imageData = generarImagen(stats, formato);
+            // Obtener estadísticas con filtro de fecha (si se proporcionan)
+            SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin);
+            ByteArrayOutputStream imageData = generarImagen(stats, formato, fechaInicio, fechaFin);
             
             HttpHeaders headers = new HttpHeaders();
             String mediaType = formato.equalsIgnoreCase("PNG") ? "image/png" : "image/jpeg";
             headers.setContentType(MediaType.parseMediaType(mediaType));
-            headers.setContentDispositionFormData("attachment", obtenerNombreArchivoImagen(formato));
+            headers.setContentDispositionFormData("attachment", obtenerNombreArchivoImagen(formato, fechaInicio, fechaFin));
             
             log.info("✅ Exportación a imagen completada exitosamente");
             return ResponseEntity.ok()
@@ -87,7 +89,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
                 formato.equalsIgnoreCase("JPG"));
     }
     
-    private ByteArrayOutputStream generarExcel(SacStatsResponse stats) {
+    private ByteArrayOutputStream generarExcel(SacStatsResponse stats, String fechaInicio, String fechaFin) {
         log.info("📊 Exportando estadísticas de SAC a Excel");
         
         try (Workbook workbook = new XSSFWorkbook()) {
@@ -107,10 +109,14 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             titleCell.setCellValue("REPORTE DE ESTADÍSTICAS SAC - YEGO");
             titleCell.setCellStyle(headerStyle);
             
-            // Fecha de generación
+            // Fecha de generación y rango de fechas (si se proporcionaron)
             Row dateRow = sheet.createRow(rowNum++);
             Cell dateCell = dateRow.createCell(0);
-            dateCell.setCellValue("Fecha de generación: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+            String fechaTexto = "Fecha de generación: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
+            if (fechaInicio != null && fechaFin != null && !fechaInicio.isEmpty() && !fechaFin.isEmpty()) {
+                fechaTexto += " | Período: " + fechaInicio + " al " + fechaFin;
+            }
+            dateCell.setCellValue(fechaTexto);
             dateCell.setCellStyle(dataStyle);
             
             rowNum++; // Espacio
@@ -146,11 +152,11 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         }
     }
     
-    private ByteArrayOutputStream generarImagen(SacStatsResponse stats, String formato) {
+    private ByteArrayOutputStream generarImagen(SacStatsResponse stats, String formato, String fechaInicio, String fechaFin) {
         log.info("📊 Exportando estadísticas de SAC a imagen: {}", formato);
         
         try {
-            BufferedImage image = crearImagenEstadisticas(stats);
+            BufferedImage image = crearImagenEstadisticas(stats, fechaInicio, fechaFin);
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             
             if ("PNG".equalsIgnoreCase(formato)) {
@@ -171,14 +177,24 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     }
     
     @Override
-    public String obtenerNombreArchivoExcel() {
-        return "estadisticas_sac_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".xlsx";
+    public String obtenerNombreArchivoExcel(String fechaInicio, String fechaFin) {
+        String nombreBase = "estadisticas_sac_";
+        if (fechaInicio != null && fechaFin != null && !fechaInicio.isEmpty() && !fechaFin.isEmpty()) {
+            // Incluir fechas en el nombre del archivo
+            nombreBase += fechaInicio.replace("-", "") + "_" + fechaFin.replace("-", "") + "_";
+        }
+        return nombreBase + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + ".xlsx";
     }
     
     @Override
-    public String obtenerNombreArchivoImagen(String formato) {
+    public String obtenerNombreArchivoImagen(String formato, String fechaInicio, String fechaFin) {
         String extension = "PNG".equalsIgnoreCase(formato) ? "png" : "jpg";
-        return "estadisticas_sac_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + "." + extension;
+        String nombreBase = "estadisticas_sac_";
+        if (fechaInicio != null && fechaFin != null && !fechaInicio.isEmpty() && !fechaFin.isEmpty()) {
+            // Incluir fechas en el nombre del archivo
+            nombreBase += fechaInicio.replace("-", "") + "_" + fechaFin.replace("-", "") + "_";
+        }
+        return nombreBase + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")) + "." + extension;
     }
     
     private CellStyle crearEstiloEncabezado(Workbook workbook) {
@@ -346,7 +362,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         }
     }
     
-    private BufferedImage crearImagenEstadisticas(SacStatsResponse stats) {
+    private BufferedImage crearImagenEstadisticas(SacStatsResponse stats, String fechaInicio, String fechaFin) {
         // Aumentar resolución para mejor calidad
         int scale = 2; // Factor de escala para mayor calidad
         int width = 1200 * scale;
@@ -375,7 +391,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         dibujarFondoGradiente(g2d, originalWidth, originalHeight);
         
         // Header con logo y título
-        dibujarHeader(g2d, originalWidth);
+        dibujarHeader(g2d, originalWidth, fechaInicio, fechaFin);
         
         // Tarjetas de estadísticas principales (centradas)
         int cardAreaWidth = 1000;
@@ -414,7 +430,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         }
     }
     
-    private void dibujarHeader(Graphics2D g2d, int width) {
+    private void dibujarHeader(Graphics2D g2d, int width, String fechaInicio, String fechaFin) {
         // Logo YEGO
         g2d.setColor(new java.awt.Color(220, 38, 38)); // Rojo YEGO
         g2d.fillRoundRect(30, 20, 40, 40, 8, 8);
@@ -435,7 +451,11 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         g2d.setColor(new java.awt.Color(75, 85, 99));
         g2d.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 14));
         String fecha = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
-        g2d.drawString("Generado: " + fecha, width - 200, 40);
+        String fechaTexto = "Generado: " + fecha;
+        if (fechaInicio != null && fechaFin != null && !fechaInicio.isEmpty() && !fechaFin.isEmpty()) {
+            fechaTexto += " | " + fechaInicio + " - " + fechaFin;
+        }
+        g2d.drawString(fechaTexto, width - 400, 40);
     }
     
     private void dibujarTarjetasEstadisticas(Graphics2D g2d, SacStatsResponse stats, int x, int y) {

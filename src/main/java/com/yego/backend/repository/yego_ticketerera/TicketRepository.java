@@ -96,4 +96,10 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     
     // Consulta optimizada: Obtener tickets por múltiples usuarios en una sola query
     List<Ticket> findByUserIdIn(List<Long> userIds);
+    
+    // Consulta optimizada: Obtener tickets por múltiples usuarios con filtro de fecha
+    @Query("SELECT t FROM Ticket t WHERE t.userId IN :userIds AND t.createdAt >= :fechaInicio AND t.createdAt <= :fechaFin")
+    List<Ticket> findByUserIdInAndCreatedAtBetween(@Param("userIds") List<Long> userIds, 
+                                                     @Param("fechaInicio") java.time.LocalDateTime fechaInicio, 
+                                                     @Param("fechaFin") java.time.LocalDateTime fechaFin);
 }
