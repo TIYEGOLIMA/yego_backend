@@ -85,4 +85,15 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     
     // Buscar tickets por userId
     List<Ticket> findByUserId(Long userId);
+    
+    // Consulta optimizada: Contar tickets por estado y usuario
+    @Query("SELECT t.status, COUNT(t) FROM Ticket t WHERE t.userId = :userId GROUP BY t.status")
+    List<Object[]> countTicketsByStatusAndUserId(@Param("userId") Long userId);
+    
+    // Consulta optimizada: Obtener tickets completados con información de tiempo
+    @Query("SELECT t FROM Ticket t WHERE t.userId = :userId AND t.status = 'COMPLETED' AND t.calledAt IS NOT NULL AND t.completedAt IS NOT NULL")
+    List<Ticket> findCompletedTicketsWithTimeByUserId(@Param("userId") Long userId);
+    
+    // Consulta optimizada: Obtener tickets por múltiples usuarios en una sola query
+    List<Ticket> findByUserIdIn(List<Long> userIds);
 }

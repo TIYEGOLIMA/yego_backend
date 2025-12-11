@@ -14,12 +14,14 @@ import com.yego.backend.repository.yego_ticketerera.TicketRepository;
 import com.yego.backend.service.yego_ticketerera.SacStatsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -32,153 +34,167 @@ public class SacStatsServiceImpl implements SacStatsService {
     private final QueueRatingRepository queueRatingRepository;
     private final QueueAgentRepository queueAgentRepository;
     
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+    
     @Override
     @Transactional(readOnly = true)
     public SacStatsResponse obtenerTodasLasEstadisticas() {
-        log.info("📊 Calculando estadísticas generales de SAC");
+        log.info("📊 Calculando estadísticas generales de SAC (optimizado)");
+        long startTime = System.currentTimeMillis();
         
-        // Obtener todos los usuarios con rol SAC (probar diferentes variaciones del nombre)
-        List<User> sacUsers = userRepository.findByRoleName("SAC");
-        if (sacUsers.isEmpty()) {
-            log.warn("⚠️ No se encontraron usuarios con rol 'SAC', intentando con 'sac'");
-            sacUsers = userRepository.findByRoleName("sac");
-        }
-        if (sacUsers.isEmpty()) {
-            log.warn("⚠️ No se encontraron usuarios con rol 'sac', intentando con 'Sac'");
-            sacUsers = userRepository.findByRoleName("Sac");
-        }
-        
+        // 1. Obtener usuarios SAC (una sola query)
+        List<User> sacUsers = obtenerUsuariosSac();
         log.info("👥 Usuarios SAC encontrados: {}", sacUsers.size());
-        if (!sacUsers.isEmpty()) {
-            sacUsers.forEach(user -> log.info("   - {} (ID: {}, Rol: {})", 
-                user.getName(), user.getId(), user.getRoleName()));
+        
+        if (sacUsers.isEmpty()) {
+            return construirRespuestaVacia();
         }
         
-        // Obtener todos los tickets
-        List<Ticket> allTickets = ticketRepository.findAll();
-        log.info("🎫 Total de tickets en el sistema: {}", allTickets.size());
+        // 2. Obtener estadísticas agregadas (consultas optimizadas)
+        long totalTickets = ticketRepository.count();
+        long totalRatings = queueRatingRepository.count();
         
-        // Obtener todas las calificaciones ordenadas por fecha
-        List<QueueRating> allRatings = queueRatingRepository.findAllByOrderByCreatedAtDesc();
-        log.info("⭐ Calificaciones encontradas: {}", allRatings.size());
+        // 3. Calcular promedio de calificaciones (una sola query agregada SQL)
+        Double averageRating = queueRatingRepository.getAverageRating();
+        if (averageRating == null) {
+            averageRating = 0.0;
+        }
         
-        // Calcular estadísticas generales
-        int totalSACs = sacUsers.size();
-        int totalTickets = allTickets.size();
-        double averageRating = allRatings.stream()
-                .mapToDouble(QueueRating::getScore)
-                .average()
-                .orElse(0.0);
-        int totalRatings = allRatings.size();
+        log.info("📊 Estadísticas generales - Tickets: {}, Ratings: {}, Promedio: {}", 
+            totalTickets, totalRatings, averageRating);
         
-        log.info("📊 Estadísticas generales - SACs: {}, Tickets: {}, Ratings: {}, Promedio: {}", 
-            totalSACs, totalTickets, totalRatings, averageRating);
+        // 4. Obtener IDs de usuarios para consultas batch
+        List<Long> userIds = sacUsers.stream().map(User::getId).collect(Collectors.toList());
         
-        // Calcular rendimiento de cada SAC
-        List<SacPerformanceResponse> sacPerformance = new ArrayList<>();
-        if (!sacUsers.isEmpty()) {
-            log.info("🔄 Calculando rendimiento para {} usuarios SAC", sacUsers.size());
-            sacPerformance = sacUsers.stream()
-                    .map(this::calcularRendimientoSac)
-                    .collect(Collectors.toList());
-            log.info("✅ Rendimiento calculado para {} SACs", sacPerformance.size());
+        // 5. Obtener todos los tickets de usuarios SAC en una sola query
+        List<Ticket> allSacTickets = ticketRepository.findByUserIdIn(userIds);
+        Map<Long, List<Ticket>> ticketsByUserId = allSacTickets.stream()
+                .collect(Collectors.groupingBy(Ticket::getUserId));
+        
+        // 6. Obtener todos los ticket IDs para buscar calificaciones
+        Set<Long> allTicketIds = allSacTickets.stream()
+                .filter(t -> t.getStatus() == Ticket.TicketStatus.COMPLETED)
+                .map(Ticket::getId)
+                .collect(Collectors.toSet());
+        
+        // 7. Obtener todas las calificaciones en una sola query batch
+        final Map<Long, List<QueueRating>> ratingsByTicketId;
+        if (!allTicketIds.isEmpty()) {
+            List<QueueRating> allRatings = queueRatingRepository.findByTicketIdIn(new ArrayList<>(allTicketIds));
+            ratingsByTicketId = allRatings.stream()
+                    .collect(Collectors.groupingBy(QueueRating::getTicketId));
         } else {
-            log.warn("⚠️ No hay usuarios SAC para calcular rendimiento");
+            ratingsByTicketId = new HashMap<>();
         }
         
-        // Obtener top performers (ordenados por satisfacción, solo si hay datos)
-        List<SacPerformanceResponse> topPerformers = new ArrayList<>();
-        if (!sacPerformance.isEmpty()) {
-            log.info("🏆 Calculando top performers de {} SACs", sacPerformance.size());
-            topPerformers = sacPerformance.stream()
-                    .filter(sac -> sac.getTotalTickets() > 0) // Solo incluir SACs con tickets
-                    .sorted((a, b) -> Double.compare(b.getSatisfactionPercentage(), a.getSatisfactionPercentage()))
-                    .limit(3)
-                    .collect(Collectors.toList());
-            log.info("✅ Top performers calculados: {}", topPerformers.size());
-        } else {
-            log.warn("⚠️ No hay datos de rendimiento para calcular top performers");
-        }
-        
-        // Obtener calificaciones recientes (ya están ordenadas por fecha en la consulta)
-        List<RecentRatingResponse> recentRatings = allRatings.stream()
-                .limit(10)
-                .map(this::convertirARecentRating)
+        // 8. Calcular rendimiento de cada SAC (sin queries adicionales)
+        List<SacPerformanceResponse> sacPerformance = sacUsers.stream()
+                .map(user -> calcularRendimientoSacOptimizado(
+                    user, 
+                    ticketsByUserId.getOrDefault(user.getId(), Collections.emptyList()),
+                    ratingsByTicketId
+                ))
                 .collect(Collectors.toList());
         
-        log.info("📋 Respuesta final - SAC Performance: {}, Top Performers: {}, Recent Ratings: {}", 
-            sacPerformance.size(), topPerformers.size(), recentRatings.size());
+        // 9. Obtener top performers
+        List<SacPerformanceResponse> topPerformers = sacPerformance.stream()
+                .filter(sac -> sac.getTotalTickets() > 0)
+                .sorted((a, b) -> Double.compare(b.getSatisfactionPercentage(), a.getSatisfactionPercentage()))
+                .limit(3)
+                .collect(Collectors.toList());
+        
+        // 10. Obtener calificaciones recientes (solo las últimas 10)
+        Pageable pageable = PageRequest.of(0, 10);
+        List<QueueRating> recentRatings = queueRatingRepository.findRecentRatings(pageable);
+        List<RecentRatingResponse> recentRatingsResponse = convertirARecentRatingsOptimizado(recentRatings);
+        
+        long endTime = System.currentTimeMillis();
+        log.info("✅ Estadísticas calculadas en {}ms", (endTime - startTime));
         
         return SacStatsResponse.builder()
-                .totalSACs(totalSACs)
-                .totalTickets(totalTickets)
+                .totalSACs(sacUsers.size())
+                .totalTickets((int) totalTickets)
                 .averageRating(Math.round(averageRating * 10.0) / 10.0)
-                .totalRatings(totalRatings)
+                .totalRatings((int) totalRatings)
                 .sacPerformance(sacPerformance)
                 .topPerformers(topPerformers)
-                .recentRatings(recentRatings)
+                .recentRatings(recentRatingsResponse)
                 .build();
     }
     
+    private List<User> obtenerUsuariosSac() {
+        List<User> sacUsers = userRepository.findByRoleName("SAC");
+        if (sacUsers.isEmpty()) {
+            sacUsers = userRepository.findByRoleName("sac");
+        }
+        if (sacUsers.isEmpty()) {
+            sacUsers = userRepository.findByRoleName("Sac");
+        }
+        return sacUsers;
+    }
     
-    private SacPerformanceResponse calcularRendimientoSac(User sacUser) {
+    private SacStatsResponse construirRespuestaVacia() {
+        return SacStatsResponse.builder()
+                .totalSACs(0)
+                .totalTickets(0)
+                .averageRating(0.0)
+                .totalRatings(0)
+                .sacPerformance(Collections.emptyList())
+                .topPerformers(Collections.emptyList())
+                .recentRatings(Collections.emptyList())
+                .build();
+    }
+    
+    private SacPerformanceResponse calcularRendimientoSacOptimizado(
+            User sacUser,
+            List<Ticket> sacTickets,
+            Map<Long, List<QueueRating>> ratingsByTicketId) {
+        
         Long userId = sacUser.getId();
-        log.info("🔍 Calculando métricas para SAC: {} (userId: {})", sacUser.getName(), userId);
         
-        // Obtener tickets del usuario usando userId
-        List<Ticket> sacTickets = ticketRepository.findByUserId(userId);
-        log.info("📊 Tickets encontrados para {}: {}", sacUser.getName(), sacTickets.size());
-        
-        // Obtener tickets completados (COMPLETED) del usuario
+        // Filtrar tickets completados y cancelados en memoria
         List<Ticket> completedTickets = sacTickets.stream()
-                .filter(ticket -> ticket.getStatus() == Ticket.TicketStatus.COMPLETED)
+                .filter(t -> t.getStatus() == Ticket.TicketStatus.COMPLETED)
                 .collect(Collectors.toList());
         
-        // Obtener tickets cancelados (CANCELLED) del usuario
         List<Ticket> cancelledTickets = sacTickets.stream()
-                .filter(ticket -> ticket.getStatus() == Ticket.TicketStatus.CANCELLED)
+                .filter(t -> t.getStatus() == Ticket.TicketStatus.CANCELLED)
                 .collect(Collectors.toList());
         
         int completedTicketsCount = completedTickets.size();
         int cancelledTicketsCount = cancelledTickets.size();
         int totalTickets = completedTicketsCount + cancelledTicketsCount;
         
-        // Obtener calificaciones de los tickets completados
-        List<QueueRating> sacRatings = new ArrayList<>();
-        for (Ticket completedTicket : completedTickets) {
-            List<QueueRating> ticketRatings = queueRatingRepository.findByTicketId(completedTicket.getId());
-            sacRatings.addAll(ticketRatings);
-        }
+        // Obtener calificaciones de tickets completados (ya están en memoria)
+        List<QueueRating> sacRatings = completedTickets.stream()
+                .map(Ticket::getId)
+                .flatMap(ticketId -> ratingsByTicketId.getOrDefault(ticketId, Collections.emptyList()).stream())
+                .collect(Collectors.toList());
         
-        log.info("⭐ Calificaciones encontradas para {}: {}", sacUser.getName(), sacRatings.size());
-        
-        // Calcular promedio de calificaciones
+        // Calcular métricas
         double averageRating = sacRatings.stream()
                 .mapToDouble(QueueRating::getScore)
                 .average()
                 .orElse(0.0);
         
         int totalRatings = sacRatings.size();
-        
         double satisfactionPercentage = totalTickets > 0 ? 
                 (double) completedTicketsCount / totalTickets * 100 : 0.0;
         
-        // Calcular tiempo promedio de respuesta real basado en calledAt y completedAt
-        String averageResponseTime = calcularTiempoPromedioRespuestaReal(completedTickets);
-        
-        // Obtener última actividad
+        String averageResponseTime = calcularTiempoPromedioRespuesta(completedTickets);
         String lastActivity = sacUser.getLastLogin() != null ? 
-                sacUser.getLastLogin().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) : 
-                "Nunca";
+                sacUser.getLastLogin().format(DATETIME_FORMATTER) : "Nunca";
         
-        // Convertir ratings a formato de respuesta
+        // Convertir ratings (solo últimos 3)
         List<RatingResponse> ratings = sacRatings.stream()
-                .limit(3) // Solo los últimos 3 ratings
-                .map(this::convertirARatingResponse)
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .limit(3)
+                .map(rating -> convertirARatingResponse(rating, completedTickets))
                 .collect(Collectors.toList());
         
         return SacPerformanceResponse.builder()
-                .id(sacUser.getId())
+                .id(userId)
                 .name(sacUser.getName())
                 .username(sacUser.getUsername())
                 .totalTickets(totalTickets)
@@ -192,39 +208,27 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .build();
     }
     
-    private String calcularTiempoPromedioRespuestaReal(List<Ticket> tickets) {
-        if (tickets.isEmpty()) {
-            return "0 min";
-        }
-        
-        // Filtrar tickets que tienen calledAt y completedAt
-        List<Ticket> completedTickets = tickets.stream()
-                .filter(ticket -> ticket.getCalledAt() != null && ticket.getCompletedAt() != null)
+    private String calcularTiempoPromedioRespuesta(List<Ticket> tickets) {
+        List<Ticket> validTickets = tickets.stream()
+                .filter(t -> t.getCalledAt() != null && t.getCompletedAt() != null)
                 .collect(Collectors.toList());
         
-        if (completedTickets.isEmpty()) {
+        if (validTickets.isEmpty()) {
             return "0 min";
         }
         
-        // Calcular tiempo promedio en minutos
-        long totalMinutes = completedTickets.stream()
-                .mapToLong(ticket -> {
-                    java.time.Duration duration = java.time.Duration.between(
-                            ticket.getCalledAt(), 
-                            ticket.getCompletedAt()
-                    );
-                    return duration.toMinutes();
-                })
+        long totalMinutes = validTickets.stream()
+                .mapToLong(t -> Duration.between(t.getCalledAt(), t.getCompletedAt()).toMinutes())
                 .sum();
         
-        long averageMinutes = totalMinutes / completedTickets.size();
-        
+        long averageMinutes = totalMinutes / validTickets.size();
         return averageMinutes + " min";
     }
     
-    private RatingResponse convertirARatingResponse(QueueRating rating) {
-        // Obtener el número real del ticket
-        String ticketNumber = ticketRepository.findById(rating.getTicketId())
+    private RatingResponse convertirARatingResponse(QueueRating rating, List<Ticket> tickets) {
+        String ticketNumber = tickets.stream()
+                .filter(t -> t.getId().equals(rating.getTicketId()))
+                .findFirst()
                 .map(Ticket::getTicketNumber)
                 .orElse("TKT-" + rating.getTicketId());
         
@@ -233,33 +237,53 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .score(rating.getScore())
                 .comment(rating.getComment())
                 .ticketNumber(ticketNumber)
-                .date(rating.getCreatedAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+                .date(rating.getCreatedAt().format(DATE_FORMATTER))
                 .build();
     }
     
-    private RecentRatingResponse convertirARecentRating(QueueRating rating) {
-        // Buscar el usuario usando el agentId del rating
-        String sacName = queueAgentRepository.findById(rating.getAgentId())
-                .map(queueAgent -> {
-                    Long userId = queueAgent.getUserId();
-                    return userRepository.findById(userId)
-                            .map(User::getName)
-                            .orElse("Usuario ID: " + userId);
+    private List<RecentRatingResponse> convertirARecentRatingsOptimizado(List<QueueRating> ratings) {
+        if (ratings.isEmpty()) {
+            return Collections.emptyList();
+        }
+        
+        // Obtener todos los ticket IDs y agent IDs en una sola pasada
+        Set<Long> ticketIds = ratings.stream()
+                .map(QueueRating::getTicketId)
+                .collect(Collectors.toSet());
+        
+        Set<Long> agentIds = ratings.stream()
+                .map(QueueRating::getAgentId)
+                .collect(Collectors.toSet());
+        
+        // Obtener todos los tickets en una query batch
+        Map<Long, Ticket> ticketsMap = ticketRepository.findAllById(ticketIds).stream()
+                .collect(Collectors.toMap(Ticket::getId, t -> t));
+        
+        // Obtener todos los agentes y usuarios en queries batch
+        Map<Long, String> sacNamesMap = new HashMap<>();
+        queueAgentRepository.findAllById(agentIds).forEach(agent -> {
+            if (agent.getUserId() != null) {
+                userRepository.findById(agent.getUserId())
+                        .ifPresent(user -> sacNamesMap.put(agent.getId(), user.getName()));
+            }
+        });
+        
+        // Construir respuesta usando los maps
+        return ratings.stream()
+                .map(rating -> {
+                    Ticket ticket = ticketsMap.get(rating.getTicketId());
+                    String ticketNumber = ticket != null ? ticket.getTicketNumber() : "TKT-" + rating.getTicketId();
+                    String sacName = sacNamesMap.getOrDefault(rating.getAgentId(), "Agent ID: " + rating.getAgentId());
+                    
+                    return RecentRatingResponse.builder()
+                            .id(rating.getId())
+                            .sacName(sacName)
+                            .score(rating.getScore())
+                            .comment(rating.getComment())
+                            .ticketNumber(ticketNumber)
+                            .date(rating.getCreatedAt().format(DATE_FORMATTER))
+                            .build();
                 })
-                .orElse("Agent ID: " + rating.getAgentId());
-        
-        // Obtener el número real del ticket
-        String ticketNumber = ticketRepository.findById(rating.getTicketId())
-                .map(Ticket::getTicketNumber)
-                .orElse("TKT-" + rating.getTicketId());
-        
-        return RecentRatingResponse.builder()
-                .id(rating.getId())
-                .sacName(sacName)
-                .score(rating.getScore())
-                .comment(rating.getComment())
-                .ticketNumber(ticketNumber)
-                .date(rating.getCreatedAt().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")))
-                .build();
+                .collect(Collectors.toList());
     }
 }
