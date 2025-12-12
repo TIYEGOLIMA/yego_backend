@@ -136,44 +136,46 @@ public class DriverServiceImpl implements DriverService {
     }
     
     @Override
-    public PPendientesResponse obtenerPendientes(String telefono, String licencia) {
-        log.info("📋 [DriverService] Obteniendo pagos pendientes para GoBot - Teléfono: {}, Licencia: {}", telefono, licencia);
+    public PPendientesResponse obtenerPendientes(String telefono) {
+        log.info("📋 [DriverService] Obteniendo pagos pendientes para GoBot - Valor recibido: {}", telefono);
         
-        // Validar que al menos uno de los dos parámetros esté presente
-        boolean tieneTelefono = telefono != null && !telefono.trim().isEmpty();
-        boolean tieneLicense = licencia != null && !licencia.trim().isEmpty();
-        
-        if (!tieneTelefono && !tieneLicense) {
-            log.error("❌ [DriverService] Se requiere al menos teléfono o licencia");
+        // Validar que el parámetro esté presente
+        if (telefono == null || telefono.trim().isEmpty()) {
+            log.error("❌ [DriverService] Se requiere teléfono o licencia");
             return PPendientesResponse.builder()
                     .nombre("").flota("").monto(0.0).pagos(0).license("").surnames("")
                     .idcar("").placa("").iddriver("").telefonop("").idyego(null)
-                    .idflota("").estatus(400).message("Se requiere al menos teléfono o licencia").msystem("").build();
+                    .idflota("").estatus(400).message("Se requiere teléfono o licencia").msystem("").build();
         }
         
+        String valorLimpio = telefono.trim();
         List<Object[]> resultados = new ArrayList<>();
         String telefonoParaBuscar = null;
         String licenciaParaBuscar = null;
+        boolean esTelefono = false;
+        boolean esLicencia = false;
         
-        // Normalizar teléfono si está disponible
-        if (tieneTelefono) {
-            String telefonoLimpio = telefono.trim();
+        // Detectar si es teléfono o licencia
+        // Un teléfono generalmente empieza con +, 51, 57, o es un número largo
+        // Una licencia generalmente tiene letras o es más corta
+        if (valorLimpio.startsWith("+") || valorLimpio.startsWith("51") || valorLimpio.startsWith("57") || 
+            (valorLimpio.length() >= 8 && valorLimpio.matches(".*\\d.*"))) {
+            // Probablemente es un teléfono
+            esTelefono = true;
+            log.info("📱 [DriverService] Detectado como teléfono: {}", valorLimpio);
             
-            if (telefonoLimpio.startsWith("+51") || telefonoLimpio.startsWith("+57")) {
-                // Ya tiene prefijo internacional, usarlo tal cual
-                telefonoParaBuscar = telefonoLimpio;
+            // Normalizar teléfono
+            if (valorLimpio.startsWith("+51") || valorLimpio.startsWith("+57")) {
+                telefonoParaBuscar = valorLimpio;
                 log.info("📱 [DriverService] Teléfono ya tiene prefijo internacional: {}", telefonoParaBuscar);
-            } else if (telefonoLimpio.startsWith("51")) {
-                // Empieza con 51 (sin +), agregar el +
-                telefonoParaBuscar = "+" + telefonoLimpio;
+            } else if (valorLimpio.startsWith("51")) {
+                telefonoParaBuscar = "+" + valorLimpio;
                 log.info("📱 [DriverService] Teléfono empieza con 51, agregando '+': {}", telefonoParaBuscar);
-            } else if (telefonoLimpio.startsWith("57")) {
-                // Empieza con 57 (sin +), agregar el +
-                telefonoParaBuscar = "+" + telefonoLimpio;
+            } else if (valorLimpio.startsWith("57")) {
+                telefonoParaBuscar = "+" + valorLimpio;
                 log.info("📱 [DriverService] Teléfono empieza con 57, agregando '+': {}", telefonoParaBuscar);
-            } else if (telefonoLimpio.startsWith("+")) {
-                // Tiene "+" pero sin código de país, quitar el "+" y agregar código según el primer dígito
-                String telefonoSinPlus = telefonoLimpio.substring(1);
+            } else if (valorLimpio.startsWith("+")) {
+                String telefonoSinPlus = valorLimpio.substring(1);
                 if (telefonoSinPlus.startsWith("9")) {
                     telefonoParaBuscar = "+51" + telefonoSinPlus;
                     log.info("📱 [DriverService] Teléfono con '+' empieza con 9, agregando prefijo +51 (Perú)");
@@ -182,65 +184,43 @@ public class DriverServiceImpl implements DriverService {
                     log.info("📱 [DriverService] Teléfono con '+' no empieza con 9, agregando prefijo +57 (Colombia)");
                 }
             } else {
-                // No tiene prefijo, agregar según el primer dígito
-                if (telefonoLimpio.startsWith("9")) {
-                    telefonoParaBuscar = "+51" + telefonoLimpio;
+                if (valorLimpio.startsWith("9")) {
+                    telefonoParaBuscar = "+51" + valorLimpio;
                     log.info("📱 [DriverService] Teléfono empieza con 9, agregando prefijo +51 (Perú)");
                 } else {
-                    telefonoParaBuscar = "+57" + telefonoLimpio;
+                    telefonoParaBuscar = "+57" + valorLimpio;
                     log.info("📱 [DriverService] Teléfono no empieza con 9, agregando prefijo +57 (Colombia)");
                 }
             }
-        }
-        
-        // Normalizar licencia si está disponible
-        if (tieneLicense) {
-            licenciaParaBuscar = licencia.trim();
-        }
-        
-        // Estrategia de búsqueda:
-        // 1. Si hay teléfono, buscar por teléfono primero
-        // 2. Si hay licencia y no se encontró por teléfono, buscar por licencia
-        // 3. Si hay ambos, después de buscar por licencia, filtrar por teléfono si hay múltiples resultados
-        if (tieneTelefono) {
+            
+            // Buscar por teléfono primero
             log.info("📱 [DriverService] Buscando en BD por teléfono: {}", telefonoParaBuscar);
             resultados = driverRepository.findAllByPhoneAsDriverApiNative(telefonoParaBuscar);
+        } else {
+            // Probablemente es una licencia
+            esLicencia = true;
+            licenciaParaBuscar = valorLimpio;
+            log.info("🪪 [DriverService] Detectado como licencia: {}", licenciaParaBuscar);
         }
         
-        // Si no se encontró por teléfono y hay licencia, buscar por licencia
-        if (resultados.isEmpty() && tieneLicense) {
+        // Si no se encontró por teléfono, intentar como licencia
+        if (resultados.isEmpty() && esTelefono) {
+            log.info("🪪 [DriverService] No se encontró por teléfono, intentando como licencia: {}", valorLimpio);
+            licenciaParaBuscar = valorLimpio;
+            resultados = driverRepository.findAllByLicenseAsDriverApiNative(licenciaParaBuscar);
+            esLicencia = true;
+        }
+        
+        // Si se detectó como licencia desde el inicio, buscar por licencia
+        if (resultados.isEmpty() && esLicencia && licenciaParaBuscar != null) {
             log.info("🪪 [DriverService] Buscando por licencia: {}", licenciaParaBuscar);
             resultados = driverRepository.findAllByLicenseAsDriverApiNative(licenciaParaBuscar);
-            
-            // Si también hay teléfono y se encontraron resultados, filtrar por teléfono para obtener el mismo registro
-            if (!resultados.isEmpty() && tieneTelefono && telefonoParaBuscar != null) {
-                log.info("🔍 [DriverService] Filtrando resultados por licencia y teléfono para obtener el mismo registro");
-                // Crear variable final para usar en la lambda
-                final String telefonoFinal = telefonoParaBuscar;
-                List<Object[]> resultadosFiltrados = resultados.stream()
-                    .filter(row -> {
-                        // El índice 4 es phone según la query: driver_id(0), park_id(1), first_name(2), full_name(3), phone(4), ...
-                        if (row.length > 4 && row[4] != null) {
-                            String phoneEnBD = row[4].toString().trim();
-                            return phoneEnBD.equals(telefonoFinal);
-                        }
-                        return false;
-                    })
-                    .collect(java.util.stream.Collectors.toList());
-                
-                if (!resultadosFiltrados.isEmpty()) {
-                    log.info("✅ [DriverService] Se encontró registro que coincide con licencia y teléfono");
-                    resultados = resultadosFiltrados;
-                } else {
-                    log.info("⚠️ [DriverService] No se encontró coincidencia exacta, usando primer resultado por licencia");
-                }
-            }
         }
         
         if (resultados.isEmpty()) {
-            String mensajeError = tieneTelefono && tieneLicense 
+            String mensajeError = esTelefono && esLicencia 
                 ? "Conductor no encontrado por teléfono ni por licencia"
-                : tieneTelefono 
+                : esTelefono 
                     ? "Conductor no encontrado por teléfono"
                     : "Conductor no encontrado por licencia";
             

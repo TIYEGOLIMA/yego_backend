@@ -17,8 +17,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class PPendientesRequest {
     
-    private String telefono;
-    
-    private String licencia;
+    private String telefono; // Puede recibir teléfono o licencia
 }
 

@@ -41,11 +41,10 @@ public interface DriverService {
     
     /**
      * Obtiene información de pagos pendientes para GoBot
-     * @param telefono número de teléfono del conductor (opcional)
-     * @param licencia número de licencia del conductor (opcional)
+     * @param telefono número de teléfono o licencia del conductor
      * @return Respuesta con información de pagos pendientes
      */
-    PPendientesResponse obtenerPendientes(String telefono, String licencia);
+    PPendientesResponse obtenerPendientes(String telefono);
     
     /**
      * Obtiene todas las flotas desde la API externa (sin filtrar)

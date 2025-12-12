@@ -30,7 +30,7 @@ public class GoBotController {
      */
     @PostMapping("/PPendientes")
     public ResponseEntity<PPendientesResponse> obtenerPendientes(@Valid @RequestBody PPendientesRequest request) {
-        PPendientesResponse response = driverService.obtenerPendientes(request.getTelefono(), request.getLicencia());
+        PPendientesResponse response = driverService.obtenerPendientes(request.getTelefono());
         return ResponseEntity.ok(response);
     }
 }
