@@ -25,12 +25,12 @@ public class GoBotController {
     
     /**
      * Endpoint para GoBot - Obtiene información de pagos pendientes
-     * @param request Request con el teléfono del conductor
+     * @param request Request con el teléfono o licencia del conductor
      * @return Respuesta con información de pagos pendientes
      */
     @PostMapping("/PPendientes")
     public ResponseEntity<PPendientesResponse> obtenerPendientes(@Valid @RequestBody PPendientesRequest request) {
-        PPendientesResponse response = driverService.obtenerPendientes(request.getTelefono());
+        PPendientesResponse response = driverService.obtenerPendientes(request.getTelefono(), request.getLicencia());
         return ResponseEntity.ok(response);
     }
 }

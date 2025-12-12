@@ -45,14 +45,35 @@ public interface DriverRepository extends JpaRepository<Driver, String> {
     /**
      * Busca un conductor por teléfono
      * Retorna solo los campos necesarios para PPendientesResponse
-     * Prioriza los registros con park_id no nulo
+     * Prioriza los registros con park_id no nulo, ordenando por park_id para consistencia
      * @param phone número de teléfono a buscar
-     * @return Lista de arrays de objetos con los campos necesarios, ordenados por park_id no nulo primero
+     * @return Lista de arrays de objetos con los campos necesarios, ordenados por park_id no nulo primero, luego por park_id y driver_id
      */
     @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number " +
                    "FROM drivers WHERE phone = :phone " +
-                   "ORDER BY CASE WHEN park_id IS NOT NULL THEN 0 ELSE 1 END, driver_id " +
+                   "ORDER BY CASE WHEN park_id IS NOT NULL THEN 0 ELSE 1 END, park_id, driver_id " +
                    "LIMIT 10", nativeQuery = true)
     List<Object[]> findAllByPhoneAsDriverApiNative(@Param("phone") String phone);
+    
+    /**
+     * Busca un conductor por licencia
+     * Retorna solo los campos necesarios para PPendientesResponse
+     * Prioriza los registros con park_id no nulo, ordenando por park_id para consistencia
+     * @param licenseNumber número de licencia a buscar
+     * @return Lista de arrays de objetos con los campos necesarios, ordenados por park_id no nulo primero, luego por park_id y driver_id
+     */
+    @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number " +
+                   "FROM drivers WHERE license_number = :licenseNumber " +
+                   "ORDER BY CASE WHEN park_id IS NOT NULL THEN 0 ELSE 1 END, park_id, driver_id " +
+                   "LIMIT 10", nativeQuery = true)
+    List<Object[]> findAllByLicenseAsDriverApiNative(@Param("licenseNumber") String licenseNumber);
+    
+    /**
+     * Busca el full_name y car_number de un conductor por su driver_id
+     * @param driverId ID del conductor a buscar
+     * @return Optional con un array [full_name, car_number] si existe
+     */
+    @Query(value = "SELECT full_name, car_number FROM drivers WHERE driver_id = :driverId LIMIT 1", nativeQuery = true)
+    Optional<Object[]> findFullNameAndCarNumberByDriverId(@Param("driverId") String driverId);
 }
 
