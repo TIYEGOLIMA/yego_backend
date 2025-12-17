@@ -221,9 +221,9 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
                 .collect(Collectors.toSet());
 
         Map<String, Driver> driverMap = driverIds.isEmpty()
-                ? Collections.emptyMap()
+                ? Collections.emptyMap() 
                 : driverRepository.findAllById(driverIds).stream()
-                .collect(Collectors.toMap(Driver::getDriverId, Function.identity()));
+                .collect(Collectors.toMap(Driver::getDriverId, Function.identity())); // Mapear los drivers por su driverId
 
         return activos.stream()
                 .map(activo -> buildResponse(activo, driverMap.get(activo.getDriverId())))

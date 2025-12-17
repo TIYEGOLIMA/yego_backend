@@ -239,8 +239,6 @@ public class SacStatsServiceImpl implements SacStatsService {
                 (double) completedTicketsCount / totalTickets * 100 : 0.0;
         
         String averageResponseTime = calcularTiempoPromedioRespuesta(completedTickets);
-        String lastActivity = sacUser.getLastLogin() != null ? 
-                sacUser.getLastLogin().format(DATETIME_FORMATTER) : "Nunca";
         
         // Convertir ratings (solo últimos 3)
         List<RatingResponse> ratings = sacRatings.stream()
@@ -259,7 +257,6 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .totalRatings(totalRatings)
                 .satisfactionPercentage(Math.round(satisfactionPercentage * 100.0) / 100.0)
                 .averageResponseTime(averageResponseTime)
-                .lastActivity(lastActivity)
                 .ratings(ratings)
                 .build();
     }

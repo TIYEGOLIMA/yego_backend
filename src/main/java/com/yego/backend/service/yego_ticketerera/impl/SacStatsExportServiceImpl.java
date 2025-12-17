@@ -295,7 +295,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         headerRow.getCell(0).setCellStyle(headerStyle);
         
         Row subHeaderRow = sheet.createRow(startRow + 2);
-        String[] headers = {"Nombre", "Usuario", "Total Tickets", "Completados", "Calificación", "Calificaciones", "% Satisfacción", "Tiempo Respuesta", "Última Actividad"};
+        String[] headers = {"Nombre", "Usuario", "Total Tickets", "Completados", "Calificación", "Calificaciones", "% Satisfacción", "Tiempo Respuesta"};
         for (int i = 0; i < headers.length; i++) {
             subHeaderRow.createCell(i).setCellValue(headers[i]);
             subHeaderRow.getCell(i).setCellStyle(headerStyle);
@@ -320,8 +320,6 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             row.getCell(6).setCellStyle(numberStyle);
             row.createCell(7).setCellValue(sac.getAverageResponseTime());
             row.getCell(7).setCellStyle(dataStyle);
-            row.createCell(8).setCellValue(sac.getLastActivity());
-            row.getCell(8).setCellStyle(dataStyle);
         }
     }
     
@@ -592,8 +590,8 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         g2d.drawRoundRect(x, y + 25, 1100, tablaHeight, 15, 15);
         
         // Encabezados de la tabla
-        String[] headers = {"SAC", "Total Tickets", "Completados", "Calificación", "Satisfacción", "Tiempo Respuesta", "Última Actividad"};
-        int[] columnWidths = {220, 130, 130, 130, 130, 130, 180};
+        String[] headers = {"SAC", "Total Tickets", "Completados", "Calificación", "Satisfacción", "Tiempo Respuesta"};
+        int[] columnWidths = {220, 130, 130, 130, 130, 130};
         int currentX = x + 20;
         
         // Fondo del header
@@ -673,9 +671,6 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             g2d.setColor(java.awt.Color.BLACK);
             g2d.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 12));
             g2d.drawString(sac.getAverageResponseTime(), currentX + 15, rowY - 5);
-            currentX += columnWidths[5];
-            
-            g2d.drawString(sac.getLastActivity(), currentX + 15, rowY - 5);
             
             rowY += 55;
         }

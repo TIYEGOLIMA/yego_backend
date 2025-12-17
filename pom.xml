@@ -84,6 +84,12 @@
             <artifactId>poi-ooxml</artifactId>
             <version>5.2.4</version>
         </dependency>
+        
+        <!-- Apache HttpClient for proxy support -->
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+        </dependency>
 
         <!-- JWT -->
         <dependency>
@@ -114,12 +120,6 @@
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
-        <!-- Apache POI para Excel (importaciones/exportaciones) -->
-        <dependency>
-            <groupId>org.apache.poi</groupId>
-            <artifactId>poi-ooxml</artifactId>
-            <version>5.2.4</version>
-        </dependency>
         
         <!-- OpenCSV para manejo de CSV -->
         <dependency>

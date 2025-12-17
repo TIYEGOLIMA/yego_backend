@@ -380,6 +380,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         // Lista de IPs autorizadas para marcación de asistencia
         List<String> authorizedIps = Arrays.asList(
             "161.132.204.202",
+            "190.81.48.242",
             "38.253.176.89", 
             "10.10.10.12",
             "127.0.0.1"         // IPv4 localhost (IPv6 se convierte automáticamente)

@@ -38,7 +38,6 @@ public class SacStatsResponse {
         private Integer totalRatings;
         private Double satisfactionPercentage;
         private String averageResponseTime;
-        private String lastActivity;
         private List<RatingResponse> ratings;
         
         @Data

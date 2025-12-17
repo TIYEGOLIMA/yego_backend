@@ -70,6 +70,7 @@ public class SecurityConfig {
             "https://api-int.yego.pro",
             "https://neto.yego.pro",
             "https://siscoca.yego.pro"
+            
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
@@ -110,6 +111,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/health").permitAll() // Health check
                 .requestMatchers("/api/yego-premiun/**").permitAll() // Driver active stats endpoints
                 .requestMatchers("/api/marketing-mensajes/**").permitAll() // Marketing mensajes endpoints
+                .requestMatchers("/api/pro-ops/**").permitAll() // Pro Ops endpoints
                 .requestMatchers("/api/GoBot/**").permitAll() // GoBot API externa endpoints
                 .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                 .requestMatchers("/actuator/**").permitAll() // Actuator endpoints
