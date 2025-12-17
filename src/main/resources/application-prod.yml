@@ -22,7 +22,7 @@ spring:
   
   # Configuración de base de datos PostgreSQL - PRODUCCIÓN
   datasource:
-    url: jdbc:postgresql://${DB_HOST:168.119.226.236}:${DB_PORT:5432}/${DB_NAME:yego_integral_dev}
+    url: jdbc:postgresql://${DB_HOST:168.119.226.236}:${DB_PORT:5432}/${DB_NAME:yego_integral}
     username: ${DB_USER:yego_user}
     password: ${DB_PASSWORD:37>MNA&-35+}
     driver-class-name: org.postgresql.Driver
@@ -51,7 +51,7 @@ spring:
 # JWT para producción
 jwt:
   secret: ${JWT_SECRET:cb0d12d0302705aba616440ca4f65dee7ec31810497a80e1b2e2e60b95c5437ea2aac09d4c2f8dd8f94c7899e2f6dcfde371182c6daa152cc8614f33f5be12ff}
-  expiration: ${JWT_EXPIRES_IN:3600}  # 1 hora en producción
+  expiration: ${JWT_EXPIRES_IN:8600}  # 1 hora en producción
 
 # Configuración de la aplicación para producción
 app:
@@ -127,3 +127,13 @@ management:
   endpoint:
     health:
       show-details: never
+
+# Configuración Yango Pro Ops - Rotación de Proxies
+# Habilitar rotación de proxies para evitar bloqueos de la API
+yego:
+  pro-ops:
+    proxy:
+      enabled: true
+      # Archivo de proxies (por defecto: proxies.txt en src/main/resources)
+      # Formato: una línea por proxy: IP:PORT:USERNAME:PASSWORD
+      file: proxies.txt
