@@ -75,5 +75,18 @@ public interface DriverRepository extends JpaRepository<Driver, String> {
      */
     @Query(value = "SELECT full_name, car_number FROM drivers WHERE driver_id = :driverId LIMIT 1", nativeQuery = true)
     Optional<Object[]> findFullNameAndCarNumberByDriverId(@Param("driverId") String driverId);
+    
+    /**
+     * Busca un conductor por driver_id
+     * Retorna solo los campos necesarios para PPendientesResponse
+     * Prioriza los registros con park_id no nulo, ordenando por park_id para consistencia
+     * @param driverId ID del conductor a buscar
+     * @return Lista de arrays de objetos con los campos necesarios, ordenados por park_id no nulo primero, luego por park_id y driver_id
+     */
+    @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number " +
+                   "FROM drivers WHERE driver_id = :driverId " +
+                   "ORDER BY CASE WHEN park_id IS NOT NULL THEN 0 ELSE 1 END, park_id, driver_id " +
+                   "LIMIT 10", nativeQuery = true)
+    List<Object[]> findAllByDriverIdAsDriverApiNative(@Param("driverId") String driverId);
 }
 

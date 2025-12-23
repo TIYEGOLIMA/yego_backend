@@ -152,13 +152,26 @@ public class DriverServiceImpl implements DriverService {
         List<Object[]> resultados = new ArrayList<>();
         String telefonoParaBuscar = null;
         String licenciaParaBuscar = null;
+        String driverIdParaBuscar = null;
         boolean esTelefono = false;
         boolean esLicencia = false;
+        boolean esDriverId = false;
         
+        // Detectar si es driver_id (longitud ~32 caracteres hexadecimales, puede ser un poco menor o mayor)
+        // Ejemplo: "95bb09d0001a4f8fb3a7e3d4a0c7113b" (32 caracteres)
+        if (valorLimpio.length() >= 28 && valorLimpio.length() <= 36 && valorLimpio.matches("^[0-9a-fA-F]+$")) {
+            esDriverId = true;
+            driverIdParaBuscar = valorLimpio;
+            log.info("🆔 [DriverService] Detectado como driver_id: {}", driverIdParaBuscar);
+            
+            // Buscar por driver_id
+            log.info("🆔 [DriverService] Buscando en BD por driver_id: {}", driverIdParaBuscar);
+            resultados = driverRepository.findAllByDriverIdAsDriverApiNative(driverIdParaBuscar);
+        }
         // Detectar si es teléfono o licencia
         // Un teléfono generalmente empieza con +, 51, 57, o es un número largo
         // Una licencia generalmente tiene letras o es más corta
-        if (valorLimpio.startsWith("+") || valorLimpio.startsWith("51") || valorLimpio.startsWith("57") || 
+        else if (valorLimpio.startsWith("+") || valorLimpio.startsWith("51") || valorLimpio.startsWith("57") || 
             (valorLimpio.length() >= 8 && valorLimpio.matches(".*\\d.*"))) {
             // Probablemente es un teléfono
             esTelefono = true;
@@ -217,7 +230,7 @@ public class DriverServiceImpl implements DriverService {
             resultados = driverRepository.findAllByLicenseAsDriverApiNative(licenciaParaBuscar);
         }
         
-        if (resultados.isEmpty()) {
+        if (resultados.isEmpty() && !esDriverId) {
             String mensajeError = esTelefono && esLicencia 
                 ? "Conductor no encontrado por teléfono ni por licencia"
                 : esTelefono 
@@ -228,6 +241,13 @@ public class DriverServiceImpl implements DriverService {
                     .nombre("").flota("").monto(0.0).pagos(0).license("").surnames("")
                     .idcar("").placa("").iddriver("").telefonop(telefonoParaBuscar != null ? telefonoParaBuscar : "").idyego(null)
                     .idflota("").estatus(400).message(mensajeError).msystem("").build();
+        }
+        
+        if (resultados.isEmpty() && esDriverId) {
+            return PPendientesResponse.builder()
+                    .nombre("").flota("").monto(0.0).pagos(0).license("").surnames("")
+                    .idcar("").placa("").iddriver(driverIdParaBuscar).telefonop("").idyego(null)
+                    .idflota("").estatus(400).message("Conductor no encontrado por driver_id").msystem("").build();
         }
         
         // La query ya ordena primero los que tienen park_id no nulo
@@ -262,8 +282,17 @@ public class DriverServiceImpl implements DriverService {
         String surnames = driver.getFullName() != null ? driver.getFullName() : "";
         
         // Usar el teléfono del conductor encontrado si no se proporcionó uno, o el normalizado si se proporcionó
-        String telefonoFinal = driver.getPhone() != null ? driver.getPhone() : 
-                              (telefonoParaBuscar != null ? telefonoParaBuscar : "");
+        // Si se buscó por driver_id, devolver el teléfono solo en ese caso
+        String telefonoFinal;
+        if (esDriverId) {
+            // Si se buscó por driver_id, devolver el teléfono
+            telefonoFinal = driver.getPhone() != null ? driver.getPhone() : "";
+            log.info("📱 [DriverService] Teléfono encontrado por driver_id: {}", telefonoFinal);
+        } else {
+            // Para teléfono o licencia, usar el teléfono encontrado o el normalizado
+            telefonoFinal = driver.getPhone() != null ? driver.getPhone() : 
+                          (telefonoParaBuscar != null ? telefonoParaBuscar : "");
+        }
         
         // Construir respuesta
         return PPendientesResponse.builder()
