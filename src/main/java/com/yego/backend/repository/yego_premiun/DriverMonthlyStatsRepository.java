@@ -10,5 +10,7 @@ import java.util.List;
 public interface DriverMonthlyStatsRepository extends JpaRepository<DriverMonthlyStats, Long> {
 
     List<DriverMonthlyStats> findAllByYearAndMonth(Integer year, Integer month);
+    
+    List<DriverMonthlyStats> findAllByMonth(Integer month);
 }
 

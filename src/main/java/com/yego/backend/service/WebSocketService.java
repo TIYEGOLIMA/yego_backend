@@ -328,6 +328,7 @@ public class WebSocketService {
         log.info("✅ Datos completos de garantizado enviados - {} conductores", conductores.size());
     }
 
+
     /**
      * Enviar notificación de actualización de usuarios para refrescar tabla
      */

@@ -1,12 +1,13 @@
 package com.yego.backend.service.yego_premiun;
 
+import com.yego.backend.entity.yego_premiun.api.request.DriverMonthlyStatsProcessRequest;
 import com.yego.backend.entity.yego_premiun.api.response.DriverMonthlyStatsResponse;
 
 import java.util.List;
 
 public interface DriverMonthlyStatsService {
 
-    List<DriverMonthlyStatsResponse> procesarYListarActivos();
+    List<DriverMonthlyStatsResponse> procesarYListarActivos(Integer month, Integer year);
 
     List<DriverMonthlyStatsResponse> listarActivos();
 }

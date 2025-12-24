@@ -2,6 +2,7 @@ package com.yego.backend.service.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.api.request.CalculatedShiftManualRequest;
 import com.yego.backend.entity.yego_pro_ops.api.request.CalculatedShiftRequest;
+import com.yego.backend.entity.yego_pro_ops.api.response.AllDriversOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.CalculatedShiftResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
 
@@ -30,5 +31,12 @@ public interface CalculatedShiftService {
      * @return Turno guardado
      */
     CalculatedShift guardarTurnoManual(CalculatedShiftManualRequest request);
+    
+    /**
+     * Obtiene todos los conductores con todos sus viajes en vivo para una fecha específica
+     * @param fecha Fecha en formato "yyyy-MM-dd" (opcional, si es null usa la fecha actual)
+     * @return Respuesta con lista de conductores y sus viajes
+     */
+    AllDriversOrdersResponse listarTodosLosConductoresConViajes(String fecha);
 }
 

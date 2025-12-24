@@ -71,5 +71,11 @@ public class OrderInfoResponse {
     
     @JsonProperty("price_tip")
     private Double priceTip;
+    
+    @JsonProperty("address_from")
+    private String addressFrom;
+    
+    @JsonProperty("address_to")
+    private String addressTo;
 }
 

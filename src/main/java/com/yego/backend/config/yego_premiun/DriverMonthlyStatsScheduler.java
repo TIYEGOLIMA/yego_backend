@@ -18,6 +18,7 @@ public class DriverMonthlyStatsScheduler {
 
     private final DriverMonthlyStatsNotificationHandler notificationHandler;
 
+
     /**
      * Notifica al frontend el primer día de cada mes a las 08:00 AM (hora Lima)
      * que ya puede procesar el periodo anterior.

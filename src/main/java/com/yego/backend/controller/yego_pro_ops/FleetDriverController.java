@@ -6,6 +6,7 @@ import com.yego.backend.entity.yego_pro_ops.api.response.DriverCloseResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverKpiResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.WorkRulesResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
@@ -89,6 +90,31 @@ public class FleetDriverController {
         
         return ResponseEntity.ok(response);
     }
+    
+    /**
+     * Obtiene TODOS los viajes (completos y cancelados) sin filtrar por status
+     * Útil para cálculos de turnos donde se necesitan todos los viajes para determinar hora de inicio y fin
+     * @param driverId ID del conductor
+     * @param dateFrom Fecha inicial (formato: "2025-12-10T00:00:00-05:00")
+     * @param dateTo Fecha final (formato: "2025-12-10T23:59:59-05:00")
+     * @param cursor Cursor opcional para paginación (obtenido de la respuesta anterior)
+     * @return Respuesta con lista de TODOS los viajes (sin filtrar por status)
+     */
+    @GetMapping("/driver/viajes-todos")
+    public ResponseEntity<DriverOrdersResponse> obtenerTodosLosViajes(
+            @RequestParam String driverId,
+            @RequestParam(required = false) String dateFrom,
+            @RequestParam(required = false) String dateTo,
+            @RequestParam(required = false) String cursor) {
+        log.info("🚗 [FleetDriverController] Obteniendo TODOS los viajes (sin filtro) para driver_id: {}, desde: {}, hasta: {}, cursor: {}", 
+            driverId, dateFrom, dateTo, cursor != null ? "presente" : "no presente");
+        
+        DriverOrdersResponse response = driverOrdersService.obtenerTodosLosViajes(driverId, dateFrom, dateTo, cursor);
+        log.info("✅ [FleetDriverController] Total de viajes devueltos: {}, hasMore: {}", 
+            response.getOrders().size(), response.getHasMore());
+        
+        return ResponseEntity.ok(response);
+    }
 
     /**
      * Registra un cierre de caja para un conductor en una fecha específica
@@ -157,6 +183,20 @@ public class FleetDriverController {
     public ResponseEntity<WorkRulesResponse> obtenerReglasTrabajo() {
         log.info("📋 [FleetDriverController] Obteniendo reglas de trabajo");
         WorkRulesResponse response = fleetDriverService.obtenerReglasTrabajo();
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * Obtiene todos los conductores con status "in_order" y sus detalles
+     * Incluye: avatar_url, balance, first_name, last_name, id, status, route, vehicle_number
+     * El scheduler actualiza estos datos cada 10 segundos y los envía por WebSocket
+     * @return Respuesta con lista de conductores en orden y sus detalles
+     */
+    @GetMapping("/drivers/in-order")
+    public ResponseEntity<DriversInOrderResponse> obtenerConductoresEnOrden() {
+        log.info("🚗 [FleetDriverController] Obteniendo conductores con status 'in_order'");
+        DriversInOrderResponse response = fleetDriverService.obtenerConductoresEnOrden();
+        log.info("✅ [FleetDriverController] Se encontraron {} conductores en orden", response.getTotal());
         return ResponseEntity.ok(response);
     }
 }

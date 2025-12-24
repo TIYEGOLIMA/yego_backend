@@ -7,6 +7,7 @@ import com.yego.backend.entity.yego_pro_ops.api.request.DriverListRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverInfoResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverKpiResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.WorkRulesResponse;
 import com.yego.backend.repository.yego_garantizado.DriverRepository;
 import com.yego.backend.service.yego_pro_ops.FleetDriverService;
@@ -20,6 +21,10 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -54,6 +59,8 @@ public class FleetDriverServiceImpl implements FleetDriverService {
     
     private static final String YANGO_COOKIE_BASE = "yashr=299832191758141387; receive-cookie-deprecation=1; gdpr=0; _ym_uid=175814138831171998; _ym_d=1758141396; yandexuid=9201743261758137514; yuidss=9201743261758137514; yandex_login=Jhajaira.ochoa; L=ZxtXZnxqBmR/SAVhdVZyXwJfaA9cBV1cLlAoE1ddHRAZOQxQLTM=.1759148388.1235855.353634.d47e5d7bafd679e1c83d4f42c6e23cd9; Session_id=3:1764107903.5.0.1758141420632:WbD9Jg:3a2a.1.2:1|2015824474.1006968.2.0:3.2:1006968.3:1759148388|60:11433100.181615.QwZv5z-R92wHzh4j43-daY0-K7g; sessar=1.1396519.CiDPtjUqckvAWEzdml3-Xvlj9hjrxSX6tJqOaxrdeZn5IA.jv1_Nvn5vO56j4mwzyFG1Wg8pHX_1BWCf-tAOHo6bQk; sessionid2=3:1764107903.5.0.1758141420632:WbD9Jg:3a2a.1.2:1|2015824474.1006968.2.0:3.2:1006968.3:1759148388|60:11433100.181615.fakesign0000000000000000000; i=XLXWMoCXAOgX6hzpx/AmT+HOGGwAwQhiTRKOzxl2tkMXu90DChcwoTT5z8qvZlmQyhkwZXurYZsuUa9AHb5foPXF2Rc=; _ym_isad=2; yp=2074508388.udn.cDpKaGFqYWlyYS5vY2hvYQ%3D%3D#1764940883.yu.9201743261758137514; ymex=1767446483.oyu.9201743261758137514#2073501389.yrts.1758141389; _ym_visorc=b; bh=Ej8iQ2hyb21pdW0iO3Y9IjE0MiIsIkdvb2dsZSBDaHJvbWUiO3Y9IjE0MiIsIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiIOMTQyLjAuNzQ0NC4xNzYqAj8wOgdXaW5kb3dzQgYxMC4wLjBKAjY0UlsiQ2hyb21pdW0iO3Y9IjE0Mi4wLjc0NDQuMTc2IiwiR29vZ2xlIENocm9tZSI7dj0iMTQyLjAuNzQ0NC4xNzYiLCJOb3RfQSBCcmFuZCI7dj0iOTkuMC4wLjAiYPzux8kGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYP+JzMhwg=; _yasc=fAS4rNTIoRKZq+JMg4Gaj9eUc5ZA62kxyJug7jaq8e08yG17i2jy7kvgtoikFrhpuyUc";
     private static final String YANGO_API_URL = "https://fleet.yango.com/api/fleet/map/v2/drivers/points";
+    private static final String YANGO_DRIVERS_LIST_API_URL = "https://fleet.yango.com/api/fleet/map/v1/drivers/list";
+    private static final String YANGO_GPS_API_URL = "https://fleet.yango.com/api/fleet/map/v1/driver/gps";
     private static final String YANGO_CONTRACTORS_API_URL = "https://fleet.yango.com/api/fleet/contractor-profiles-manager/v2/contractors/list";
     private static final String YANGO_WORK_RULES_API_URL = "https://fleet.yango.com/api/fleet/driver-work-rules/v1/work-rules/light-list";
     private static final String PARK_ID = "64085dd85e124e2c808806f70d527ea8";
@@ -464,6 +471,298 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                 .workRules(new ArrayList<>())
                 .build();
         }
+    }
+    
+    @Override
+    public DriversInOrderResponse obtenerConductoresEnOrden() {
+        try {
+            List<String> driverIdsInOrder = obtenerDriverIdsInOrder();
+            
+            if (driverIdsInOrder.isEmpty()) {
+                return DriversInOrderResponse.builder()
+                    .conductores(new ArrayList<>())
+                    .total(0)
+                    .build();
+            }
+            
+            return obtenerDetallesConductores(driverIdsInOrder);
+            
+        } catch (Exception e) {
+            log.error("❌ [FleetDriverService] Error obteniendo conductores en orden: {}", e.getMessage(), e);
+            return DriversInOrderResponse.builder()
+                .conductores(new ArrayList<>())
+                .total(0)
+                .build();
+        }
+    }
+    
+    /**
+     * Obtiene los driver_ids de conductores con status "in_order" desde /v2/drivers/points
+     */
+    private List<String> obtenerDriverIdsInOrder() {
+        try {
+            HttpHeaders headers = crearHeadersDriversPoints();
+            
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("park_id", PARK_ID);
+            requestBody.put("car", new HashMap<>());
+            requestBody.put("statuses", java.util.Arrays.asList("in_order"));
+            
+            Map<String, Object> sort = new HashMap<>();
+            sort.put("field", "status_duration");
+            sort.put("direction", "desc");
+            requestBody.put("sort", sort);
+            
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            ResponseEntity<String> response = getRestTemplate().exchange(
+                YANGO_API_URL, 
+                HttpMethod.POST, 
+                request, 
+                String.class
+            );
+            
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                return new ArrayList<>();
+            }
+            
+            JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+            JsonNode items = jsonResponse.get("items");
+            
+            if (items == null || !items.isArray()) {
+                return new ArrayList<>();
+            }
+            
+            List<String> driverIds = new ArrayList<>();
+            for (JsonNode item : items) {
+                String driverId = item.has("driver_id") ? item.get("driver_id").asText() : null;
+                if (driverId != null && !driverId.isEmpty()) {
+                    driverIds.add(driverId);
+                }
+            }
+            return driverIds;
+            
+        } catch (Exception e) {
+            log.error("❌ [FleetDriverService] Error obteniendo driver_ids in_order: {}", e.getMessage(), e);
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * Obtiene los detalles de los conductores desde /v1/drivers/list
+     */
+    private DriversInOrderResponse obtenerDetallesConductores(List<String> driverIds) {
+        try {
+            HttpHeaders headers = crearHeadersDriversList();
+            
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("driver_ids", driverIds);
+            requestBody.put("with_order_field", true);
+            
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            ResponseEntity<String> response = getRestTemplate().exchange(
+                YANGO_DRIVERS_LIST_API_URL,
+                HttpMethod.POST,
+                request,
+                String.class
+            );
+            
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                return DriversInOrderResponse.builder()
+                    .conductores(new ArrayList<>())
+                    .total(0)
+                    .build();
+            }
+            
+            JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+            JsonNode items = jsonResponse.get("items");
+            
+            if (items == null || !items.isArray()) {
+                return DriversInOrderResponse.builder()
+                    .conductores(new ArrayList<>())
+                    .total(0)
+                    .build();
+            }
+            
+            List<DriversInOrderResponse.DriverInOrderInfo> conductores = new ArrayList<>();
+            
+            LocalDate fechaHoy = LocalDate.now(ZoneId.of("America/Lima"));
+            String dateFrom = fechaHoy.atStartOfDay(ZoneId.of("America/Lima")).toInstant().toString();
+            String dateTo = fechaHoy.atTime(23, 59, 59).atZone(ZoneId.of("America/Lima")).toInstant().toString();
+            
+            for (JsonNode item : items) {
+                JsonNode driver = item.has("driver") ? item.get("driver") : item;
+                JsonNode order = item.get("order");
+                JsonNode routeNode = (order != null && order.has("route")) ? order.get("route") : item.get("route");
+                
+                String driverId = driver.has("id") ? driver.get("id").asText() : null;
+                GpsDataResult gpsData = obtenerDatosGpsCompletos(driverId, dateFrom, dateTo);
+                
+                DriversInOrderResponse.DriverInOrderInfo info = DriversInOrderResponse.DriverInOrderInfo.builder()
+                    .id(driverId)
+                    .avatarUrl(driver.has("avatar_url") ? driver.get("avatar_url").asText() : null)
+                    .balance(driver.has("balance") ? driver.get("balance").asText() : null)
+                    .firstName(driver.has("first_name") ? driver.get("first_name").asText() : null)
+                    .lastName(driver.has("last_name") ? driver.get("last_name").asText() : null)
+                    .status(driver.has("status") ? driver.get("status").asText() : null)
+                    .vehicleNumber(extraerVehicleNumber(order))
+                    .route(extraerRoute(routeNode))
+                    .summaryDistance(gpsData != null ? gpsData.summaryDistance : null)
+                    .totalActivityTime(gpsData != null ? gpsData.totalActivityTime : null)
+                    .build();
+                
+                conductores.add(info);
+            }
+            
+            return DriversInOrderResponse.builder()
+                .conductores(conductores)
+                .total(conductores.size())
+                .build();
+            
+        } catch (Exception e) {
+            log.error("❌ [FleetDriverService] Error obteniendo detalles de conductores: {}", e.getMessage(), e);
+            return DriversInOrderResponse.builder()
+                .conductores(new ArrayList<>())
+                .total(0)
+                .build();
+        }
+    }
+    
+    /**
+     * Clase wrapper para retornar datos GPS (summary_distance y tiempo total de actividad)
+     */
+    private static class GpsDataResult {
+        DriversInOrderResponse.SummaryDistance summaryDistance;
+        Long totalActivityTime;
+    }
+    
+    /**
+     * Obtiene los datos de GPS (summary_distance y tiempo total de actividad) para un conductor
+     * Optimizado para hacer una sola llamada a la API
+     * @return GpsDataResult con summaryDistance y totalActivityTime, o null si hay error
+     */
+    private GpsDataResult obtenerDatosGpsCompletos(String contractorProfileId, String dateFrom, String dateTo) {
+        if (contractorProfileId == null || contractorProfileId.isEmpty()) {
+            return null;
+        }
+        
+        try {
+            HttpHeaders headers = crearHeadersDriversList();
+            
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("contractor_profile_id", contractorProfileId);
+            requestBody.put("date_from", dateFrom);
+            requestBody.put("date_to", dateTo);
+            
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            ResponseEntity<String> response = getRestTemplate().exchange(
+                YANGO_GPS_API_URL,
+                HttpMethod.POST,
+                request,
+                String.class
+            );
+            
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                return null;
+            }
+            
+            JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+            
+            // Extraer summary_distance
+            JsonNode summaryDistanceNode = jsonResponse.get("summary_distance");
+            DriversInOrderResponse.SummaryDistance summaryDistance = null;
+            if (summaryDistanceNode != null) {
+                // Dividir todos los valores entre 1000 para expresarlos en kilómetros
+                summaryDistance = DriversInOrderResponse.SummaryDistance.builder()
+                    .common(summaryDistanceNode.has("common") && !summaryDistanceNode.get("common").isNull() 
+                        ? summaryDistanceNode.get("common").asDouble() / 1000.0 : null)
+                    .active(summaryDistanceNode.has("active") && !summaryDistanceNode.get("active").isNull() 
+                        ? summaryDistanceNode.get("active").asDouble() / 1000.0 : null)
+                    .notActive(summaryDistanceNode.has("not_active") && !summaryDistanceNode.get("not_active").isNull() 
+                        ? summaryDistanceNode.get("not_active").asDouble() / 1000.0 : null)
+                    .offline(summaryDistanceNode.has("offline") && !summaryDistanceNode.get("offline").isNull() 
+                        ? summaryDistanceNode.get("offline").asDouble() / 1000.0 : null)
+                    .busy(summaryDistanceNode.has("busy") && !summaryDistanceNode.get("busy").isNull() 
+                        ? summaryDistanceNode.get("busy").asDouble() / 1000.0 : null)
+                    .free(summaryDistanceNode.has("free") && !summaryDistanceNode.get("free").isNull() 
+                        ? summaryDistanceNode.get("free").asDouble() / 1000.0 : null)
+                    .inOrder(summaryDistanceNode.has("in_order") && !summaryDistanceNode.get("in_order").isNull() 
+                        ? summaryDistanceNode.get("in_order").asDouble() / 1000.0 : null)
+                    .build();
+            }
+            
+            // Calcular tiempo total de actividad sumando status_time solo de viajes con driver_status "in_order" o "free"
+            JsonNode detailedGpsNode = jsonResponse.get("detailed_gps");
+            Long totalActivityTime = 0L;
+            if (detailedGpsNode != null && detailedGpsNode.isArray()) {
+                long totalTimeSeconds = 0;
+                for (JsonNode trip : detailedGpsNode) {
+                    // Solo sumar si driver_status es "in_order" o "free"
+                    String driverStatus = trip.has("driver_status") ? trip.get("driver_status").asText() : null;
+                    if (("in_order".equals(driverStatus) || "free".equals(driverStatus)) 
+                        && trip.has("status_time") && !trip.get("status_time").isNull()) {
+                        totalTimeSeconds += trip.get("status_time").asLong();
+                    }
+                }
+                totalActivityTime = totalTimeSeconds;
+            }
+            
+            GpsDataResult result = new GpsDataResult();
+            result.summaryDistance = summaryDistance;
+            result.totalActivityTime = totalActivityTime;
+            return result;
+                
+        } catch (Exception e) {
+            log.error("❌ [FleetDriverService] Error obteniendo datos GPS para conductor {}: {}", contractorProfileId, e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Extrae el número del vehículo desde order.vehicle.number
+     */
+    private String extraerVehicleNumber(JsonNode order) {
+        if (order != null && order.has("vehicle") && !order.get("vehicle").isNull()) {
+            JsonNode vehicle = order.get("vehicle");
+            return vehicle.has("number") ? vehicle.get("number").asText() : null;
+        }
+        return null;
+    }
+    
+    /**
+     * Extrae la ruta (route array con addresses)
+     * Puede estar en order.route o directamente en route
+     */
+    private List<DriversInOrderResponse.RoutePoint> extraerRoute(JsonNode routeNode) {
+        List<DriversInOrderResponse.RoutePoint> route = new ArrayList<>();
+        
+        if (routeNode != null && routeNode.isArray()) {
+            for (JsonNode routePoint : routeNode) {
+                String address = routePoint.has("address") ? routePoint.get("address").asText() : null;
+                if (address != null) {
+                    route.add(DriversInOrderResponse.RoutePoint.builder()
+                        .address(address)
+                        .build());
+                }
+            }
+        }
+        
+        return route;
+    }
+    
+    /**
+     * Crea headers comunes para los endpoints de Yango
+     */
+    private HttpHeaders crearHeadersDriversPoints() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Cookie", YANGO_COOKIE_BASE);
+        headers.set("x-park-id", PARK_ID);
+        headers.set("origin", "https://fleet.yango.com");
+        return headers;
+    }
+    
+    private HttpHeaders crearHeadersDriversList() {
+        return crearHeadersDriversPoints();
     }
 }
 

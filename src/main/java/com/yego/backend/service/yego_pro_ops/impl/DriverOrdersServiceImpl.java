@@ -282,7 +282,80 @@ public class DriverOrdersServiceImpl implements DriverOrdersService {
             String cursorActual = cursor;
             
             // Paginación automática: cargar todas las páginas hasta que no haya más cursor
-            // Para cálculo de turnos, incluir TODOS los viajes (completos y cancelados) sin filtrar por status
+            // Solo incluir viajes COMPLETOS (filtrar por status = "complete")
+            do {
+                Map<String, Object> requestBody = crearRequestBody(driverId, dateFrom, dateTo, cursorActual, true);
+                String requestBodyJson = objectMapper.writeValueAsString(requestBody);
+                
+                esperarSiEsNecesario();
+                
+                HttpEntity<String> httpRequest = new HttpEntity<>(requestBodyJson, crearHeaders());
+                
+                ResponseEntity<String> response = getRestTemplate().exchange(
+                    YANGO_ORDERS_API_URL, 
+                    HttpMethod.POST, 
+                    httpRequest, 
+                    String.class
+                );
+                
+                if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                    JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+                    
+                    // Procesar esta página - SOLO viajes completos (filtrar por status = "complete")
+                    List<OrderInfoResponse> viajesPagina = procesarViajesCompletos(jsonResponse);
+                    todosLosViajes.addAll(viajesPagina);
+                    
+                    // Verificar si hay más páginas
+                    if (jsonResponse.has("cursor") && !jsonResponse.get("cursor").isNull()) {
+                        cursorActual = jsonResponse.get("cursor").asText();
+                        log.info("📄 [DriverOrdersService] Cargando siguiente página (cursor presente). Total acumulado: {}", 
+                            todosLosViajes.size());
+                    } else {
+                        cursorActual = null; // No hay más páginas
+                        log.info("✅ [DriverOrdersService] No hay más páginas. Total final: {}", todosLosViajes.size());
+                    }
+                } else {
+                    log.warn("⚠️ [DriverOrdersService] Respuesta HTTP no exitosa. Status: {}", response.getStatusCode());
+                    cursorActual = null; // Detener paginación
+                }
+                
+            } while (cursorActual != null);
+            
+            return DriverOrdersResponse.builder()
+                .dateFrom(dateFrom)
+                .dateTo(dateTo)
+                .orders(todosLosViajes)
+                .cursor(null)
+                .hasMore(false)
+                .cierreRegistrado(tieneCierreRegistrado)
+                .build();
+            
+        } catch (HttpClientErrorException | HttpServerErrorException e) {
+            log.error("❌ [DriverOrdersService] Error HTTP al obtener viajes completos: {} - {}", 
+                e.getStatusCode(), e.getResponseBodyAsString());
+            return crearRespuestaError(driverId, dateFrom, dateTo);
+        } catch (Exception e) {
+            log.error("❌ [DriverOrdersService] Error obteniendo viajes completos: {}", e.getMessage(), e);
+            return crearRespuestaError(driverId, dateFrom, dateTo);
+        }
+    }
+    
+    @Override
+    public DriverOrdersResponse obtenerTodosLosViajes(String driverId, String dateFrom, String dateTo, String cursor) {
+        try {
+            log.info("📋 [DriverOrdersService] Obteniendo TODOS los viajes (sin filtro) para driver_id: {}", driverId);
+            
+            if (dateFrom == null || dateTo == null) {
+                String[] fechas = obtenerRangoFechaActual();
+                dateFrom = fechas[0];
+                dateTo = fechas[1];
+            }
+            
+            List<OrderInfoResponse> todosLosViajes = new ArrayList<>();
+            String cursorActual = cursor;
+            
+            // Paginación automática: cargar todas las páginas hasta que no haya más cursor
+            // Incluir TODOS los viajes (completos y cancelados) sin filtrar por status
             do {
                 Map<String, Object> requestBody = crearRequestBody(driverId, dateFrom, dateTo, cursorActual, false);
                 String requestBodyJson = objectMapper.writeValueAsString(requestBody);
@@ -327,15 +400,15 @@ public class DriverOrdersServiceImpl implements DriverOrdersService {
                 .orders(todosLosViajes)
                 .cursor(null)
                 .hasMore(false)
-                .cierreRegistrado(tieneCierreRegistrado)
+                .cierreRegistrado(false)
                 .build();
             
         } catch (HttpClientErrorException | HttpServerErrorException e) {
-            log.error("❌ [DriverOrdersService] Error HTTP al obtener viajes completos: {} - {}", 
+            log.error("❌ [DriverOrdersService] Error HTTP al obtener todos los viajes: {} - {}", 
                 e.getStatusCode(), e.getResponseBodyAsString());
             return crearRespuestaError(driverId, dateFrom, dateTo);
         } catch (Exception e) {
-            log.error("❌ [DriverOrdersService] Error obteniendo viajes completos: {}", e.getMessage(), e);
+            log.error("❌ [DriverOrdersService] Error obteniendo todos los viajes: {}", e.getMessage(), e);
             return crearRespuestaError(driverId, dateFrom, dateTo);
         }
     }
@@ -485,6 +558,8 @@ public class DriverOrdersServiceImpl implements DriverOrdersService {
                 .pricePartnerRides(extraerDouble(orderNode, "price_partner_rides"))
                 .pricePromotion(extraerDouble(orderNode, "price_promotion"))
                 .priceTip(extraerDouble(orderNode, "price_tip"))
+                .addressFrom(orderNode.has("address_from") ? orderNode.get("address_from").asText() : null)
+                .addressTo(orderNode.has("address_to") ? orderNode.get("address_to").asText() : null)
                 .build();
         } catch (Exception e) {
             log.error("❌ [DriverOrdersService] Error mapeando viaje completo: {}", e.getMessage());

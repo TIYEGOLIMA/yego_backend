@@ -7,6 +7,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.Column;
+import jakarta.persistence.Transient;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -64,22 +65,22 @@ public class DriverMonthlyStats {
     @Column(name = "count_orders_platform")
     private Integer countOrdersPlatform;
 
-    @Column(name = "count_active_drivers")
+    @Transient
     private Integer countActiveDrivers;
 
-    @Column(name = "count_drivers")
+    @Transient
     private Integer countDrivers;
 
-    @Column(name = "acceptance_rate", precision = 10, scale = 6)
+    @Transient
     private BigDecimal acceptanceRate;
 
-    @Column(name = "completion_rate", precision = 10, scale = 6)
+    @Transient
     private BigDecimal completionRate;
 
-    @Column(name = "sum_distance", precision = 15, scale = 6)
+    @Transient
     private BigDecimal sumDistance;
 
-    @Column(name = "sum_orders_completed")
+    @Transient
     private Integer sumOrdersCompleted;
 
     @Column(name = "sum_price_cash", precision = 10, scale = 2)
@@ -100,7 +101,7 @@ public class DriverMonthlyStats {
     @Column(name = "sum_work_time_seconds")
     private Long sumWorkTimeSeconds;
 
-    @Column(name = "trips_per_hour", precision = 10, scale = 6)
+    @Transient
     private BigDecimal tripsPerHour;
 
     @CreationTimestamp
@@ -110,7 +111,7 @@ public class DriverMonthlyStats {
     @Column(name = "category_synced")
     private Boolean categorySynced;
 
-    @Column(name = "category_synced_at")
+    @Transient
     private LocalDateTime categorySyncedAt;
 
     @PrePersist

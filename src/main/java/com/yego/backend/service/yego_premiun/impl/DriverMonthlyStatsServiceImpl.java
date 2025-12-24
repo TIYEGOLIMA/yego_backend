@@ -44,29 +44,17 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
 
     @Override
     @Transactional
-    public List<DriverMonthlyStatsResponse> procesarYListarActivos() {
-        YearMonth mesEvaluacion = obtenerMesEvaluacion();
+    public List<DriverMonthlyStatsResponse> procesarYListarActivos(Integer month, Integer year) {
+        YearMonth mesEvaluacion = YearMonth.of(year, month);
         log.info("📊 [DriverMonthlyStatsService] Iniciando proceso de sincronización de driver_active_list para {}-{}", mesEvaluacion.getYear(), mesEvaluacion.getMonthValue());
 
-        List<DriverMonthlyStats> stats = driverMonthlyStatsRepository.findAllByYearAndMonth(mesEvaluacion.getYear(), mesEvaluacion.getMonthValue());
+        List<DriverMonthlyStats> stats = driverMonthlyStatsRepository.findAllByYearAndMonth(year, month);
         if (stats.isEmpty()) {
             log.info("ℹ️ [DriverMonthlyStatsService] No se encontraron registros en driver_monthly_stats para procesar");
             driverActiveListRepository.deleteAll();
             log.info("🧹 [DriverMonthlyStatsService] driver_active_list fue limpiada por falta de datos");
             return Collections.emptyList();
         }
-
-        List<DriverActiveList> existentes = driverActiveListRepository.findAll();
-
-        Map<String, DriverActiveList> activosPorDriver = existentes.stream()
-                .filter(activo -> esDriverIdValido(activo.getDriverId()))
-                .collect(Collectors.toMap(DriverActiveList::getDriverId, Function.identity(), (actual, ignorado) -> actual));
-
-        Set<Long> idsParaEliminar = existentes.stream()
-                .filter(activo -> !esDriverIdValido(activo.getDriverId()))
-                .map(DriverActiveList::getId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(HashSet::new));
 
         Set<String> driverIds = stats.stream()
                 .map(DriverMonthlyStats::getDriverId)
@@ -77,6 +65,16 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
                 ? Collections.emptyMap()
                 : driverRepository.findAllById(driverIds).stream()
                 .collect(Collectors.toMap(Driver::getDriverId, Function.identity()));
+
+        // Optimización: Cargar solo los existentes que coinciden con los driverIds que estamos procesando
+        // para poder reutilizar los IDs de entidades existentes (mejor rendimiento en saveAll)
+        List<DriverActiveList> existentes = driverIds.isEmpty() 
+                ? Collections.emptyList()
+                : driverActiveListRepository.findByDriverIdIn(new ArrayList<>(driverIds));
+
+        Map<String, DriverActiveList> activosPorDriver = existentes.stream()
+                .filter(activo -> esDriverIdValido(activo.getDriverId()))
+                .collect(Collectors.toMap(DriverActiveList::getDriverId, Function.identity(), (actual, ignorado) -> actual));
 
         List<DriverActiveList> activosParaGuardar = new ArrayList<>();
         List<DriverMonthlyStats> statsParaActualizar = new ArrayList<>();
@@ -93,7 +91,7 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
             LocalDate hireDate = driver != null ? driver.getHireDate() : null;
             if (hireDate == null) {
                 log.debug("ℹ️ [DriverMonthlyStatsService] Se omite driver {} por no tener hire_date", driverId);
-                eliminarActivoSiExiste(activosPorDriver, driverId, idsParaEliminar);
+                activosPorDriver.remove(driverId); // Remover de mapa si existe
                 marcarSincronizacion(stat, false, statsParaActualizar);
                 continue;
             }
@@ -101,7 +99,7 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
             long mesesDesdeVinculacion = calcularMesesDesdeVinculacion(hireDate, mesEvaluacion);
             if (mesesDesdeVinculacion <= 0) {
                 log.debug("ℹ️ [DriverMonthlyStatsService] Se omite driver {} porque aún no cumple un mes desde su vinculación", driverId);
-                eliminarActivoSiExiste(activosPorDriver, driverId, idsParaEliminar);
+                activosPorDriver.remove(driverId); // Remover de mapa si existe
                 marcarSincronizacion(stat, false, statsParaActualizar);
                 continue;
             }
@@ -109,7 +107,7 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
             int trips = obtenerTrips(stat);
             Optional<String> categoriaOpt = determinarCategoria(trips, mesesDesdeVinculacion);
             if (categoriaOpt.isEmpty()) {
-                eliminarActivoSiExiste(activosPorDriver, driverId, idsParaEliminar);
+                activosPorDriver.remove(driverId); // Remover de mapa si existe
                 marcarSincronizacion(stat, false, statsParaActualizar);
                 continue;
             }
@@ -117,7 +115,7 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
             String parkId = resolverParkId(stat, driver);
             if (!esDriverIdValido(parkId)) {
                 log.warn("⚠️ [DriverMonthlyStatsService] No se pudo determinar park_id para driver {}", driverId);
-                eliminarActivoSiExiste(activosPorDriver, driverId, idsParaEliminar);
+                activosPorDriver.remove(driverId); // Remover de mapa si existe
                 marcarSincronizacion(stat, false, statsParaActualizar);
                 continue;
             }
@@ -135,19 +133,14 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
             marcarSincronizacion(stat, true, statsParaActualizar);
         }
 
-        activosPorDriver.values().stream()
-                .map(DriverActiveList::getId)
-                .filter(Objects::nonNull)
-                .forEach(idsParaEliminar::add);
-
-        if (!idsParaEliminar.isEmpty()) {
-            driverActiveListRepository.deleteAllById(idsParaEliminar);
-            log.info("🧹 [DriverMonthlyStatsService] Eliminados {} registros de driver_active_list", idsParaEliminar.size());
-        }
+        // Optimización: Como procesamos un mes/año específico, reemplazamos toda la tabla
+        // deleteAll() es más eficiente que deleteAllById() cuando hay muchos registros
+        driverActiveListRepository.deleteAll();
+        log.info("🧹 [DriverMonthlyStatsService] Limpiada tabla driver_active_list para reemplazo completo");
 
         if (!activosParaGuardar.isEmpty()) {
             driverActiveListRepository.saveAll(activosParaGuardar);
-            log.info("💾 [DriverMonthlyStatsService] Guardados/actualizados {} registros en driver_active_list", activosParaGuardar.size());
+            log.info("💾 [DriverMonthlyStatsService] Guardados {} registros en driver_active_list", activosParaGuardar.size());
         }
 
         if (!statsParaActualizar.isEmpty()) {
@@ -155,13 +148,12 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
             log.info("🔄 [DriverMonthlyStatsService] Columnas de sincronización actualizadas para {} registros en driver_monthly_stats", statsParaActualizar.size());
         }
 
-        List<DriverActiveList> activos = driverActiveListRepository.findAll();
-        if (activos.isEmpty()) {
+        if (activosParaGuardar.isEmpty()) {
             log.info("ℹ️ [DriverMonthlyStatsService] No existen conductores activos en driver_active_list después del procesamiento");
             return Collections.emptyList();
         }
 
-        return construirRespuestas(activos);
+        return construirRespuestas(activosParaGuardar, driverMap);
     }
 
     @Override
@@ -183,9 +175,6 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
     }
 
     private int obtenerTrips(DriverMonthlyStats stat) {
-        if (stat.getSumOrdersCompleted() != null) {
-            return stat.getSumOrdersCompleted();
-        }
         if (stat.getCountOrdersCompleted() != null) {
             return stat.getCountOrdersCompleted();
         }
@@ -212,6 +201,13 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
         activo.setSumWorkTimeSeconds(stat.getSumWorkTimeSeconds());
     }
 
+    private List<DriverMonthlyStatsResponse> construirRespuestas(List<DriverActiveList> activos, Map<String, Driver> driverMap) {
+        log.info("📦 [DriverMonthlyStatsService] Construyendo respuestas para {} registros activos", activos.size());
+        return activos.stream()
+                .map(activo -> buildResponse(activo, driverMap.get(activo.getDriverId())))
+                .collect(Collectors.toList());
+    }
+
     private List<DriverMonthlyStatsResponse> construirRespuestas(List<DriverActiveList> activos) {
         log.info("📦 [DriverMonthlyStatsService] Registros activos listados: {}", activos.size());
 
@@ -223,11 +219,9 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
         Map<String, Driver> driverMap = driverIds.isEmpty()
                 ? Collections.emptyMap() 
                 : driverRepository.findAllById(driverIds).stream()
-                .collect(Collectors.toMap(Driver::getDriverId, Function.identity())); // Mapear los drivers por su driverId
+                .collect(Collectors.toMap(Driver::getDriverId, Function.identity()));
 
-        return activos.stream()
-                .map(activo -> buildResponse(activo, driverMap.get(activo.getDriverId())))
-                .collect(Collectors.toList());
+        return construirRespuestas(activos, driverMap);
     }
 
     private DriverMonthlyStatsResponse buildResponse(DriverActiveList activo, Driver driver) {
@@ -282,13 +276,6 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
         }
     }
 
-    private void eliminarActivoSiExiste(Map<String, DriverActiveList> activosPorDriver, String driverId, Set<Long> idsParaEliminar) {
-        DriverActiveList existente = activosPorDriver.remove(driverId);
-        if (existente != null && existente.getId() != null) {
-            idsParaEliminar.add(existente.getId());
-        }
-    }
-
     private long calcularMesesDesdeVinculacion(LocalDate hireDate, YearMonth mesEvaluacion) {
         if (hireDate == null) {
             return -1;
@@ -332,11 +319,6 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
             return driver.getParkId();
         }
         return null;
-    }
-
-    private YearMonth obtenerMesEvaluacion() {
-        YearMonth actual = YearMonth.now(LIMA_ZONE);
-        return actual.minusMonths(1);
     }
 
     private String generarDetalleCategoria(DriverActiveList activo, Driver driver) {

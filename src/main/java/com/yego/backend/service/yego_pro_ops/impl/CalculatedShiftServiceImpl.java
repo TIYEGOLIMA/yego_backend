@@ -4,7 +4,9 @@ import com.yego.backend.entity.yego_pro_ops.api.request.CalculatedShiftManualReq
 import com.yego.backend.entity.yego_pro_ops.api.request.CalculatedShiftRequest;
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverOrdersRequest;
 import com.yego.backend.entity.yego_pro_ops.api.request.TurnoRequest;
+import com.yego.backend.entity.yego_pro_ops.api.response.AllDriversOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.CalculatedShiftResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.OrderInfoResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
@@ -648,6 +650,114 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             log.error("❌ [CalculatedShiftService] Error guardando turno manual para driverId: {}, fecha: {}: {}", 
                 request.getDriverId(), request.getFecha(), e.getMessage(), e);
             throw new RuntimeException("Error al guardar turno manual: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
+    public AllDriversOrdersResponse listarTodosLosConductoresConViajes(String fecha) {
+        log.info("🚗 [CalculatedShiftService] Listando todos los conductores con sus viajes en vivo");
+        
+        try {
+            // Determinar la fecha a usar (si es null, usar fecha actual)
+            LocalDate fechaConsulta;
+            if (fecha != null && !fecha.isEmpty()) {
+                fechaConsulta = LocalDate.parse(fecha, DATE_FORMATTER);
+            } else {
+                fechaConsulta = LocalDate.now(ZONE_UTC_MINUS_5);
+            }
+            
+            // Calcular rango de fechas para la consulta (todo el día)
+            LocalDateTime inicioDia = fechaConsulta.atStartOfDay();
+            LocalDateTime finDia = fechaConsulta.atTime(23, 59, 59);
+            ZonedDateTime dateFrom = inicioDia.atZone(ZONE_UTC_MINUS_5);
+            ZonedDateTime dateTo = finDia.atZone(ZONE_UTC_MINUS_5);
+            String dateFromStr = dateFrom.format(DATETIME_FORMATTER);
+            String dateToStr = dateTo.format(DATETIME_FORMATTER);
+            
+            log.info("📅 [CalculatedShiftService] Consultando viajes para la fecha: {} (desde {} hasta {})", 
+                fechaConsulta, dateFromStr, dateToStr);
+            
+            // Obtener todos los conductores
+            DriverListResponse driverListResponse = fleetDriverService.obtenerListaConductores(null);
+            List<DriverListResponse.ContractorResponse> conductores = driverListResponse.getContractors();
+            
+            if (conductores == null || conductores.isEmpty()) {
+                log.warn("⚠️ [CalculatedShiftService] No se encontraron conductores");
+                return AllDriversOrdersResponse.builder()
+                    .fecha(fechaConsulta.format(DATE_FORMATTER))
+                    .conductores(new ArrayList<>())
+                    .totalConductores(0)
+                    .build();
+            }
+            
+            log.info("📋 [CalculatedShiftService] Procesando {} conductores", conductores.size());
+            
+            // Para cada conductor, obtener sus viajes
+            List<AllDriversOrdersResponse.DriverWithOrders> conductoresConViajes = new ArrayList<>();
+            
+            for (DriverListResponse.ContractorResponse conductor : conductores) {
+                String driverId = conductor.getId();
+                
+                if (driverId == null || driverId.isEmpty()) {
+                    log.warn("⚠️ [CalculatedShiftService] Conductor sin ID, saltando: {}", conductor.getFullName());
+                    continue;
+                }
+                
+                try {
+                    // Obtener todos los viajes del conductor para esta fecha
+                    DriverOrdersResponse viajesResponse = driverOrdersService.obtenerTodosLosViajes(
+                        driverId, dateFromStr, dateToStr, null);
+                    
+                    List<OrderInfoResponse> viajes = viajesResponse.getOrders();
+                    if (viajes == null) {
+                        viajes = new ArrayList<>();
+                    }
+                    
+                    AllDriversOrdersResponse.DriverWithOrders driverWithOrders = 
+                        AllDriversOrdersResponse.DriverWithOrders.builder()
+                            .driverId(driverId)
+                            .fullName(conductor.getFullName())
+                            .phone(conductor.getPhone())
+                            .status(conductor.getStatus())
+                            .viajes(viajes)
+                            .totalViajes(viajes.size())
+                            .build();
+                    
+                    conductoresConViajes.add(driverWithOrders);
+                    
+                    log.debug("✅ [CalculatedShiftService] Conductor {} tiene {} viajes", 
+                        conductor.getFullName(), viajes.size());
+                    
+                } catch (Exception e) {
+                    log.error("❌ [CalculatedShiftService] Error obteniendo viajes para conductor {} ({}): {}", 
+                        conductor.getFullName(), driverId, e.getMessage());
+                    
+                    // Agregar el conductor sin viajes si hay error
+                    AllDriversOrdersResponse.DriverWithOrders driverWithOrders = 
+                        AllDriversOrdersResponse.DriverWithOrders.builder()
+                            .driverId(driverId)
+                            .fullName(conductor.getFullName())
+                            .phone(conductor.getPhone())
+                            .status(conductor.getStatus())
+                            .viajes(new ArrayList<>())
+                            .totalViajes(0)
+                            .build();
+                    
+                    conductoresConViajes.add(driverWithOrders);
+                }
+            }
+            
+            log.info("✅ [CalculatedShiftService] Procesados {} conductores con sus viajes", conductoresConViajes.size());
+            
+            return AllDriversOrdersResponse.builder()
+                .fecha(fechaConsulta.format(DATE_FORMATTER))
+                .conductores(conductoresConViajes)
+                .totalConductores(conductoresConViajes.size())
+                .build();
+            
+        } catch (Exception e) {
+            log.error("❌ [CalculatedShiftService] Error listando todos los conductores con viajes: {}", e.getMessage(), e);
+            throw new RuntimeException("Error al listar todos los conductores con viajes: " + e.getMessage(), e);
         }
     }
 }
