@@ -70,6 +70,9 @@ public class DriverCloseResponse {
     @JsonProperty("resta")
     private BigDecimal resta;
 
+    @JsonProperty("calculatedShiftIds")
+    private String calculatedShiftIds; // IDs de CalculatedShift separados por coma (ej: "1,2" para identificar los registros de turnos)
+
     @JsonProperty("createdAt")
     private LocalDateTime createdAt;
 

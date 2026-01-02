@@ -10,7 +10,7 @@ import com.yego.backend.service.yego_principal.RoleService;
 import com.yego.backend.service.yego_principal.ModuleService;
 import com.yego.backend.service.yego_principal.PermissionService;
 import com.yego.backend.service.yego_principal.SessionService;
-import com.yego.backend.service.WebSocketService;
+import com.yego.backend.handler.yego_principal.UserNotificationHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +36,7 @@ public class RoleServiceImpl implements RoleService {
     private final ModuleService moduleService;
     private final PermissionService permissionService;
     private final SessionService sessionService;
-    private final WebSocketService webSocketService;
+    private final UserNotificationHandler userNotificationHandler;
     
     @Override
     @Transactional
@@ -197,7 +197,7 @@ public class RoleServiceImpl implements RoleService {
                         "Rol '" + savedRole.getName() + "' desactivado por administrador");
                     
                     // Enviar notificación por WebSocket
-                    webSocketService.enviarDesactivacionRol(
+                    userNotificationHandler.enviarDesactivacionRol(
                         user.getId(), 
                         user.getUsername(), 
                         savedRole.getName()

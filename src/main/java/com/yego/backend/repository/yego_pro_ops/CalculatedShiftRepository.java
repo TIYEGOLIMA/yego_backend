@@ -46,5 +46,13 @@ public interface CalculatedShiftRepository extends JpaRepository<CalculatedShift
         @Param("fecha") LocalDate fecha
     );
     
+    /**
+     * Obtiene todos los CalculatedShift de un driver agrupados por fecha
+     * @param driverId ID del conductor
+     * @return Lista de CalculatedShift ordenados por fecha
+     */
+    @Query("SELECT c FROM CalculatedShift c WHERE c.driverId = :driverId ORDER BY c.fecha ASC")
+    List<CalculatedShift> findByDriverIdOrderByFecha(@Param("driverId") String driverId);
+    
 }
 

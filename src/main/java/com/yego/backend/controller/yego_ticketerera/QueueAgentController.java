@@ -1,7 +1,6 @@
 package com.yego.backend.controller.yego_ticketerera;
 
-import com.yego.backend.entity.yego_ticketerera.entities.QueueAgent;
-import com.yego.backend.entity.yego_ticketerera.api.response.UserModuleStatusResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.AsignarModuloResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.RecuperarModuloResponse;
 import com.yego.backend.service.yego_ticketerera.QueueAgentService;
 import lombok.RequiredArgsConstructor;
@@ -10,7 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,36 +23,31 @@ public class QueueAgentController {
     
     private final QueueAgentService queueAgentService;
     
+    //giomar 2025-12-30
     @PostMapping("/asignar")
-    public ResponseEntity<QueueAgent> asignarModuloAUsuario(
-            @RequestBody Map<String, Object> request,
-            Authentication authentication) {
-        return queueAgentService.asignarModuloAUsuario(request, authentication);
+    public ResponseEntity<AsignarModuloResponse> asignarModuloAUsuario(
+            @RequestBody Map<String, Object> request) {
+        return queueAgentService.asignarModuloAUsuario(request);
     }
     
-    @PostMapping("/liberar")
-    public ResponseEntity<Void> liberarModuloDeUsuario(
-            @RequestBody Map<String, Object> request,
-            Authentication authentication) {
-        return queueAgentService.liberarModuloDeUsuario(request, authentication);
+    //giomar 2025-12-30
+    @PostMapping("/liberar-modulo/{userId}")
+    public ResponseEntity<Map<String, Object>> liberarModulo(@PathVariable Long userId) {
+        return queueAgentService.liberarModuloDelUsuario(userId);
     }
     
-    @GetMapping("/activos")
-    public ResponseEntity<List<QueueAgent>> obtenerAgentesActivos() {
-        List<QueueAgent> agentes = queueAgentService.obtenerAgentesActivos();
-        return ResponseEntity.ok(agentes);
+    //giomar 2025-12-30
+    @PostMapping("/liberar-modulo-por-id/{moduleId}")
+    public ResponseEntity<Map<String, Object>> liberarModuloPorModuleId(@PathVariable Long moduleId) {
+        return queueAgentService.liberarModuloPorModuleId(moduleId);
     }
     
-    @GetMapping("/user/{userId}/status")
-    public ResponseEntity<UserModuleStatusResponse> verificarEstadoModuloUsuario(@PathVariable Long userId) {
-        UserModuleStatusResponse status = queueAgentService.verificarEstadoModuloUsuario(userId);
-        return ResponseEntity.ok(status);
-    }
-    
-    @PostMapping("/user/{userId}/restore")
-    public ResponseEntity<RecuperarModuloResponse> restaurarModuloUsuario(@PathVariable Long userId) {
-        RecuperarModuloResponse response = queueAgentService.restaurarModuloUsuario(userId);
-        return ResponseEntity.ok(response);
+    //giomar 2025-12-30
+    @GetMapping("/recuperar-modulo/{userId}")
+    public ResponseEntity<RecuperarModuloResponse> recuperarModulo(@PathVariable Long userId) {
+        return queueAgentService.recuperarModuloAsignado(userId)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
     
     @GetMapping("/jwt-verify")

@@ -4,7 +4,7 @@ import com.yego.backend.entity.yego_garantizado.api.request.*;
 import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoListResponse;
 import com.yego.backend.entity.yego_garantizado.entities.CalculoGarantizado;
 import com.yego.backend.repository.yego_garantizado.CalculoGarantizadoRepository;
-import com.yego.backend.service.WebSocketService;
+import com.yego.backend.handler.yego_garantizado.SystemNotificationHandler;
 import com.yego.backend.service.yego_garantizado.CalculoGarantizadoService;
 import com.yego.backend.service.yego_garantizado.YegoGarantizadoRegistroService;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +26,7 @@ public class CalculoGarantizadoServiceImpl implements CalculoGarantizadoService 
 
     private final CalculoGarantizadoRepository calculoRepository;
     private final YegoGarantizadoRegistroService yegoGarantizadoRegistroService;
-    private final WebSocketService webSocketService;
+    private final SystemNotificationHandler systemNotificationHandler;
     private final com.yego.backend.service.yego_garantizado.ProcesoGarantizadoEstadoService procesoEstadoService;
 
     @Override
@@ -218,13 +218,13 @@ public class CalculoGarantizadoServiceImpl implements CalculoGarantizadoService 
         procesoEstadoService.registrarProcesamiento();
         
         // 📡 ENVIAR POR WEBSOCKET PARA ACTUALIZAR LA TABLA
-        webSocketService.enviarDatosCompletosGarantizado(
+        systemNotificationHandler.enviarDatosCompletosGarantizado(
             resultado.getConductores(),
             resultado.getSemanaAnterior()
         );
         
         // 🎉 ENVIAR NOTIFICACIÓN DE ÉXITO
-        webSocketService.sendSystemEvent("GARANTIZADO_PROCESS_SUCCESS", Map.of(
+        systemNotificationHandler.sendSystemEvent("GARANTIZADO_PROCESS_SUCCESS", Map.of(
             "message", "✅ Proceso completado exitosamente. El botón estará bloqueado hasta el próximo lunes.",
             "totalConductores", resultado.getConductores().size(),
             "semana", resultado.getSemanaAnterior(),
@@ -232,7 +232,7 @@ public class CalculoGarantizadoServiceImpl implements CalculoGarantizadoService 
         ));
         
         // 🔒 ENVIAR EVENTO DE BLOQUEO DEL BOTÓN
-        webSocketService.enviarEstadoProcesoGarantizado(true, "El botón está bloqueado hasta el próximo lunes");
+        systemNotificationHandler.enviarEstadoProcesoGarantizado(true, "El botón está bloqueado hasta el próximo lunes");
         
         return resultado;
     }

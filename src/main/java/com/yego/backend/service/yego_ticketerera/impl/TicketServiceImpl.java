@@ -11,7 +11,7 @@ import com.yego.backend.repository.yego_ticketerera.OptionRepository;
 import com.yego.backend.service.yego_ticketerera.TicketService;
 import com.yego.backend.service.yego_ticketerera.QueueTicketHistoryService;
 import com.yego.backend.service.yego_ticketerera.QueueAgentService;
-import com.yego.backend.service.WebSocketService;
+import com.yego.backend.handler.yego_ticketerera.TicketNotificationHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -34,7 +34,7 @@ public class TicketServiceImpl implements TicketService {
 
     private final TicketRepository ticketRepository;
     private final OptionRepository optionRepository;
-    private final WebSocketService webSocketService;
+    private final TicketNotificationHandler ticketNotificationHandler;
     private final QueueTicketHistoryService queueTicketHistoryService;
     private final QueueAgentService queueAgentService;
     
@@ -67,7 +67,7 @@ public class TicketServiceImpl implements TicketService {
         log.info("Ticket creado: {} (sin asignar agente aún)", savedTicket.getTicketNumber());
         
         // Enviar notificación WebSocket
-        webSocketService.enviarNuevoTicket(savedTicket);
+        ticketNotificationHandler.enviarNuevoTicket(savedTicket);
         
         // Limpiar caches relacionados
         limpiarCaches();
@@ -122,7 +122,7 @@ public class TicketServiceImpl implements TicketService {
         }
         
         // Enviar notificación WebSocket
-        webSocketService.enviarTicketLlamado(convertirTicketConCategorias(updatedTicket));
+        ticketNotificationHandler.enviarTicketLlamado(convertirTicketConCategorias(updatedTicket));
         
         return updatedTicket;
     }
@@ -168,7 +168,7 @@ public class TicketServiceImpl implements TicketService {
         } catch (Exception e) {
             log.error("Error registrando historial para ticket completado {}: {}", ticketId, e.getMessage());
         }
-        webSocketService.enviarTicketCompletado(convertirTicketConCategorias(ticketGuardado));
+        ticketNotificationHandler.enviarTicketCompletado(convertirTicketConCategorias(ticketGuardado));
         
         return ticketGuardado;
     }
@@ -183,6 +183,9 @@ public class TicketServiceImpl implements TicketService {
         
         Ticket updatedTicket = ticketRepository.save(ticket);
         log.info("Ticket cancelado: {} por agente: {}", updatedTicket.getTicketNumber(), agentId);
+        
+        // Enviar notificación WebSocket
+        ticketNotificationHandler.enviarTicketCancelado(updatedTicket);
         
         return updatedTicket;
     }
@@ -218,7 +221,7 @@ public class TicketServiceImpl implements TicketService {
         }
         
         // Enviar notificación WebSocket
-        webSocketService.enviarTicketIniciado(convertirTicketConCategorias(updatedTicket));
+        ticketNotificationHandler.enviarTicketIniciado(convertirTicketConCategorias(updatedTicket));
         
         return updatedTicket;
     }

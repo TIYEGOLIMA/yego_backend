@@ -5,7 +5,7 @@ import com.yego.backend.entity.yego_asistencia.entities.AttendanceType;
 import com.yego.backend.repository.yego_asistencia.AttendanceRepository;
 import com.yego.backend.service.yego_asistencia.AttendanceService;
 import com.yego.backend.service.yego_asistencia.MessageService;
-import com.yego.backend.service.WebSocketService;
+import com.yego.backend.handler.yego_asistencia.AttendanceNotificationHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -33,7 +33,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     private final AttendanceRepository attendanceRepository;
     private final MessageService messageService;
-    private final WebSocketService webSocketService;
+    private final AttendanceNotificationHandler attendanceNotificationHandler;
 
     // ===== MÉTODOS PRINCIPALES DE MARCACIÓN =====
 
@@ -199,7 +199,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             List<Map<String, Object>> registrosHoy = getTodayAttendances(userId);
             
             // Enviar solo la lista actualizada de registros de hoy
-            webSocketService.enviarActualizacionRegistrosHoy(userId, registrosHoy);
+            attendanceNotificationHandler.enviarActualizacionRegistrosHoy(userId, registrosHoy);
             
             log.info("📤 [AttendanceService] Lista actualizada de registros enviada para usuario: {}", userId);
         } catch (Exception e) {

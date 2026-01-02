@@ -70,6 +70,9 @@ public class DriverClose {
     @Column(name = "resta", precision = 10, scale = 2)
     private BigDecimal resta;
 
+    @Column(name = "calculated_shift_ids", length = 255)
+    private String calculatedShiftIds; // IDs de CalculatedShift separados por coma (ej: "1,2" para identificar los registros de turnos)
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -8,18 +8,19 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * DTO de response para el estado del módulo de un usuario en el sistema YEGO Ticketerera
+ * DTO de response para módulo ocupado en el sistema YEGO Ticketerera
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UserModuleStatusResponse {
+public class ModuloOcupadoResponse {
     
-    private Long userId;
     private Long moduleId;
-    private String status;           // OCUPADO, LIBRE, DISPONIBLE
-    private boolean isActive;
-    private LocalDateTime createdAt;
+    private Long userId;
+    private String userName;
+    private String status;
+    private LocalDateTime horaAsignacion;
     private LocalDateTime updatedAt;
 }
+

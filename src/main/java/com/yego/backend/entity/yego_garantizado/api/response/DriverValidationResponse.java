@@ -4,13 +4,9 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.util.List;
 
-/**
- * Respuesta de validación de licencia de conductor
- * 
- * @author Sistema Yego
- * @version 1.0
- */
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -19,6 +15,6 @@ public class DriverValidationResponse {
     private String licenseNumber;
     private boolean existe;
     private String mensaje;
-    private java.util.List<DriverInfo> drivers;
+    private List<DriverInfo> drivers;
 }
 

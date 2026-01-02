@@ -54,6 +54,12 @@ public class DriversInOrderResponse {
         
         @JsonProperty("total_activity_time")
         private Long totalActivityTime; // Tiempo total de actividad en segundos (suma de status_time de todos los viajes)
+        
+        @JsonProperty("completed_trips_count")
+        private Integer completedTripsCount; // Cantidad de viajes completados del día actual
+        
+        @JsonProperty("completed_trips_total_price")
+        private Double completedTripsTotalPrice; // Suma total de precios de viajes completados del día actual (price_cash + price_card + price_tip + price_promotion + price_bonus + price_other)
     }
     
     @Data

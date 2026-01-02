@@ -2,6 +2,7 @@ package com.yego.backend.service.yego_ticketerera;
 
 import com.yego.backend.entity.yego_ticketerera.entities.ModuloAtencion;
 import com.yego.backend.entity.yego_ticketerera.api.response.ModuloAtencionResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.ModuloUsuarioResponse;
 
 import java.util.List;
 
@@ -12,10 +13,10 @@ public interface ModuloAtencionService {
     
     List<ModuloAtencion> obtenerTodosLosModulosActivos();
     
-    List<ModuloAtencion> obtenerTodosLosModulos();
+    //giomar 2025-12-30
+    List<ModuloAtencionResponse> obtenerTodosLosModulosActivosResponse();
     
     void cambiarEstadoModulo(Long moduleId, boolean activo);
     
-    // Método simplificado para el controlador (sin lógica de negocio en el controlador)
-    List<ModuloAtencionResponse> obtenerModulosParaFrontend();
+    ModuloUsuarioResponse verificarModuloOListarDisponibles(Long userId);
 }

@@ -73,7 +73,8 @@ public class DriverOrdersServiceImpl implements DriverOrdersService {
     }
     
     /**
-     * Espera si es necesario para mantener un intervalo de 10 segundos entre llamadas consecutivas a la API de Yango
+     * Espera si es necesario para mantener un intervalo de 15 segundos entre llamadas consecutivas a la API de Yango
+     * Aumentado de 10 a 15 segundos para evitar errores 429 (Too Many Requests) incluso con rotación de proxies
      */
     private void esperarSiEsNecesario() {
         long ahora = System.currentTimeMillis();
@@ -81,7 +82,7 @@ public class DriverOrdersServiceImpl implements DriverOrdersService {
         
         if (ultimaLlamada > 0) {
             long tiempoDesdeUltimaLlamada = ahora - ultimaLlamada;
-            long tiempoAEsperar = 10000 - tiempoDesdeUltimaLlamada;
+            long tiempoAEsperar = 15000 - tiempoDesdeUltimaLlamada; // 15 segundos en lugar de 10
             
             if (tiempoAEsperar > 0) {
                 log.debug("⏳ [DriverOrdersService] Esperando {} ms antes de la siguiente llamada a Yango API", tiempoAEsperar);

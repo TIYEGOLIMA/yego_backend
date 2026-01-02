@@ -7,7 +7,7 @@ import com.yego.backend.entity.yego_garantizado.entities.YegoGarantizado;
 import com.yego.backend.entity.yego_garantizado.entities.Registro;
 import com.yego.backend.repository.yego_garantizado.YegoGarantizadoRegistroRepository;
 import com.yego.backend.repository.yego_garantizado.YegoGarantizadoRepository;
-import com.yego.backend.service.WebSocketService;
+import com.yego.backend.handler.yego_garantizado.SystemNotificationHandler;
 import com.yego.backend.service.yego_garantizado.ExternalApiService;
 import com.yego.backend.service.yego_garantizado.ProcesoGarantizadoEstadoService;
 import com.yego.backend.service.yego_garantizado.YegoGarantizadoRegistroService;
@@ -38,7 +38,7 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
     private final YegoGarantizadoRepository yegoGarantizadoRepository;
     private final ExternalApiService externalApiService;
     private final ProcesoGarantizadoEstadoService procesoEstadoService;
-    private final WebSocketService webSocketService;
+    private final SystemNotificationHandler systemNotificationHandler;
 
     @Override
     @Transactional
@@ -158,13 +158,13 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
             procesoEstadoService.registrarProcesamiento();
             
             // 📡 ENVIAR POR WEBSOCKET PARA ACTUALIZAR LA TABLA
-            webSocketService.enviarDatosCompletosGarantizado(
+            systemNotificationHandler.enviarDatosCompletosGarantizado(
                 conductores,
                 semanaAnterior
             );
             
             // 🎉 ENVIAR NOTIFICACIÓN DE ÉXITO
-            webSocketService.sendSystemEvent("GARANTIZADO_PROCESS_SUCCESS", Map.of(
+            systemNotificationHandler.sendSystemEvent("GARANTIZADO_PROCESS_SUCCESS", Map.of(
                 "message", "✅ Proceso completado exitosamente. El botón estará bloqueado hasta el próximo lunes.",
                 "totalConductores", conductores.size(),
                 "semana", semanaAnterior,
@@ -172,7 +172,7 @@ public class YegoGarantizadoRegistroServiceImpl implements YegoGarantizadoRegist
             ));
             
             // 🔒 ENVIAR EVENTO DE BLOQUEO DEL BOTÓN
-            webSocketService.enviarEstadoProcesoGarantizado(true, "El botón está bloqueado hasta el próximo lunes");
+            systemNotificationHandler.enviarEstadoProcesoGarantizado(true, "El botón está bloqueado hasta el próximo lunes");
             
             log.info("[YegoGarantizadoRegistroService] Procesados y devueltos {} conductores de la semana anterior", conductores.size());
             return response;

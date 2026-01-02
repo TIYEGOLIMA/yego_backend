@@ -1,5 +1,6 @@
 package com.yego.backend.handler.yego_garantizado;
 
+import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -9,8 +10,8 @@ import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Map;
-
 
 @Component
 @Slf4j
@@ -69,6 +70,65 @@ public class SystemNotificationHandler {
             return now.with(LocalTime.of(6, 0))
                 .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
         }
+    }
+    
+    /**
+     * Enviar datos completos de garantizado para actualizar la tabla
+     */
+    public void enviarDatosCompletosGarantizado(List<GarantizadoResponse> conductores, String semanaActual) {
+        log.info("📊 [SystemNotificationHandler] Enviando datos completos de garantizado - {} conductores para semana {}", conductores.size(), semanaActual);
+
+        Map<String, Object> data = Map.of(
+            "type", "GARANTIZADO_TABLE_UPDATE",
+            "semanaActual", semanaActual,
+            "conductores", conductores,
+            "totalConductores", conductores.size(),
+            "timestamp", LocalDateTime.now().toString()
+        );
+
+        // Enviar al topic del sistema
+        messagingTemplate.convertAndSend("/topic/system", data);
+
+        // Enviar a topic específico de garantizado
+        messagingTemplate.convertAndSend("/topic/garantizado", data);
+
+        log.info("✅ [SystemNotificationHandler] Datos completos de garantizado enviados - {} conductores", conductores.size());
+    }
+    
+    /**
+     * Enviar estado del procesamiento de garantizado (bloqueado/desbloqueado)
+     */
+    public void enviarEstadoProcesoGarantizado(boolean bloqueado, String mensaje) {
+        log.info("🔒 [SystemNotificationHandler] Enviando estado del procesamiento - Bloqueado: {}", bloqueado);
+        
+        Map<String, Object> evento = Map.of(
+            "type", bloqueado ? "GARANTIZADO_BUTTON_BLOCKED" : "GARANTIZADO_BUTTON_UNBLOCKED",
+            "bloqueado", bloqueado,
+            "mensaje", mensaje,
+            "timestamp", LocalDateTime.now().toString()
+        );
+        
+        // Enviar a topic de garantizado
+        messagingTemplate.convertAndSend("/topic/garantizado", evento);
+        
+        // También enviar al topic del sistema
+        messagingTemplate.convertAndSend("/topic/system", evento);
+        
+        log.info("✅ [SystemNotificationHandler] Estado del procesamiento enviado - Bloqueado: {}", bloqueado);
+    }
+    
+    /**
+     * Enviar evento genérico del sistema
+     */
+    public void sendSystemEvent(String event, Object data) {
+        Map<String, Object> notification = Map.of(
+            "event", event,
+            "data", data,
+            "timestamp", LocalDateTime.now().toString()
+        );
+        
+        messagingTemplate.convertAndSend("/topic/system", notification);
+        log.info("📤 [SystemNotificationHandler] Sistema: {}", event);
     }
 }
 

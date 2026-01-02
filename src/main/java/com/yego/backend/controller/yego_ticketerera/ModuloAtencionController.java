@@ -1,7 +1,7 @@
 package com.yego.backend.controller.yego_ticketerera;
 
-import com.yego.backend.entity.yego_ticketerera.entities.ModuloAtencion;
 import com.yego.backend.entity.yego_ticketerera.api.response.ModuloAtencionResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.ModuloUsuarioResponse;
 import com.yego.backend.service.yego_ticketerera.ModuloAtencionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,29 +22,17 @@ public class ModuloAtencionController {
     
     private final ModuloAtencionService moduloAtencionService;
     
-    @GetMapping
-    public ResponseEntity<List<ModuloAtencion>> obtenerTodosLosModulos() {
-        List<ModuloAtencion> modules = moduloAtencionService.obtenerTodosLosModulos();
-        return ResponseEntity.ok(modules);
-    }
-    
+    //giomar 2025-12-30
     @GetMapping("/activos")
-    public ResponseEntity<List<ModuloAtencion>> obtenerModulosActivos() {
-        List<ModuloAtencion> modules = moduloAtencionService.obtenerTodosLosModulosActivos();
-        return ResponseEntity.ok(modules);
-    }
-
-    @GetMapping("/frontend")
-    public ResponseEntity<List<ModuloAtencionResponse>> obtenerModulosParaFrontend() {
-        log.info("🎯 [ModuloAtencionController] Endpoint /frontend llamado correctamente");
-        List<ModuloAtencionResponse> responses = moduloAtencionService.obtenerModulosParaFrontend();
-        log.info("✅ [ModuloAtencionController] Devolviendo {} módulos", responses.size());
-        return ResponseEntity.ok(responses);
+    public ResponseEntity<List<ModuloAtencionResponse>> obtenerTodosLosModulosActivos() {
+        return ResponseEntity.ok(moduloAtencionService.obtenerTodosLosModulosActivosResponse());
     }
     
-    @PutMapping("/{moduleId}/estado/{activo}")
-    public ResponseEntity<Void> cambiarEstadoModulo(@PathVariable Long moduleId, @PathVariable boolean activo) {
-        moduloAtencionService.cambiarEstadoModulo(moduleId, activo);
-        return ResponseEntity.ok().build();
+    @GetMapping("/usuario/{userId}")
+    public ResponseEntity<ModuloUsuarioResponse> verificarModuloOListarDisponibles(@PathVariable Long userId) {
+        log.info("🎯 [ModuloAtencionController] Verificando módulo para usuario {} o listando módulos disponibles", userId);
+        ModuloUsuarioResponse response = moduloAtencionService.verificarModuloOListarDisponibles(userId);
+        log.info("✅ [ModuloAtencionController] Usuario {} - Tiene módulo asignado: {}", userId, response.getTieneModuloAsignado());
+        return ResponseEntity.ok(response);
     }
 }

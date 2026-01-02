@@ -3,7 +3,7 @@ package com.yego.backend.service.yego_garantizado.impl;
 import com.yego.backend.entity.yego_garantizado.api.response.EstadoProcesoResponse;
 import com.yego.backend.entity.yego_garantizado.entities.ProcesoGarantizadoEstado;
 import com.yego.backend.repository.yego_garantizado.ProcesoGarantizadoEstadoRepository;
-import com.yego.backend.service.WebSocketService;
+import com.yego.backend.handler.yego_garantizado.SystemNotificationHandler;
 import com.yego.backend.service.yego_garantizado.ProcesoGarantizadoEstadoService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +25,7 @@ import java.util.Optional;
 public class ProcesoGarantizadoEstadoServiceImpl implements ProcesoGarantizadoEstadoService {
 
     private final ProcesoGarantizadoEstadoRepository repository;
-    private final WebSocketService webSocketService;
+    private final SystemNotificationHandler systemNotificationHandler;
 
     @Override
     @Transactional(readOnly = true)
@@ -127,7 +127,7 @@ public class ProcesoGarantizadoEstadoServiceImpl implements ProcesoGarantizadoEs
         repository.save(estado);
         
         // 📡 NOTIFICAR POR WEBSOCKET QUE EL BOTÓN FUE BLOQUEADO
-        webSocketService.enviarEstadoProcesoGarantizado(true, "Procesamiento completado. El botón estará disponible el próximo lunes a las 9:00 AM");
+        systemNotificationHandler.enviarEstadoProcesoGarantizado(true, "Procesamiento completado. El botón estará disponible el próximo lunes a las 9:00 AM");
         
         log.info("✅ [ProcesoGarantizadoEstadoService] Procesamiento registrado - Bloqueado hasta el próximo lunes (ID: {})", estado.getId());
     }
@@ -140,7 +140,7 @@ public class ProcesoGarantizadoEstadoServiceImpl implements ProcesoGarantizadoEs
     public void notificarEstadoActual() {
         try {
             EstadoProcesoResponse estado = obtenerEstadoProceso();
-            webSocketService.enviarEstadoProcesoGarantizado(
+            systemNotificationHandler.enviarEstadoProcesoGarantizado(
                 estado.getBloqueado(), 
                 estado.getMensaje() != null ? estado.getMensaje() : "Estado actualizado"
             );

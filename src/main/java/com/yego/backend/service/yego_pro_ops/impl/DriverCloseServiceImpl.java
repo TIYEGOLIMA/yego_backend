@@ -2,7 +2,9 @@ package com.yego.backend.service.yego_pro_ops.impl;
 
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverCloseRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverCloseResponse;
+import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
+import com.yego.backend.repository.yego_pro_ops.CalculatedShiftRepository;
 import com.yego.backend.repository.yego_pro_ops.DriverCloseRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
@@ -14,7 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 
 @Slf4j
@@ -24,6 +28,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
 
     private final DriverCloseRepository driverCloseRepository;
     private final UserRepository userRepository;
+    private final CalculatedShiftRepository calculatedShiftRepository;
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     
     /**
@@ -51,6 +56,9 @@ public class DriverCloseServiceImpl implements DriverCloseService {
                 driverCloseRepository.delete(existingClose);
             });
         
+        // Buscar los CalculatedShift de esta fecha para obtener los IDs de los registros
+        String calculatedShiftIds = obtenerCalculatedShiftIds(request.getDriverId(), fecha);
+        
         // Crear nueva entidad
         DriverClose driverClose = DriverClose.builder()
             .driverId(request.getDriverId())
@@ -67,6 +75,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .totalIngresos(toBigDecimal(request.getTotalIngresos()))
             .totalGastos(toBigDecimal(request.getTotalGastos()))
             .resta(toBigDecimal(request.getResta()))
+            .calculatedShiftIds(calculatedShiftIds)
             .build();
 
         DriverClose saved = driverCloseRepository.save(driverClose);
@@ -127,6 +136,10 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         cierreExistente.setTotalGastos(toBigDecimal(request.getTotalGastos()));
         cierreExistente.setResta(toBigDecimal(request.getResta()));
         
+        // Actualizar los CalculatedShift IDs si hay registros para esta fecha
+        String calculatedShiftIds = obtenerCalculatedShiftIds(request.getDriverId(), LocalDate.parse(request.getFecha(), DATE_FORMATTER));
+        cierreExistente.setCalculatedShiftIds(calculatedShiftIds);
+        
         // Guardar el userId que modificó el registro (userId original NO se modifica)
         // El userId del request es quien está actualizando, se guarda en userIdModificado
         if (request.getUserId() != null) {
@@ -184,9 +197,42 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .totalIngresos(cierre.getTotalIngresos())
             .totalGastos(cierre.getTotalGastos())
             .resta(cierre.getResta())
+            .calculatedShiftIds(cierre.getCalculatedShiftIds())
             .createdAt(cierre.getCreatedAt())
             .updatedAt(cierre.getUpdatedAt())
             .build();
+    }
+
+    /**
+     * Obtiene los IDs de los CalculatedShift para un driver y fecha específica
+     * Los IDs se devuelven separados por coma (ej: "1,2" para identificar los registros de turnos)
+     * @param driverId ID del conductor
+     * @param fecha Fecha del turno
+     * @return String con los IDs de CalculatedShift separados por coma, o null si no hay turnos
+     */
+    private String obtenerCalculatedShiftIds(String driverId, LocalDate fecha) {
+        try {
+            List<CalculatedShift> shifts = calculatedShiftRepository.findByDriverIdAndFecha(driverId, fecha);
+            
+            if (shifts.isEmpty()) {
+                log.info("ℹ️ [DriverCloseService] No se encontraron turnos para driver_id: {} y fecha: {}", driverId, fecha);
+                return null;
+            }
+            
+            // Obtener los IDs de los CalculatedShift y unirlos con coma
+            String calculatedShiftIds = shifts.stream()
+                    .map(shift -> shift.getId().toString())
+                    .collect(Collectors.joining(","));
+            
+            log.info("✅ [DriverCloseService] CalculatedShift IDs encontrados para driver_id: {} y fecha: {}: {}", 
+                    driverId, fecha, calculatedShiftIds);
+            
+            return calculatedShiftIds;
+        } catch (Exception e) {
+            log.error("❌ [DriverCloseService] Error obteniendo CalculatedShift IDs para driver_id: {} y fecha: {}: {}", 
+                    driverId, fecha, e.getMessage());
+            return null;
+        }
     }
 }
 

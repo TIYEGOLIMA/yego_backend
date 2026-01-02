@@ -22,12 +22,6 @@ public interface QueueAgentRepository extends JpaRepository<QueueAgent, Long> {
     // Buscar por módulo de atención activo
     Optional<QueueAgent> findByModuleIdAndIsActiveTrue(Long moduleId);
     
-    // Buscar todos los agentes activos
-    List<QueueAgent> findByIsActiveTrue();
-    
-    // Verificar si un usuario tiene módulo asignado y está OCUPADO
-    Optional<QueueAgent> findByUserIdAndStatusAndIsActiveTrue(Long userId, String status);
-    
-    // Verificar si un usuario tiene módulo asignado (cualquier estado)
-    Optional<QueueAgent> findByUserIdAndModuleIdIsNotNullAndIsActiveTrue(Long userId);
+    // Buscar todos los módulos ocupados (status OCUPADO y activos)
+    List<QueueAgent> findByStatusAndIsActiveTrue(String status);
 }

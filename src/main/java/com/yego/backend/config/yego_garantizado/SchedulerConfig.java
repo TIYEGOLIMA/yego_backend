@@ -5,6 +5,7 @@ import com.yego.backend.service.yego_garantizado.CalculoGarantizadoService;
 import com.yego.backend.service.yego_garantizado.ProcesoGarantizadoEstadoService;
 import com.yego.backend.service.yego_garantizado.SystemStatusService;
 import com.yego.backend.service.yego_garantizado.YegoGarantizadoRegistroService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -15,10 +16,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 /**
  * Configuración de tareas programadas para el sistema de garantizado.
  * Maneja la activación/desactivación automática del sistema según horarios específicos.
+ * 
+ * Nota: @EnableScheduling ya está habilitado en YegoBackendApplication
  */
 @Configuration
-@EnableScheduling
 @Slf4j
+@RequiredArgsConstructor
 public class SchedulerConfig {
 
     private final SystemStatusService systemStatusService;
@@ -26,26 +29,6 @@ public class SchedulerConfig {
     private final CalculoGarantizadoService calculoGarantizadoService;
     private final ProcesoGarantizadoEstadoService procesoGarantizadoEstadoService;
     private final YegoGarantizadoRegistroService yegoGarantizadoRegistroService;
-
-    /**
-     * Constructor para inyección de dependencias.
-     * @param systemStatusService Servicio para gestionar el estado del sistema.
-     * @param systemNotificationHandler Handler para notificaciones WebSocket.
-     * @param calculoGarantizadoService Servicio para gestionar cálculos de garantizado.
-     * @param procesoGarantizadoEstadoService Servicio para gestionar el estado del botón de procesamiento.
-     * @param yegoGarantizadoRegistroService Servicio para procesar conductores garantizados.
-     */
-    public SchedulerConfig(SystemStatusService systemStatusService, 
-                          SystemNotificationHandler systemNotificationHandler,
-                          CalculoGarantizadoService calculoGarantizadoService,
-                          ProcesoGarantizadoEstadoService procesoGarantizadoEstadoService,
-                          YegoGarantizadoRegistroService yegoGarantizadoRegistroService) {
-        this.systemStatusService = systemStatusService;
-        this.systemNotificationHandler = systemNotificationHandler;
-        this.calculoGarantizadoService = calculoGarantizadoService;
-        this.procesoGarantizadoEstadoService = procesoGarantizadoEstadoService;
-        this.yegoGarantizadoRegistroService = yegoGarantizadoRegistroService;
-    }
 
     /**
      * Verificar estado del sistema al iniciar la aplicación.

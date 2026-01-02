@@ -3,7 +3,6 @@ package com.yego.backend.config;
 import com.yego.backend.service.yego_principal.AuthService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.security.Keys;
 import javax.crypto.SecretKey;
 import lombok.RequiredArgsConstructor;
@@ -40,10 +39,6 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
     
-    private JwtParser getJwtParser() {
-        return Jwts.parser().setSigningKey(getSigningKey()).build();
-    }
-    
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
                                     FilterChain chain) throws ServletException, IOException {
@@ -58,9 +53,13 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             jwtToken = requestTokenHeader.substring(7);
             log.info("🔑 [JwtRequestFilter] Token JWT recibido para: {}", request.getRequestURI());
             try {
-                Claims claims = getJwtParser()
-                        .parseClaimsJws(jwtToken)
-                        .getBody();
+                // Usar API moderna de JWT (consistente con el resto del código)
+                SecretKey key = getSigningKey();
+                Claims claims = Jwts.parser()
+                        .verifyWith(key)
+                        .build()
+                        .parseSignedClaims(jwtToken)
+                        .getPayload();
                 
                 username = claims.get("username", String.class);
                 String role = claims.get("role", String.class);
@@ -72,7 +71,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             } catch (Exception e) {
                 log.warn("❌ [JwtRequestFilter] Error procesando JWT para {}: {}", request.getRequestURI(), e.getMessage());
                 // Si el token está expirado, no continuar con la autenticación
-                if (e.getMessage().contains("expired") || e.getMessage().contains("expiration")) {
+                if (e.getMessage() != null && (e.getMessage().contains("expired") || e.getMessage().contains("expiration"))) {
                     log.info("🕐 [JwtRequestFilter] Token expirado para: {}", request.getRequestURI());
                 }
             }
@@ -89,18 +88,18 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             if (validateToken(jwtToken, userDetails)) {
                 
                 // Obtener userId del token para usarlo como nombre de autenticación
+                // Reutilizar los claims ya parseados del request attribute
                 String userId = null;
                 try {
-                    // Decodificar el token directamente sin usar authService para evitar dependencias circulares
-                    SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-                    io.jsonwebtoken.Claims tokenClaims = Jwts.parser()
-                            .verifyWith(key)
-                            .build()
-                            .parseSignedClaims(jwtToken)
-                            .getPayload();
-                    // El userId viene como Integer en el token, lo convertimos a String
-                    Integer userIdInt = tokenClaims.get("userId", Integer.class);
-                    userId = userIdInt != null ? userIdInt.toString() : null;
+                    Claims tokenClaims = (Claims) request.getAttribute("jwtClaims");
+                    if (tokenClaims != null) {
+                        // El userId viene como Integer en el token, lo convertimos a String
+                        Integer userIdInt = tokenClaims.get("userId", Integer.class);
+                        userId = userIdInt != null ? userIdInt.toString() : null;
+                    }
+                    if (userId == null) {
+                        userId = username; // Fallback al username si no se puede obtener userId
+                    }
                 } catch (Exception e) {
                     log.warn("No se pudo obtener userId del token: {}", e.getMessage());
                     userId = username; // Fallback al username si no se puede obtener userId
@@ -132,10 +131,6 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             log.warn("Error validando token: {}", e.getMessage());
             return false;
         }
-    }
-    
-    private Boolean isTokenExpired(Claims claims) {
-        return claims.getExpiration().before(new java.util.Date());
     }
 }
 

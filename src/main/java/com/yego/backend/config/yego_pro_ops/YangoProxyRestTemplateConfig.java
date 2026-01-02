@@ -27,6 +27,7 @@ import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 import jakarta.annotation.PostConstruct;
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -40,10 +41,10 @@ public class YangoProxyRestTemplateConfig {
     
     private final ProxyConfig proxyConfig;
     private final AtomicInteger proxyIndex = new AtomicInteger(0);
+    private final Random random = new Random();
     
     
     @Bean(name = "yangoProxyRestTemplate")
-    @Primary
     public RestTemplate yangoProxyRestTemplate() {
         if (proxyConfig.isEnabled() && proxyConfig.getProxies() != null && !proxyConfig.getProxies().isEmpty()) {
             CloseableHttpClient httpClient = createHttpClientWithProxy();
@@ -83,19 +84,37 @@ public class YangoProxyRestTemplateConfig {
             .build();
     }
     
+    /**
+     * Obtiene el siguiente proxy de forma rotativa
+     * Usa un índice atómico para garantizar distribución uniforme entre todos los proxies
+     */
     ProxyInfo getNextProxyInfo() {
         var proxies = proxyConfig.getProxies();
         if (proxies == null || proxies.isEmpty()) {
+            log.warn("⚠️ [YangoProxyRestTemplateConfig] No hay proxies disponibles");
             return null;
         }
         
-        int index = proxyIndex.getAndIncrement() % proxies.size();
+        // Rotación circular: cada request usa un proxy diferente
+        int index = Math.abs(proxyIndex.getAndIncrement()) % proxies.size();
         String proxyString = proxies.get(index);
         
         try {
-            return parseProxy(proxyString);
+            ProxyInfo proxyInfo = parseProxy(proxyString);
+            log.debug("🔄 [YangoProxyRestTemplateConfig] Seleccionado proxy {}/{}: {}:{}", 
+                index + 1, proxies.size(), proxyInfo.host, proxyInfo.port);
+            return proxyInfo;
         } catch (Exception e) {
-            log.error("❌ [YangoProxyRestTemplateConfig] Error parseando proxy: {}", e.getMessage());
+            log.error("❌ [YangoProxyRestTemplateConfig] Error parseando proxy en índice {}: {}", index, e.getMessage());
+            // Si falla, intentar con el siguiente proxy
+            if (proxies.size() > 1) {
+                int nextIndex = (index + 1) % proxies.size();
+                try {
+                    return parseProxy(proxies.get(nextIndex));
+                } catch (Exception e2) {
+                    log.error("❌ [YangoProxyRestTemplateConfig] Error también con proxy siguiente: {}", e2.getMessage());
+                }
+            }
             return null;
         }
     }
@@ -170,9 +189,23 @@ public class YangoProxyRestTemplateConfig {
                     new UsernamePasswordCredentials(proxyInfo.username, proxyInfo.password.toCharArray())
                 );
                 
+                // Pequeño delay aleatorio (0-500ms) para distribuir mejor las requests entre proxies
+                // Esto ayuda a evitar que múltiples requests simultáneas usen el mismo proxy
+                try {
+                    int delayMs = config.random.nextInt(500); // 0-500ms aleatorio
+                    if (delayMs > 0) {
+                        Thread.sleep(delayMs);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                
                 HttpHost proxy = new HttpHost("http", proxyInfo.host, proxyInfo.port);
-                log.debug("🔄 [RotatingProxyRoutePlanner] Usando proxy: {}:{} para target: {}:{}", 
-                    proxyInfo.host, proxyInfo.port, normalizedTarget.getHostName(), normalizedTarget.getPort());
+                // Log solo en nivel debug para no saturar los logs, pero útil para debugging
+                if (log.isTraceEnabled()) {
+                    log.trace("🔄 [RotatingProxyRoutePlanner] Usando proxy: {}:{} para target: {}:{}", 
+                        proxyInfo.host, proxyInfo.port, normalizedTarget.getHostName(), normalizedTarget.getPort());
+                }
                 
                 return new HttpRoute(normalizedTarget, proxy);
             }

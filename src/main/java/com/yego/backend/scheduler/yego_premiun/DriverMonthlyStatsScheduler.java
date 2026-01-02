@@ -1,4 +1,4 @@
-package com.yego.backend.config.yego_premiun;
+package com.yego.backend.scheduler.yego_premiun;
 
 import com.yego.backend.handler.yego_premiun.DriverMonthlyStatsNotificationHandler;
 import lombok.RequiredArgsConstructor;
@@ -30,5 +30,4 @@ public class DriverMonthlyStatsScheduler {
         notificationHandler.notifyProcessAvailable(periodo);
     }
 }
-
 

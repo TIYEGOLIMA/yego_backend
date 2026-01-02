@@ -1,4 +1,4 @@
-package com.yego.backend.config.yego_pro_ops;
+package com.yego.backend.scheduler.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverKpiResponse;
 import com.yego.backend.handler.yego_pro_ops.FleetDriverNotificationHandler;

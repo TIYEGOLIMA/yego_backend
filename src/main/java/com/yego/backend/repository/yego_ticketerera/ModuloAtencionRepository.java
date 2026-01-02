@@ -12,5 +12,5 @@ import java.util.List;
 @Repository
 public interface ModuloAtencionRepository extends JpaRepository<ModuloAtencion, Long> {
     
-    List<ModuloAtencion> findByIsActiveTrueOrderByNameAsc();
+    List<ModuloAtencion> findByIsActiveFalseOrderByNameAsc();
 }

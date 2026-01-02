@@ -7,7 +7,7 @@ import com.yego.backend.entity.yego_principal.entities.Role;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.repository.yego_principal.RoleRepository;
 import com.yego.backend.service.yego_principal.UserService;
-import com.yego.backend.service.WebSocketService;
+import com.yego.backend.handler.yego_principal.UserNotificationHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -36,7 +36,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final BCryptPasswordEncoder passwordEncoder;
-    private final WebSocketService webSocketService;
+    private final UserNotificationHandler userNotificationHandler;
     
     @Override
     @Transactional
@@ -71,7 +71,7 @@ public class UserServiceImpl implements UserService {
         User savedUser = userRepository.save(user);
         
         // Enviar notificación WebSocket para refrescar tabla
-        webSocketService.enviarActualizacionUsuarios("USER_CREATED", savedUser.getId(), savedUser.getUsername());
+        userNotificationHandler.enviarActualizacionUsuarios("USER_CREATED", savedUser.getId(), savedUser.getUsername());
         
         log.info("✅ Usuario YEGO Principal creado: {}", savedUser.getUsername());
         
@@ -311,7 +311,7 @@ public class UserServiceImpl implements UserService {
         verificarYEnviarLogoutForzado(savedUser);
         
         // Enviar notificación WebSocket para refrescar tabla
-        webSocketService.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
+        userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
         
         log.info("✅ Usuario YEGO Principal actualizado: {}", savedUser.getUsername());
         
@@ -329,7 +329,7 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
         
         // Enviar notificación WebSocket para refrescar tabla
-        webSocketService.enviarActualizacionUsuarios("USER_DELETED", user.getId(), user.getUsername());
+        userNotificationHandler.enviarActualizacionUsuarios("USER_DELETED", user.getId(), user.getUsername());
         
         log.info("🗑️ Usuario YEGO Principal eliminado (soft delete): {}", user.getUsername());
     }
@@ -349,7 +349,7 @@ public class UserServiceImpl implements UserService {
         }
         
         // Enviar notificación WebSocket para refrescar tabla
-        webSocketService.enviarActualizacionUsuarios("USER_STATUS_CHANGED", savedUser.getId(), savedUser.getUsername());
+        userNotificationHandler.enviarActualizacionUsuarios("USER_STATUS_CHANGED", savedUser.getId(), savedUser.getUsername());
         
         log.info("{} Usuario YEGO Principal: {}", activo ? "Activado" : "Desactivado", savedUser.getUsername());
         
@@ -370,7 +370,7 @@ public class UserServiceImpl implements UserService {
         userRepository.save(user);
         
         // Enviar notificación WebSocket para refrescar tabla
-        webSocketService.enviarActualizacionUsuarios("USER_PASSWORD_CHANGED", user.getId(), user.getUsername());
+        userNotificationHandler.enviarActualizacionUsuarios("USER_PASSWORD_CHANGED", user.getId(), user.getUsername());
         
         log.info("🔑 Contraseña cambiada para usuario YEGO Principal: {}", user.getUsername());
     }
@@ -438,7 +438,7 @@ public class UserServiceImpl implements UserService {
                 log.info("🚨 Usuario {} está logueado, enviando notificación de logout forzado", user.getUsername());
                 
                 // Enviar notificación WebSocket
-                webSocketService.enviarLogoutForzado(user.getId(), user.getUsername());
+                userNotificationHandler.enviarLogoutForzado(user.getId(), user.getUsername());
             }
         } catch (Exception e) {
             log.error("❌ Error enviando logout forzado para usuario {}: {}", user.getUsername(), e.getMessage());
@@ -454,7 +454,7 @@ public class UserServiceImpl implements UserService {
             log.info("🚨 Usuario {} desactivado, enviando notificación de bloqueo", user.getUsername());
             
             // Enviar notificación WebSocket de bloqueo
-            webSocketService.enviarBloqueoCuenta(user.getId(), user.getUsername());
+            userNotificationHandler.enviarBloqueoCuenta(user.getId(), user.getUsername());
         } catch (Exception e) {
             log.error("❌ Error enviando notificación de bloqueo para usuario {}: {}", user.getUsername(), e.getMessage());
         }

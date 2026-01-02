@@ -50,7 +50,12 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     // Validar token JWT
                     if (validateToken(token)) {
                         Claims claims = getClaimsFromToken(token);
-                        String username = claims.getSubject();
+                        // Usar get("username") para consistencia con JwtRequestFilter
+                        String username = claims.get("username", String.class);
+                        if (username == null) {
+                            // Fallback a subject si username no está presente
+                            username = claims.getSubject();
+                        }
                         String role = claims.get("role", String.class);
                         Integer userIdInt = claims.get("userId", Integer.class);
                         String userId = userIdInt != null ? userIdInt.toString() : username;
@@ -70,17 +75,19 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                         log.info("🔐 [WebSocket] Usuario autenticado: {} con rol: {}", username, role);
                         
                     } else {
-                        log.warn("⚠️ [WebSocket] Token JWT inválido, permitiendo conexión anónima");
-                        // Permitir conexión anónima en lugar de fallar
+                        log.warn("⚠️ [WebSocket] Token JWT inválido, rechazando conexión");
+                        throw new org.springframework.messaging.MessageDeliveryException("Token JWT inválido");
                     }
                     
+                } catch (org.springframework.messaging.MessageDeliveryException e) {
+                    throw e; // Re-lanzar excepciones de entrega
                 } catch (Exception e) {
-                    log.warn("⚠️ [WebSocket] Error validando token: {}, permitiendo conexión anónima", e.getMessage());
-                    // Permitir conexión anónima en lugar de fallar
+                    log.warn("⚠️ [WebSocket] Error validando token: {}, rechazando conexión", e.getMessage());
+                    throw new org.springframework.messaging.MessageDeliveryException("Error validando token: " + e.getMessage());
                 }
             } else {
-                log.info("ℹ️ [WebSocket] Conexión anónima permitida");
-                // Permitir conexión anónima
+                log.warn("⚠️ [WebSocket] No se proporcionó token de autenticación, rechazando conexión");
+                throw new org.springframework.messaging.MessageDeliveryException("Token de autenticación requerido");
             }
         }
         

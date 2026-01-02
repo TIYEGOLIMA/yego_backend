@@ -1,4 +1,4 @@
-package com.yego.backend.config.yego_pro_ops;
+package com.yego.backend.scheduler.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverInfoResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverKpiResponse;
@@ -75,10 +75,10 @@ public class CalculatedShiftScheduler {
 
     /**
      * Scheduler para calcular y guardar las horas de turno del día anterior
-     * Se ejecuta todos los días a las 7:48 AM para procesar el día anterior
-     * Cron: 0 48 7 * * * (segundo minuto hora día mes día_semana)
+     * Se ejecuta todos los días a las 15:09 (3:09 PM) para procesar el día anterior
+     * Cron: 0 9 15 * * * (segundo minuto hora día mes día_semana)
      */
-    @Scheduled(cron = "0 19 8 * * *", zone = "America/Lima")
+    @Scheduled(cron = "0 10 16 * * *", zone = "America/Lima")
     public void calcularHorasTurnoDiaAnterior() {
         LocalDateTime ahora = LocalDateTime.now(ZONE_UTC_MINUS_5);
         log.info("⏰ [CalculatedShiftScheduler] ⏰⏰⏰ SCHEDULER EJECUTÁNDOSE A LAS {} ⏰⏰⏰", ahora);

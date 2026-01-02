@@ -4,6 +4,7 @@ import com.yego.backend.entity.yego_pro_ops.api.request.CalculatedShiftManualReq
 import com.yego.backend.entity.yego_pro_ops.api.request.CalculatedShiftRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.AllDriversOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.CalculatedShiftResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
 
 public interface CalculatedShiftService {
@@ -38,5 +39,12 @@ public interface CalculatedShiftService {
      * @return Respuesta con lista de conductores y sus viajes
      */
     AllDriversOrdersResponse listarTodosLosConductoresConViajes(String fecha);
+    
+    /**
+     * Obtiene las fechas únicas con sus tipos de turno para un conductor
+     * @param driverId ID del conductor
+     * @return Respuesta con fechas únicas y sus tipos de turno (diurno, nocturno, o ambos)
+     */
+    FechasConTiposTurnoResponse obtenerFechasConTiposTurno(String driverId);
 }
 

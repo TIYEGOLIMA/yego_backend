@@ -8,6 +8,9 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+import java.util.Arrays;
+import java.util.List;
+
 /**
  * Configuración de WebSocket para el Backend Principal
  * 
@@ -23,6 +26,17 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
     private final WebSocketAuthInterceptor webSocketAuthInterceptor;
+    
+    // Orígenes permitidos para WebSocket (debe coincidir con SecurityConfig)
+    private static final List<String> ALLOWED_ORIGINS = Arrays.asList(
+        "http://localhost:3030",
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "https://integral.yego.pro",
+        "https://api-int.yego.pro",
+        "https://neto.yego.pro",
+        "https://siscoca.yego.pro"
+    );
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
@@ -44,22 +58,20 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        String[] allowedOrigins = ALLOWED_ORIGINS.toArray(new String[0]);
+        
         // Endpoint principal para WebSocket
         registry.addEndpoint("/ws")
-                .setAllowedOrigins("http://localhost:5173", "http://localhost:5174", "https://integral.yego.pro", "https://api-int.yego.pro", "https://neto.yego.pro", "https://siscoca.yego.pro")
+                .setAllowedOrigins(allowedOrigins)
                 .withSockJS();
 
         // Endpoint específico para cada microfrontend
         registry.addEndpoint("/ws/ticketera")
-                .setAllowedOrigins("http://localhost:5173", "http://localhost:5174", "https://integral.yego.pro", "https://api-int.yego.pro", "https://neto.yego.pro", "https://siscoca.yego.pro")
-                .withSockJS();
-
-        registry.addEndpoint("/ws/okr")
-                .setAllowedOrigins("http://localhost:5173", "http://localhost:5174", "https://integral.yego.pro", "https://api-int.yego.pro", "https://neto.yego.pro", "https://siscoca.yego.pro")
+                .setAllowedOrigins(allowedOrigins)
                 .withSockJS();
 
         registry.addEndpoint("/ws/marketing")
-                .setAllowedOrigins("http://localhost:5173", "http://localhost:5174", "https://integral.yego.pro", "https://api-int.yego.pro", "https://neto.yego.pro", "https://siscoca.yego.pro")
+                .setAllowedOrigins(allowedOrigins)
                 .withSockJS();
     }
 }

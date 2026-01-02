@@ -1,4 +1,4 @@
-package com.yego.backend.config.yego_marketing_mensajes;
+package com.yego.backend.scheduler.yego_marketing_mensajes;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

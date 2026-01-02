@@ -61,6 +61,7 @@ public class FleetDriverServiceImpl implements FleetDriverService {
     private static final String YANGO_API_URL = "https://fleet.yango.com/api/fleet/map/v2/drivers/points";
     private static final String YANGO_DRIVERS_LIST_API_URL = "https://fleet.yango.com/api/fleet/map/v1/drivers/list";
     private static final String YANGO_GPS_API_URL = "https://fleet.yango.com/api/fleet/map/v1/driver/gps";
+    private static final String YANGO_ORDERS_API_URL = "https://fleet.yango.com/api/reports-api/v1/orders/list";
     private static final String YANGO_CONTRACTORS_API_URL = "https://fleet.yango.com/api/fleet/contractor-profiles-manager/v2/contractors/list";
     private static final String YANGO_WORK_RULES_API_URL = "https://fleet.yango.com/api/fleet/driver-work-rules/v1/work-rules/light-list";
     private static final String PARK_ID = "64085dd85e124e2c808806f70d527ea8";
@@ -596,6 +597,7 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                 
                 String driverId = driver.has("id") ? driver.get("id").asText() : null;
                 GpsDataResult gpsData = obtenerDatosGpsCompletos(driverId, dateFrom, dateTo);
+                CompletedOrdersResult completedOrders = obtenerOrdenesCompletadasDelDia(driverId);
                 
                 DriversInOrderResponse.DriverInOrderInfo info = DriversInOrderResponse.DriverInOrderInfo.builder()
                     .id(driverId)
@@ -608,6 +610,8 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                     .route(extraerRoute(routeNode))
                     .summaryDistance(gpsData != null ? gpsData.summaryDistance : null)
                     .totalActivityTime(gpsData != null ? gpsData.totalActivityTime : null)
+                    .completedTripsCount(completedOrders.count)
+                    .completedTripsTotalPrice(completedOrders.totalPrice)
                     .build();
                 
                 conductores.add(info);
@@ -633,6 +637,14 @@ public class FleetDriverServiceImpl implements FleetDriverService {
     private static class GpsDataResult {
         DriversInOrderResponse.SummaryDistance summaryDistance;
         Long totalActivityTime;
+    }
+    
+    /**
+     * Clase wrapper para retornar datos de órdenes completadas (cantidad y suma total de precios)
+     */
+    private static class CompletedOrdersResult {
+        Integer count;
+        Double totalPrice;
     }
     
     /**
@@ -714,6 +726,159 @@ public class FleetDriverServiceImpl implements FleetDriverService {
         } catch (Exception e) {
             log.error("❌ [FleetDriverService] Error obteniendo datos GPS para conductor {}: {}", contractorProfileId, e.getMessage());
             return null;
+        }
+    }
+    
+    /**
+     * Obtiene las órdenes completadas del día actual para un conductor y calcula cantidad y suma total de precios
+     * @param driverId ID del conductor
+     * @return CompletedOrdersResult con count y totalPrice, nunca null (retorna objeto con 0 si no hay datos)
+     */
+    private CompletedOrdersResult obtenerOrdenesCompletadasDelDia(String driverId) {
+        CompletedOrdersResult result = new CompletedOrdersResult();
+        result.count = 0;
+        result.totalPrice = 0.0;
+        
+        if (driverId == null || driverId.isEmpty()) {
+            log.warn("⚠️ [FleetDriverService] driverId es null o vacío para obtener órdenes completadas");
+            return result;
+        }
+        
+        try {
+            // Obtener rango de fechas del día actual en America/Lima
+            ZoneId limaZone = ZoneId.of("America/Lima");
+            DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
+            LocalDate fechaHoy = LocalDate.now(limaZone);
+            String dateFrom = fechaHoy.atStartOfDay().atZone(limaZone).format(dateFormatter);
+            String dateTo = fechaHoy.atTime(23, 59, 59).atZone(limaZone).format(dateFormatter);
+            
+            log.debug("🔍 [FleetDriverService] Obteniendo órdenes completadas para driverId: {}, desde {} hasta {}", 
+                driverId, dateFrom, dateTo);
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("Cookie", YANGO_COOKIE_BASE);
+            headers.set("x-park-id", PARK_ID);
+            headers.set("language", "es-419");
+            headers.set("x-client-version", "fleet/19321");
+            headers.set("origin", "https://fleet.yango.com");
+            headers.set("accept-language", "es-419,es;q=0.9");
+            
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("date_from", dateFrom);
+            requestBody.put("date_to", dateTo);
+            requestBody.put("date_type", "booked_at");
+            requestBody.put("driver_id", driverId);
+            requestBody.put("order_statuses", java.util.Arrays.asList("complete"));
+            
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            ResponseEntity<String> response = getRestTemplate().exchange(
+                YANGO_ORDERS_API_URL,
+                HttpMethod.POST,
+                request,
+                String.class
+            );
+            
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                log.warn("⚠️ [FleetDriverService] Respuesta no exitosa al obtener órdenes para driverId {}: status={}, body={}", 
+                    driverId, response.getStatusCode(), response.getBody());
+                return result;
+            }
+            
+            log.debug("✅ [FleetDriverService] Respuesta exitosa de API órdenes para driverId: {}", driverId);
+            
+            JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+            JsonNode ordersNode = jsonResponse.get("orders");
+            
+            if (ordersNode == null || !ordersNode.isArray()) {
+                log.debug("📋 [FleetDriverService] No hay órdenes en la respuesta para driverId: {}", driverId);
+                return result;
+            }
+            
+            int count = 0;
+            double totalPrice = 0.0;
+            
+            // Procesar todas las órdenes (ya filtradas por "complete" en el request)
+            for (JsonNode order : ordersNode) {
+                count++;
+                
+                // Sumar todos los precios
+                double priceCash = order.has("price_cash") && !order.get("price_cash").isNull() 
+                    ? order.get("price_cash").asDouble() : 0.0;
+                double priceCard = order.has("price_card") && !order.get("price_card").isNull() 
+                    ? order.get("price_card").asDouble() : 0.0;
+                double priceTip = order.has("price_tip") && !order.get("price_tip").isNull() 
+                    ? order.get("price_tip").asDouble() : 0.0;
+                double pricePromotion = order.has("price_promotion") && !order.get("price_promotion").isNull() 
+                    ? order.get("price_promotion").asDouble() : 0.0;
+                double priceBonus = order.has("price_bonus") && !order.get("price_bonus").isNull() 
+                    ? order.get("price_bonus").asDouble() : 0.0;
+                double priceOther = order.has("price_other") && !order.get("price_other").isNull() 
+                    ? order.get("price_other").asDouble() : 0.0;
+                
+                totalPrice += priceCash + priceCard + priceTip + pricePromotion + priceBonus + priceOther;
+            }
+            
+            // Si hay más páginas (cursor), procesarlas también
+            JsonNode cursorNode = jsonResponse.get("cursor");
+            while (cursorNode != null && !cursorNode.isNull() && !cursorNode.asText().isEmpty()) {
+                String cursor = cursorNode.asText();
+                requestBody.put("cursor", cursor);
+                
+                request = new HttpEntity<>(requestBody, headers);
+                response = getRestTemplate().exchange(
+                    YANGO_ORDERS_API_URL,
+                    HttpMethod.POST,
+                    request,
+                    String.class
+                );
+                
+                if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                    break;
+                }
+                
+                jsonResponse = objectMapper.readTree(response.getBody());
+                ordersNode = jsonResponse.get("orders");
+                
+                if (ordersNode != null && ordersNode.isArray()) {
+                    for (JsonNode order : ordersNode) {
+                        count++;
+                        
+                        double priceCash = order.has("price_cash") && !order.get("price_cash").isNull() 
+                            ? order.get("price_cash").asDouble() : 0.0;
+                        double priceCard = order.has("price_card") && !order.get("price_card").isNull() 
+                            ? order.get("price_card").asDouble() : 0.0;
+                        double priceTip = order.has("price_tip") && !order.get("price_tip").isNull() 
+                            ? order.get("price_tip").asDouble() : 0.0;
+                        double pricePromotion = order.has("price_promotion") && !order.get("price_promotion").isNull() 
+                            ? order.get("price_promotion").asDouble() : 0.0;
+                        double priceBonus = order.has("price_bonus") && !order.get("price_bonus").isNull() 
+                            ? order.get("price_bonus").asDouble() : 0.0;
+                        double priceOther = order.has("price_other") && !order.get("price_other").isNull() 
+                            ? order.get("price_other").asDouble() : 0.0;
+                        
+                        totalPrice += priceCash + priceCard + priceTip + pricePromotion + priceBonus + priceOther;
+                    }
+                }
+                
+                cursorNode = jsonResponse.get("cursor");
+                if (cursorNode == null || cursorNode.isNull() || cursorNode.asText().isEmpty()) {
+                    break;
+                }
+            }
+            
+            result.count = count;
+            result.totalPrice = totalPrice;
+            
+            log.debug("✅ [FleetDriverService] Órdenes completadas para driverId {}: count={}, totalPrice={}", 
+                driverId, count, totalPrice);
+            
+            return result;
+                
+        } catch (Exception e) {
+            log.error("❌ [FleetDriverService] Error obteniendo órdenes completadas para conductor {}: {}", 
+                driverId, e.getMessage(), e);
+            return result; // Retornar objeto con valores 0 en lugar de null
         }
     }
     

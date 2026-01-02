@@ -40,7 +40,8 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder(12);
     }
     
-    @Bean
+    @Bean(name = "defaultRestTemplate")
+    @org.springframework.context.annotation.Primary
     public RestTemplate restTemplate() {
         return new RestTemplate();
     }
@@ -70,7 +71,6 @@ public class SecurityConfig {
             "https://api-int.yego.pro",
             "https://neto.yego.pro",
             "https://siscoca.yego.pro"
-            
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));

@@ -7,8 +7,10 @@ import com.yego.backend.entity.yego_pro_ops.api.response.DriverKpiResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.WorkRulesResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
+import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
 import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
 import com.yego.backend.service.yego_pro_ops.FleetDriverService;
@@ -32,6 +34,7 @@ public class FleetDriverController {
     private final FleetDriverService fleetDriverService;
     private final DriverOrdersService driverOrdersService;
     private final DriverCloseService driverCloseService;
+    private final CalculatedShiftService calculatedShiftService;
     
     @GetMapping("/kpis")
     public ResponseEntity<DriverKpiResponse> obtenerKpis() {
@@ -197,6 +200,22 @@ public class FleetDriverController {
         log.info("🚗 [FleetDriverController] Obteniendo conductores con status 'in_order'");
         DriversInOrderResponse response = fleetDriverService.obtenerConductoresEnOrden();
         log.info("✅ [FleetDriverController] Se encontraron {} conductores en orden", response.getTotal());
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Obtiene las fechas únicas con sus tipos de turno para un conductor
+     * Las fechas no se repiten y pueden tener uno o dos tipos de turno (diurno, nocturno)
+     * @param driverId ID del conductor
+     * @return Respuesta con fechas únicas y sus tipos de turno con sus IDs
+     */
+    @GetMapping("/driver/fechas-turnos/{driverId}")
+    public ResponseEntity<FechasConTiposTurnoResponse> obtenerFechasConTiposTurno(
+            @PathVariable String driverId) {
+        log.info("📅 [FleetDriverController] Obteniendo fechas con tipos de turno para driver_id: {}", driverId);
+        FechasConTiposTurnoResponse response = calculatedShiftService.obtenerFechasConTiposTurno(driverId);
+        log.info("✅ [FleetDriverController] Se encontraron {} fechas únicas para driver_id: {}", 
+                response.getFechas().size(), driverId);
         return ResponseEntity.ok(response);
     }
 }
