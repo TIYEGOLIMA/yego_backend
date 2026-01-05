@@ -46,7 +46,7 @@ spring:
 # JWT para desarrollo
 jwt:
   secret: ${JWT_SECRET:YegoBackendSecretKey2024VerySecureAndLongEnoughForHS512AlgorithmWithAtLeast64Characters}
-  expiration: ${JWT_EXPIRES_IN:86400} 
+  expiration: ${JWT_EXPIRES_IN:604800} 
 
 # Configuración de la aplicación para desarrollo
 app:

@@ -1,12 +1,14 @@
 package com.yego.backend.service.yego_ticketerera.impl;
 
 import com.yego.backend.entity.yego_ticketerera.entities.ModuloAtencion;
+import com.yego.backend.entity.yego_ticketerera.entities.QueueAgent;
 import com.yego.backend.entity.yego_ticketerera.api.response.ModuloAtencionResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.ModuloUsuarioResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.RecuperarModuloResponse;
 import com.yego.backend.handler.yego_ticketerera.TicketNotificationHandler;
 import com.yego.backend.repository.yego_ticketerera.ModuloAtencionRepository;
 import com.yego.backend.service.yego_ticketerera.ModuloAtencionService;
+import com.yego.backend.repository.yego_ticketerera.QueueAgentRepository;
 import com.yego.backend.service.yego_ticketerera.QueueAgentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -26,22 +28,43 @@ public class ModuloAtencionServiceImpl implements ModuloAtencionService {
     private final ModuloAtencionRepository moduloAtencionRepository;
     private final QueueAgentService queueAgentService;
     private final TicketNotificationHandler ticketNotificationHandler;
+    private final QueueAgentRepository queueAgentRepository;
     
     public ModuloAtencionServiceImpl(
             ModuloAtencionRepository moduloAtencionRepository,
             @Lazy QueueAgentService queueAgentService,
-            TicketNotificationHandler ticketNotificationHandler) {
+            TicketNotificationHandler ticketNotificationHandler,
+            QueueAgentRepository queueAgentRepository) {
         this.moduloAtencionRepository = moduloAtencionRepository;
         this.queueAgentService = queueAgentService;
         this.ticketNotificationHandler = ticketNotificationHandler;
+        this.queueAgentRepository = queueAgentRepository;
     }
     
     @Override
     @Transactional(readOnly = true)
     public List<ModuloAtencion> obtenerTodosLosModulosActivos() {
-        log.info("Obteniendo todos los módulos de atención activos");
-        List<ModuloAtencion> modules = moduloAtencionRepository.findByIsActiveFalseOrderByNameAsc();
-        log.info("Se encontraron {} módulos de atención activos", modules.size());
+        log.info("Obteniendo todos los módulos de atención ocupados (isActive = true)");
+        
+        List<QueueAgent> agentesOcupados = 
+            queueAgentRepository.findByStatusAndIsActiveTrue("OCUPADO");
+        
+        // Extraer los moduleIds de los agentes ocupados
+        List<Long> moduleIdsOcupados = agentesOcupados.stream()
+            .map(QueueAgent::getModuleId)
+            .distinct()
+            .toList();
+        
+        // Obtener los ModuloAtencion correspondientes que tengan isActive = true
+        List<ModuloAtencion> modules = moduleIdsOcupados.stream()
+            .map(moduloAtencionRepository::findById)
+            .filter(Optional::isPresent)
+            .map(Optional::get)
+            .filter(modulo -> modulo.getIsActive() == true)
+            .sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName()))
+            .toList();
+        
+        log.info("Se encontraron {} módulos de atención ocupados (isActive = true)", modules.size());
         return modules;
     }
     
@@ -90,15 +113,22 @@ public class ModuloAtencionServiceImpl implements ModuloAtencionService {
                     .modulosDisponibles(null)
                     .build();
         } else {
-            log.info("Usuario {} no tiene módulo asignado. Devolviendo lista de módulos activos", userId);
-            List<ModuloAtencion> modules = obtenerTodosLosModulosActivos();
-            List<ModuloAtencionResponse> modulosDisponibles = modules.stream()
+            log.info("Usuario {} no tiene módulo asignado. Devolviendo lista de módulos ocupados y disponibles", userId);
+            
+            // Obtener módulos disponibles (isActive = false)
+            List<ModuloAtencion> modulesDisponibles = moduloAtencionRepository.findByIsActiveFalseOrderByNameAsc();
+            List<ModuloAtencionResponse> modulosDisponiblesResponse = modulesDisponibles.stream()
                     .map(ModuloAtencionResponse::fromModuloAtencion)
                     .toList();
+            
+            // Obtener módulos ocupados con información del usuario usando el método del servicio
+            var modulosEstado = queueAgentService.obtenerModulosDisponiblesYOcupados();
+            
             response = ModuloUsuarioResponse.builder()
                     .tieneModuloAsignado(false)
                     .moduloAsignado(null)
-                    .modulosDisponibles(modulosDisponibles)
+                    .modulosDisponibles(modulosDisponiblesResponse)
+                    .modulosOcupados(modulosEstado.getModulosOcupados())
                     .build();
         }
         

@@ -150,7 +150,7 @@ public class AuthServiceImpl implements AuthService {
                     .userId(userId)
                     .tokenHash(passwordEncoder.encode(newAccessToken))
                     .userAgent(request.getHeader("User-Agent"))
-                    .expiresAt(LocalDateTime.now().plusHours(8))
+                    .expiresAt(LocalDateTime.now().plusDays(7))
                     .build();
             
             sessionService.create(sessionDto, userId, request);
@@ -192,12 +192,12 @@ public class AuthServiceImpl implements AuthService {
         // Generar JWT token
         String accessToken = generateToken(user);
         
-        // Crear sesión con geolocalización (8 horas de expiración)
+        // Crear sesión con geolocalización (1 semana de expiración)
         CreateSessionDto sessionDto = CreateSessionDto.builder()
                 .userId(user.getId())
                 .tokenHash(passwordEncoder.encode(accessToken))
                 .userAgent(request.getHeader("User-Agent"))
-                .expiresAt(LocalDateTime.now().plusHours(8))
+                .expiresAt(LocalDateTime.now().plusDays(7))
                 .build();
         
         sessionService.create(sessionDto, user.getId(), request);

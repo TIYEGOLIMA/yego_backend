@@ -51,7 +51,7 @@ spring:
 # JWT para producción
 jwt:
   secret: ${JWT_SECRET:cb0d12d0302705aba616440ca4f65dee7ec31810497a80e1b2e2e60b95c5437ea2aac09d4c2f8dd8f94c7899e2f6dcfde371182c6daa152cc8614f33f5be12ff}
-  expiration: ${JWT_EXPIRES_IN:8600}  # 1 hora en producción
+  expiration: ${JWT_EXPIRES_IN:604800}  # 1 semana en producción
 
 # Configuración de la aplicación para producción
 app:

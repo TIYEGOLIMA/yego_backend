@@ -20,7 +20,14 @@ import java.util.List;
 public class ModuloUsuarioResponse {
     
     private Boolean tieneModuloAsignado;
+    
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private RecuperarModuloResponse moduloAsignado;
+    
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private List<ModuloAtencionResponse> modulosDisponibles;
+    
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    private List<ModuloOcupadoResponse> modulosOcupados;
 }
 

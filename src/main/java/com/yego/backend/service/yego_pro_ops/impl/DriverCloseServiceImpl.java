@@ -16,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -197,7 +199,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .totalIngresos(cierre.getTotalIngresos())
             .totalGastos(cierre.getTotalGastos())
             .resta(cierre.getResta())
-            .calculatedShiftIds(cierre.getCalculatedShiftIds())
+            .tiposTurno(obtenerTiposTurnoDesdeIds(cierre.getCalculatedShiftIds()))
             .createdAt(cierre.getCreatedAt())
             .updatedAt(cierre.getUpdatedAt())
             .build();
@@ -232,6 +234,47 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             log.error("❌ [DriverCloseService] Error obteniendo CalculatedShift IDs para driver_id: {} y fecha: {}: {}", 
                     driverId, fecha, e.getMessage());
             return null;
+        }
+    }
+
+    /**
+     * Obtiene los tipos de turno desde los IDs almacenados en calculatedShiftIds
+     * @param calculatedShiftIds String con IDs separados por coma (ej: "1,2")
+     * @return Lista de tipos de turno (ej: ["diurno", "nocturno"])
+     */
+    private List<String> obtenerTiposTurnoDesdeIds(String calculatedShiftIds) {
+        if (calculatedShiftIds == null || calculatedShiftIds.trim().isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        try {
+            // Dividir los IDs por coma
+            List<Long> ids = Arrays.stream(calculatedShiftIds.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .map(Long::parseLong)
+                    .collect(Collectors.toList());
+            
+            if (ids.isEmpty()) {
+                return new ArrayList<>();
+            }
+            
+            // Buscar los CalculatedShift por IDs
+            List<CalculatedShift> shifts = calculatedShiftRepository.findAllById(ids);
+            
+            // Extraer los tipos de turno únicos
+            List<String> tiposTurno = shifts.stream()
+                    .map(shift -> shift.getTipoTurno().name())
+                    .distinct()
+                    .collect(Collectors.toList());
+            
+            log.debug("✅ [DriverCloseService] Tipos de turno obtenidos desde IDs {}: {}", calculatedShiftIds, tiposTurno);
+            
+            return tiposTurno;
+        } catch (Exception e) {
+            log.error("❌ [DriverCloseService] Error obteniendo tipos de turno desde IDs {}: {}", 
+                    calculatedShiftIds, e.getMessage());
+            return new ArrayList<>();
         }
     }
 }

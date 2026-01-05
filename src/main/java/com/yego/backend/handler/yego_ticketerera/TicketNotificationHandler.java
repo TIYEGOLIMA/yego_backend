@@ -102,7 +102,8 @@ public class TicketNotificationHandler {
             messagingTemplate.convertAndSend("/topic/ticketera", notification);
             messagingTemplate.convertAndSend("/topic/modulos-atencion", notification);
             log.info("📤 [TicketNotificationHandler] Lista de módulos actualizada enviada por WebSocket - Disponibles: {}, Ocupados: {}", 
-                modulosEstado.getModulosDisponibles().size(), modulosEstado.getModulosOcupados().size());
+                modulosEstado.getModulosDisponibles().size(), 
+                modulosEstado.getModulosOcupados().size());
         } catch (Exception e) {
             log.error("❌ [TicketNotificationHandler] Error enviando módulos actualizados por WebSocket: {}", e.getMessage(), e);
         }

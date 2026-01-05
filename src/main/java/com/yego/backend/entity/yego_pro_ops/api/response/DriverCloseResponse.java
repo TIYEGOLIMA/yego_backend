@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -70,8 +71,8 @@ public class DriverCloseResponse {
     @JsonProperty("resta")
     private BigDecimal resta;
 
-    @JsonProperty("calculatedShiftIds")
-    private String calculatedShiftIds; // IDs de CalculatedShift separados por coma (ej: "1,2" para identificar los registros de turnos)
+    @JsonProperty("tiposTurno")
+    private List<String> tiposTurno; // Lista de tipos de turno (ej: ["diurno", "nocturno"])
 
     @JsonProperty("createdAt")
     private LocalDateTime createdAt;
