@@ -15,8 +15,18 @@ public interface FleetDriverService {
     
     /**
      * Obtiene todos los conductores con status "in_order" y sus detalles
+     * @param page Número de página (0-indexed)
+     * @param limit Cantidad de conductores por página
      * @return Respuesta con lista de conductores en orden y sus detalles
      */
-    DriversInOrderResponse obtenerConductoresEnOrden();
+    DriversInOrderResponse obtenerConductoresEnOrden(Integer page, Integer limit);
+    
+    /**
+     * Obtiene todos los conductores con status "in_order" y sus detalles (sin paginación)
+     * @return Respuesta con lista de conductores en orden y sus detalles
+     */
+    default DriversInOrderResponse obtenerConductoresEnOrden() {
+        return obtenerConductoresEnOrden(0, Integer.MAX_VALUE);
+    }
 }
 

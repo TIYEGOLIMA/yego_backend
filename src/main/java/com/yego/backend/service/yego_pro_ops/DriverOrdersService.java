@@ -2,6 +2,8 @@ package com.yego.backend.service.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverOrdersRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.DriverTripsSimplifiedResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.MultipleDriversTripsSimplifiedResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.OrderInfoResponse;
 
 import java.util.List;
@@ -31,5 +33,15 @@ public interface DriverOrdersService {
      * @return Respuesta con lista de TODOS los viajes (sin filtrar por status)
      */
     DriverOrdersResponse obtenerTodosLosViajes(String driverId, String dateFrom, String dateTo, String cursor);
+    
+    /**
+     * Obtiene viajes simplificados para múltiples conductores en una sola llamada (procesamiento en paralelo)
+     * @param driverIds Lista de IDs de conductores
+     * @param dateFrom Fecha inicial (formato: "2025-12-10T00:00:00-05:00")
+     * @param dateTo Fecha final (formato: "2025-12-10T23:59:59-05:00")
+     * @return Respuesta con viajes agrupados por conductor
+     */
+    MultipleDriversTripsSimplifiedResponse obtenerViajesSimplificadosMultiples(List<String> driverIds, String dateFrom, String dateTo);
+    
 }
 

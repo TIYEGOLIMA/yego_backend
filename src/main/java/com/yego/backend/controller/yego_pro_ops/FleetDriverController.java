@@ -2,12 +2,14 @@ package com.yego.backend.controller.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverCloseRequest;
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverOrdersRequest;
+import com.yego.backend.entity.yego_pro_ops.api.request.MultipleDriversTripsRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverCloseResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverKpiResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.MultipleDriversTripsSimplifiedResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.WorkRulesResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
 import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
@@ -39,11 +41,6 @@ public class FleetDriverController {
     @GetMapping("/kpis")
     public ResponseEntity<DriverKpiResponse> obtenerKpis() {
         return ResponseEntity.ok(fleetDriverService.obtenerKpisActuales());
-    }
-    
-    @PostMapping("/kpis/refresh")
-    public ResponseEntity<DriverKpiResponse> refrescarKpis() {
-        return ResponseEntity.ok(fleetDriverService.consultarConductores());
     }
 
     /**
@@ -115,6 +112,25 @@ public class FleetDriverController {
         DriverOrdersResponse response = driverOrdersService.obtenerTodosLosViajes(driverId, dateFrom, dateTo, cursor);
         log.info("✅ [FleetDriverController] Total de viajes devueltos: {}, hasMore: {}", 
             response.getOrders().size(), response.getHasMore());
+        
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Obtiene viajes simplificados para múltiples conductores en una sola llamada
+     * @param request Request con driver_ids, date_from y date_to
+     * @return Respuesta con viajes agrupados por conductor
+     */
+    @PostMapping("/drivers/viajes-simplificados")
+    public ResponseEntity<MultipleDriversTripsSimplifiedResponse> obtenerViajesSimplificadosMultiples(
+            @Valid @RequestBody MultipleDriversTripsRequest request) {
+        log.info("🚗 [FleetDriverController] Obteniendo viajes simplificados para {} conductores, desde: {}, hasta: {}", 
+            request.getDriverIds().size(), request.getDateFrom(), request.getDateTo());
+        
+        MultipleDriversTripsSimplifiedResponse response = driverOrdersService.obtenerViajesSimplificadosMultiples(
+            request.getDriverIds(), request.getDateFrom(), request.getDateTo());
+        log.info("✅ [FleetDriverController] Total de conductores procesados: {}", 
+            response.getDrivers().size());
         
         return ResponseEntity.ok(response);
     }
@@ -193,13 +209,17 @@ public class FleetDriverController {
      * Obtiene todos los conductores con status "in_order" y sus detalles
      * Incluye: avatar_url, balance, first_name, last_name, id, status, route, vehicle_number
      * El scheduler actualiza estos datos cada 10 segundos y los envía por WebSocket
+     * @param page Número de página (default: 0, primera página)
+     * @param limit Cantidad de conductores por página (default: 4)
      * @return Respuesta con lista de conductores en orden y sus detalles
      */
     @GetMapping("/drivers/in-order")
-    public ResponseEntity<DriversInOrderResponse> obtenerConductoresEnOrden() {
-        log.info("🚗 [FleetDriverController] Obteniendo conductores con status 'in_order'");
-        DriversInOrderResponse response = fleetDriverService.obtenerConductoresEnOrden();
-        log.info("✅ [FleetDriverController] Se encontraron {} conductores en orden", response.getTotal());
+    public ResponseEntity<DriversInOrderResponse> obtenerConductoresEnOrden(
+            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "4") Integer limit) {
+        log.info("🚗 [FleetDriverController] Obteniendo conductores con status 'in_order' - page: {}, limit: {}", page, limit);
+        DriversInOrderResponse response = fleetDriverService.obtenerConductoresEnOrden(page, limit);
+        log.info("✅ [FleetDriverController] Se encontraron {} conductores en orden (página {})", response.getTotal(), page);
         return ResponseEntity.ok(response);
     }
 

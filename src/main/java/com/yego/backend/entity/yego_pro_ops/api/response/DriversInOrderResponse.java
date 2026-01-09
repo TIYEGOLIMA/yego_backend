@@ -46,9 +46,6 @@ public class DriversInOrderResponse {
         @JsonProperty("route")
         private List<RoutePoint> route;
         
-        @JsonProperty("vehicle_number")
-        private String vehicleNumber;
-        
         @JsonProperty("summary_distance")
         private SummaryDistance summaryDistance;
         
@@ -76,26 +73,14 @@ public class DriversInOrderResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class SummaryDistance {
-        @JsonProperty("common")
-        private Double common;
-        
-        @JsonProperty("active")
-        private Double active;
+        @JsonProperty("free")
+        private Double free;
         
         @JsonProperty("not_active")
         private Double notActive;
         
-        @JsonProperty("offline")
-        private Double offline;
-        
-        @JsonProperty("busy")
-        private Double busy;
-        
-        @JsonProperty("free")
-        private Double free;
-        
-        @JsonProperty("in_order")
-        private Double inOrder;
+        @JsonProperty("active")
+        private Double active;
     }
 }
 

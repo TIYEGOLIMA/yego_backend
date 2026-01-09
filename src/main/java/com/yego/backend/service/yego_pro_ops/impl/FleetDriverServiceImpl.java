@@ -30,7 +30,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import jakarta.annotation.PreDestroy;
 
 @Slf4j
 @Service
@@ -43,6 +49,8 @@ public class FleetDriverServiceImpl implements FleetDriverService {
     private final DriverRepository driverRepository;
     private final JdbcTemplate jdbcTemplate;
     private final Map<String, DriverKpiResponse> kpisCache = new ConcurrentHashMap<>();
+    
+    private final ExecutorService executorService = Executors.newFixedThreadPool(20);
     
     public FleetDriverServiceImpl(
             RestTemplate restTemplate,
@@ -61,7 +69,7 @@ public class FleetDriverServiceImpl implements FleetDriverService {
     private static final String YANGO_API_URL = "https://fleet.yango.com/api/fleet/map/v2/drivers/points";
     private static final String YANGO_DRIVERS_LIST_API_URL = "https://fleet.yango.com/api/fleet/map/v1/drivers/list";
     private static final String YANGO_GPS_API_URL = "https://fleet.yango.com/api/fleet/map/v1/driver/gps";
-    private static final String YANGO_ORDERS_API_URL = "https://fleet.yango.com/api/reports-api/v1/orders/list";
+    private static final String YANGO_DRIVER_INCOME_API_URL = "https://fleet.yango.com/api/v1/cards/driver/income";
     private static final String YANGO_CONTRACTORS_API_URL = "https://fleet.yango.com/api/fleet/contractor-profiles-manager/v2/contractors/list";
     private static final String YANGO_WORK_RULES_API_URL = "https://fleet.yango.com/api/fleet/driver-work-rules/v1/work-rules/light-list";
     private static final String PARK_ID = "64085dd85e124e2c808806f70d527ea8";
@@ -71,6 +79,19 @@ public class FleetDriverServiceImpl implements FleetDriverService {
             return yangoProxyRestTemplate;
         }
         return restTemplate;
+    }
+    
+    @PreDestroy
+    public void shutdown() {
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(60, TimeUnit.SECONDS)) {
+                executorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executorService.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
     
     @Override
@@ -130,7 +151,6 @@ public class FleetDriverServiceImpl implements FleetDriverService {
             return items;
         }
         
-        // Obtener todos los driver_ids primero
         List<String> driverIds = new ArrayList<>();
         for (JsonNode item : itemsNode) {
             String driverId = item.has("driver_id") ? item.get("driver_id").asText() : null;
@@ -139,10 +159,8 @@ public class FleetDriverServiceImpl implements FleetDriverService {
             }
         }
         
-        // Hacer UNA sola consulta SQL para obtener todos los datos
         Map<String, DriverData> datosConductores = obtenerDatosConductoresBatch(driverIds);
         
-        // Construir las respuestas
         for (JsonNode item : itemsNode) {
             String driverId = item.has("driver_id") ? item.get("driver_id").asText() : null;
             if (driverId == null) continue;
@@ -176,9 +194,6 @@ public class FleetDriverServiceImpl implements FleetDriverService {
         return items;
     }
     
-    /**
-     * Clase interna para almacenar datos del conductor
-     */
     private static class DriverData {
         final String fullName;
         final String carNumber;
@@ -212,8 +227,6 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                 return null;
             });
             
-            log.debug("✅ Datos obtenidos para {} conductores en una sola consulta", resultado.size());
-            
         } catch (Exception e) {
             log.error("❌ Error obteniendo datos de conductores en batch: {}", e.getMessage(), e);
         }
@@ -243,16 +256,11 @@ public class FleetDriverServiceImpl implements FleetDriverService {
     @Override
     public DriverListResponse obtenerListaConductores(List<String> workRuleIds) {
         try {
-            // Crear filtro - si se proporcionan work_rule_ids, agregarlos al filtro
             Map<String, Object> filter = new HashMap<>();
             if (workRuleIds != null && !workRuleIds.isEmpty()) {
                 filter.put("work_rule_ids", workRuleIds);
-                log.info("📋 [FleetDriverService] Filtrando conductores por work_rule_ids: {}", workRuleIds);
-            } else {
-                log.info("📋 [FleetDriverService] Obteniendo todos los conductores sin filtro de work_rule_ids");
             }
             
-            // Crear request body
             DriverListRequest requestBody = DriverListRequest.builder()
                 .filter(filter)
                 .limit(50)
@@ -286,7 +294,6 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                 return transformarAListaConductores(jsonResponse);
             }
 
-            log.warn("⚠️ Respuesta HTTP no exitosa al obtener lista de conductores: {}", response.getStatusCode());
             return DriverListResponse.builder()
                 .contractors(new ArrayList<>())
                 .build();
@@ -339,7 +346,6 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                     .build();
             }
 
-            // Mapear grupos
             List<String> groups = new ArrayList<>();
             if (contractorNode.has("groups") && contractorNode.get("groups").isArray()) {
                 for (JsonNode groupNode : contractorNode.get("groups")) {
@@ -347,7 +353,6 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                 }
             }
 
-            // Mapear violations
             List<String> violations = new ArrayList<>();
             if (contractorNode.has("violations") && contractorNode.get("violations").isArray()) {
                 for (JsonNode violationNode : contractorNode.get("violations")) {
@@ -355,7 +360,6 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                 }
             }
 
-            // Mapear attestation_issues
             List<String> attestationIssues = new ArrayList<>();
             if (contractorNode.has("attestation_issues") && contractorNode.get("attestation_issues").isArray()) {
                 for (JsonNode issueNode : contractorNode.get("attestation_issues")) {
@@ -363,7 +367,6 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                 }
             }
 
-            // Mapear photocheck_restrictions
             List<String> photocheckRestrictions = new ArrayList<>();
             if (contractorNode.has("photocheck_restrictions") && contractorNode.get("photocheck_restrictions").isArray()) {
                 for (JsonNode restrictionNode : contractorNode.get("photocheck_restrictions")) {
@@ -400,9 +403,6 @@ public class FleetDriverServiceImpl implements FleetDriverService {
     @Override
     public WorkRulesResponse obtenerReglasTrabajo() {
         try {
-            log.info("📋 [FleetDriverService] Obteniendo reglas de trabajo");
-            
-            // Crear request body con has_contractors: true
             Map<String, Object> requestBody = new HashMap<>();
             requestBody.put("has_contractors", true);
             
@@ -429,7 +429,6 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                 return transformarAReglasTrabajo(jsonResponse);
             }
             
-            log.warn("⚠️ Respuesta HTTP no exitosa al obtener reglas de trabajo: {}", response.getStatusCode());
             return WorkRulesResponse.builder()
                 .workRules(new ArrayList<>())
                 .build();
@@ -475,32 +474,10 @@ public class FleetDriverServiceImpl implements FleetDriverService {
     }
     
     @Override
-    public DriversInOrderResponse obtenerConductoresEnOrden() {
-        try {
-            List<String> driverIdsInOrder = obtenerDriverIdsInOrder();
-            
-            if (driverIdsInOrder.isEmpty()) {
-                return DriversInOrderResponse.builder()
-                    .conductores(new ArrayList<>())
-                    .total(0)
-                    .build();
-            }
-            
-            return obtenerDetallesConductores(driverIdsInOrder);
-            
-        } catch (Exception e) {
-            log.error("❌ [FleetDriverService] Error obteniendo conductores en orden: {}", e.getMessage(), e);
-            return DriversInOrderResponse.builder()
-                .conductores(new ArrayList<>())
-                .total(0)
-                .build();
-        }
-    }
-    
-    /**
-     * Obtiene los driver_ids de conductores con status "in_order" desde /v2/drivers/points
-     */
-    private List<String> obtenerDriverIdsInOrder() {
+    public DriversInOrderResponse obtenerConductoresEnOrden(Integer page, Integer limit) {
+        Map<String, Double> balanceMap = new HashMap<>();
+        List<String> driverIdsInOrder = new ArrayList<>();
+        
         try {
             HttpHeaders headers = crearHeadersDriversPoints();
             
@@ -515,6 +492,7 @@ public class FleetDriverServiceImpl implements FleetDriverService {
             requestBody.put("sort", sort);
             
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            
             ResponseEntity<String> response = getRestTemplate().exchange(
                 YANGO_API_URL, 
                 HttpMethod.POST, 
@@ -523,107 +501,106 @@ public class FleetDriverServiceImpl implements FleetDriverService {
             );
             
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                return new ArrayList<>();
+                return DriversInOrderResponse.builder()
+                    .conductores(new ArrayList<>())
+                    .total(0)
+                    .build();
             }
             
             JsonNode jsonResponse = objectMapper.readTree(response.getBody());
             JsonNode items = jsonResponse.get("items");
             
-            if (items == null || !items.isArray()) {
-                return new ArrayList<>();
+            if (items == null || !items.isArray() || items.size() == 0) {
+                return DriversInOrderResponse.builder()
+                    .conductores(new ArrayList<>())
+                    .total(0)
+                    .build();
             }
             
-            List<String> driverIds = new ArrayList<>();
             for (JsonNode item : items) {
                 String driverId = item.has("driver_id") ? item.get("driver_id").asText() : null;
                 if (driverId != null && !driverId.isEmpty()) {
-                    driverIds.add(driverId);
+                    driverIdsInOrder.add(driverId);
+                    if (item.has("balance") && !item.get("balance").isNull()) {
+                        balanceMap.put(driverId, item.get("balance").asDouble());
+                    }
                 }
             }
-            return driverIds;
             
-        } catch (Exception e) {
-            log.error("❌ [FleetDriverService] Error obteniendo driver_ids in_order: {}", e.getMessage(), e);
-            return new ArrayList<>();
-        }
-    }
-    
-    /**
-     * Obtiene los detalles de los conductores desde /v1/drivers/list
-     */
-    private DriversInOrderResponse obtenerDetallesConductores(List<String> driverIds) {
-        try {
-            HttpHeaders headers = crearHeadersDriversList();
-            
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("driver_ids", driverIds);
-            requestBody.put("with_order_field", true);
-            
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
-            ResponseEntity<String> response = getRestTemplate().exchange(
-                YANGO_DRIVERS_LIST_API_URL,
-                HttpMethod.POST,
-                request,
-                String.class
-            );
-            
-            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+            if (driverIdsInOrder.isEmpty()) {
                 return DriversInOrderResponse.builder()
                     .conductores(new ArrayList<>())
                     .total(0)
                     .build();
             }
             
-            JsonNode jsonResponse = objectMapper.readTree(response.getBody());
-            JsonNode items = jsonResponse.get("items");
+            int totalConductores = driverIdsInOrder.size();
+            int startIndex = page * limit;
+            int endIndex = Math.min(startIndex + limit, totalConductores);
             
-            if (items == null || !items.isArray()) {
+            if (startIndex >= totalConductores) {
                 return DriversInOrderResponse.builder()
                     .conductores(new ArrayList<>())
-                    .total(0)
+                    .total(totalConductores)
                     .build();
             }
             
-            List<DriversInOrderResponse.DriverInOrderInfo> conductores = new ArrayList<>();
-            
-            LocalDate fechaHoy = LocalDate.now(ZoneId.of("America/Lima"));
-            String dateFrom = fechaHoy.atStartOfDay(ZoneId.of("America/Lima")).toInstant().toString();
-            String dateTo = fechaHoy.atTime(23, 59, 59).atZone(ZoneId.of("America/Lima")).toInstant().toString();
-            
-            for (JsonNode item : items) {
-                JsonNode driver = item.has("driver") ? item.get("driver") : item;
-                JsonNode order = item.get("order");
-                JsonNode routeNode = (order != null && order.has("route")) ? order.get("route") : item.get("route");
-                
-                String driverId = driver.has("id") ? driver.get("id").asText() : null;
-                GpsDataResult gpsData = obtenerDatosGpsCompletos(driverId, dateFrom, dateTo);
-                CompletedOrdersResult completedOrders = obtenerOrdenesCompletadasDelDia(driverId);
-                
-                DriversInOrderResponse.DriverInOrderInfo info = DriversInOrderResponse.DriverInOrderInfo.builder()
-                    .id(driverId)
-                    .avatarUrl(driver.has("avatar_url") ? driver.get("avatar_url").asText() : null)
-                    .balance(driver.has("balance") ? driver.get("balance").asText() : null)
-                    .firstName(driver.has("first_name") ? driver.get("first_name").asText() : null)
-                    .lastName(driver.has("last_name") ? driver.get("last_name").asText() : null)
-                    .status(driver.has("status") ? driver.get("status").asText() : null)
-                    .vehicleNumber(extraerVehicleNumber(order))
-                    .route(extraerRoute(routeNode))
-                    .summaryDistance(gpsData != null ? gpsData.summaryDistance : null)
-                    .totalActivityTime(gpsData != null ? gpsData.totalActivityTime : null)
-                    .completedTripsCount(completedOrders.count)
-                    .completedTripsTotalPrice(completedOrders.totalPrice)
-                    .build();
-                
-                conductores.add(info);
+            List<String> driverIdsPaginated = driverIdsInOrder.subList(startIndex, endIndex);
+            Map<String, Double> balanceMapPaginated = new HashMap<>();
+            for (String driverId : driverIdsPaginated) {
+                if (balanceMap.containsKey(driverId)) {
+                    balanceMapPaginated.put(driverId, balanceMap.get(driverId));
+                }
             }
             
-            return DriversInOrderResponse.builder()
-                .conductores(conductores)
-                .total(conductores.size())
-                .build();
+            DriversInOrderResponse result = obtenerDetallesConductores(driverIdsPaginated, balanceMapPaginated);
+            
+            if (result == null || result.getConductores() == null || result.getConductores().isEmpty()) {
+                List<DriversInOrderResponse.DriverInOrderInfo> conductoresBasicos = new ArrayList<>();
+                for (String driverId : driverIdsPaginated) {
+                    Double balance = balanceMapPaginated.get(driverId);
+                    conductoresBasicos.add(DriversInOrderResponse.DriverInOrderInfo.builder()
+                        .id(driverId)
+                        .balance(balance != null ? String.valueOf(balance) : "0.0")
+                        .status("in_order")
+                        .route(new ArrayList<>())
+                        .summaryDistance(crearSummaryDistancePorDefecto())
+                        .totalActivityTime(0L)
+                        .completedTripsCount(0)
+                        .completedTripsTotalPrice(0.0)
+                        .build());
+                }
+                result = DriversInOrderResponse.builder()
+                    .conductores(conductoresBasicos)
+                    .total(totalConductores)
+                    .build();
+            } else {
+                result.setTotal(totalConductores);
+            }
+            
+            return result;
             
         } catch (Exception e) {
-            log.error("❌ [FleetDriverService] Error obteniendo detalles de conductores: {}", e.getMessage(), e);
+            if (!driverIdsInOrder.isEmpty()) {
+                List<DriversInOrderResponse.DriverInOrderInfo> conductoresBasicos = new ArrayList<>();
+                for (String driverId : driverIdsInOrder) {
+                    Double balance = balanceMap.get(driverId);
+                    conductoresBasicos.add(DriversInOrderResponse.DriverInOrderInfo.builder()
+                        .id(driverId)
+                        .balance(balance != null ? String.valueOf(balance) : "0.0")
+                        .status("in_order")
+                        .route(new ArrayList<>())
+                        .summaryDistance(crearSummaryDistancePorDefecto())
+                        .totalActivityTime(0L)
+                        .completedTripsCount(0)
+                        .completedTripsTotalPrice(0.0)
+                        .build());
+                }
+                return DriversInOrderResponse.builder()
+                    .conductores(conductoresBasicos)
+                    .total(conductoresBasicos.size())
+                    .build();
+            }
             return DriversInOrderResponse.builder()
                 .conductores(new ArrayList<>())
                 .total(0)
@@ -631,27 +608,181 @@ public class FleetDriverServiceImpl implements FleetDriverService {
         }
     }
     
-    /**
-     * Clase wrapper para retornar datos GPS (summary_distance y tiempo total de actividad)
-     */
+    private DriversInOrderResponse obtenerDetallesConductores(List<String> driverIds, Map<String, Double> balanceMap) {
+        try {
+            HttpHeaders headers = crearHeadersDriversList();
+            
+            Map<String, Object> requestBody = new HashMap<>();
+            requestBody.put("driver_ids", driverIds);
+            requestBody.put("with_order_field", true);
+            
+            final HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            
+            ResponseEntity<String> response = getRestTemplate().exchange(
+                YANGO_DRIVERS_LIST_API_URL,
+                HttpMethod.POST,
+                request,
+                String.class
+            );
+            
+            boolean driversListSuccess = true;
+            JsonNode items = null;
+            
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+                items = jsonResponse.get("items");
+            } else {
+                driversListSuccess = false;
+            }
+            
+            if (!driversListSuccess || items == null || !items.isArray() || items.size() == 0) {
+                List<DriversInOrderResponse.DriverInOrderInfo> conductoresBasicos = new ArrayList<>();
+                
+                for (String driverId : driverIds) {
+                    Double balance = balanceMap.get(driverId);
+                    conductoresBasicos.add(DriversInOrderResponse.DriverInOrderInfo.builder()
+                        .id(driverId)
+                        .balance(balance != null ? String.valueOf(balance) : "0.0")
+                        .status("in_order")
+                        .route(new ArrayList<>())
+                        .summaryDistance(crearSummaryDistancePorDefecto())
+                        .totalActivityTime(0L)
+                        .completedTripsCount(0)
+                        .completedTripsTotalPrice(0.0)
+                        .build());
+                }
+                
+                return DriversInOrderResponse.builder()
+                    .conductores(conductoresBasicos)
+                    .total(conductoresBasicos.size())
+                    .build();
+            }
+            
+            LocalDate fechaHoy = LocalDate.now(ZoneId.of("America/Lima"));
+            String dateFrom = fechaHoy.atStartOfDay(ZoneId.of("America/Lima")).toInstant().toString();
+            String dateTo = fechaHoy.atTime(23, 59, 59).atZone(ZoneId.of("America/Lima")).toInstant().toString();
+            
+            List<CompletableFuture<DriversInOrderResponse.DriverInOrderInfo>> futures = new ArrayList<>();
+            
+            for (JsonNode item : items) {
+                JsonNode driver = item.has("driver") ? item.get("driver") : item;
+                JsonNode order = item.get("order");
+                JsonNode routeNode = (order != null && order.has("route")) ? order.get("route") : item.get("route");
+                
+                String driverId = driver.has("id") ? driver.get("id").asText() : null;
+                if (driverId == null || driverId.isEmpty()) {
+                    continue;
+                }
+                
+                final String finalDriverId = driverId;
+                final JsonNode finalDriver = driver;
+                final JsonNode finalOrder = order;
+                final JsonNode finalRouteNode = routeNode;
+                final Double balanceFromPoints = balanceMap.get(finalDriverId);
+                
+                CompletableFuture<DriversInOrderResponse.DriverInOrderInfo> future = CompletableFuture
+                    .supplyAsync(() -> {
+                        CompletableFuture<GpsDataResult> gpsFuture = CompletableFuture
+                            .supplyAsync(() -> obtenerDatosGpsCompletos(finalDriverId, dateFrom, dateTo), executorService);
+                        
+                        CompletableFuture<CompletedOrdersResult> ordersFuture = CompletableFuture
+                            .supplyAsync(() -> obtenerOrdenesCompletadasDelDia(finalDriverId), executorService);
+                        
+                        GpsDataResult gpsData = null;
+                        CompletedOrdersResult completedOrders = null;
+                        
+                        try {
+                            gpsData = gpsFuture.get();
+                        } catch (Exception e) {
+                            log.warn("⚠️ [FleetDriverService] Error obteniendo GPS para {}: {}", finalDriverId, e.getMessage());
+                        }
+                        
+                        try {
+                            completedOrders = ordersFuture.get();
+                        } catch (Exception e) {
+                            log.warn("⚠️ [FleetDriverService] Error obteniendo órdenes para {}: {}", finalDriverId, e.getMessage());
+                            completedOrders = new CompletedOrdersResult();
+                            completedOrders.count = 0;
+                            completedOrders.totalPrice = 0.0;
+                        }
+                        
+                        String balanceStr = null;
+                        if (balanceFromPoints != null) {
+                            balanceStr = String.valueOf(balanceFromPoints);
+                        } else if (finalDriver.has("balance")) {
+                            balanceStr = finalDriver.get("balance").asText();
+                        }
+                        
+                        DriversInOrderResponse.SummaryDistance summaryDistance = gpsData != null && gpsData.summaryDistance != null 
+                            ? gpsData.summaryDistance 
+                            : crearSummaryDistancePorDefecto();
+                        Long totalActivityTime = gpsData != null && gpsData.totalActivityTime != null 
+                            ? gpsData.totalActivityTime 
+                            : 0L;
+                        
+                        int tripsCount = completedOrders != null ? completedOrders.count : 0;
+                        double tripsTotalPrice = completedOrders != null ? completedOrders.totalPrice : 0.0;
+                        
+                        log.info("📊 [FleetDriverService] Conductor {}: {} viajes, total={}", finalDriverId, tripsCount, tripsTotalPrice);
+                        
+                        return DriversInOrderResponse.DriverInOrderInfo.builder()
+                            .id(finalDriverId)
+                            .avatarUrl(finalDriver.has("avatar_url") ? finalDriver.get("avatar_url").asText() : null)
+                            .balance(balanceStr)
+                            .firstName(finalDriver.has("first_name") ? finalDriver.get("first_name").asText() : null)
+                            .lastName(finalDriver.has("last_name") ? finalDriver.get("last_name").asText() : null)
+                            .status(finalDriver.has("status") ? finalDriver.get("status").asText() : "in_order")
+                            .route(extraerRoute(finalRouteNode))
+                            .summaryDistance(summaryDistance)
+                            .totalActivityTime(totalActivityTime)
+                            .completedTripsCount(tripsCount)
+                            .completedTripsTotalPrice(tripsTotalPrice)
+                            .build();
+                    }, executorService);
+                
+                futures.add(future);
+            }
+            
+            CompletableFuture<Void> allFutures = CompletableFuture.allOf(
+                futures.toArray(new CompletableFuture[0])
+            );
+            
+            allFutures.get();
+            
+            List<DriversInOrderResponse.DriverInOrderInfo> conductores = futures.stream()
+                .map(future -> {
+                    try {
+                        return future.get();
+                    } catch (Exception e) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toList());
+            
+            return DriversInOrderResponse.builder()
+                .conductores(conductores)
+                .total(conductores.size())
+                .build();
+            
+        } catch (Exception e) {
+            return DriversInOrderResponse.builder()
+                .conductores(new ArrayList<>())
+                .total(0)
+                .build();
+        }
+    }
+    
     private static class GpsDataResult {
         DriversInOrderResponse.SummaryDistance summaryDistance;
         Long totalActivityTime;
     }
     
-    /**
-     * Clase wrapper para retornar datos de órdenes completadas (cantidad y suma total de precios)
-     */
     private static class CompletedOrdersResult {
         Integer count;
         Double totalPrice;
     }
     
-    /**
-     * Obtiene los datos de GPS (summary_distance y tiempo total de actividad) para un conductor
-     * Optimizado para hacer una sola llamada a la API
-     * @return GpsDataResult con summaryDistance y totalActivityTime, o null si hay error
-     */
     private GpsDataResult obtenerDatosGpsCompletos(String contractorProfileId, String dateFrom, String dateTo) {
         if (contractorProfileId == null || contractorProfileId.isEmpty()) {
             return null;
@@ -666,6 +797,7 @@ public class FleetDriverServiceImpl implements FleetDriverService {
             requestBody.put("date_to", dateTo);
             
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            
             ResponseEntity<String> response = getRestTemplate().exchange(
                 YANGO_GPS_API_URL,
                 HttpMethod.POST,
@@ -679,36 +811,24 @@ public class FleetDriverServiceImpl implements FleetDriverService {
             
             JsonNode jsonResponse = objectMapper.readTree(response.getBody());
             
-            // Extraer summary_distance
             JsonNode summaryDistanceNode = jsonResponse.get("summary_distance");
             DriversInOrderResponse.SummaryDistance summaryDistance = null;
             if (summaryDistanceNode != null) {
-                // Dividir todos los valores entre 1000 para expresarlos en kilómetros
                 summaryDistance = DriversInOrderResponse.SummaryDistance.builder()
-                    .common(summaryDistanceNode.has("common") && !summaryDistanceNode.get("common").isNull() 
-                        ? summaryDistanceNode.get("common").asDouble() / 1000.0 : null)
-                    .active(summaryDistanceNode.has("active") && !summaryDistanceNode.get("active").isNull() 
-                        ? summaryDistanceNode.get("active").asDouble() / 1000.0 : null)
-                    .notActive(summaryDistanceNode.has("not_active") && !summaryDistanceNode.get("not_active").isNull() 
-                        ? summaryDistanceNode.get("not_active").asDouble() / 1000.0 : null)
-                    .offline(summaryDistanceNode.has("offline") && !summaryDistanceNode.get("offline").isNull() 
-                        ? summaryDistanceNode.get("offline").asDouble() / 1000.0 : null)
-                    .busy(summaryDistanceNode.has("busy") && !summaryDistanceNode.get("busy").isNull() 
-                        ? summaryDistanceNode.get("busy").asDouble() / 1000.0 : null)
                     .free(summaryDistanceNode.has("free") && !summaryDistanceNode.get("free").isNull() 
-                        ? summaryDistanceNode.get("free").asDouble() / 1000.0 : null)
-                    .inOrder(summaryDistanceNode.has("in_order") && !summaryDistanceNode.get("in_order").isNull() 
-                        ? summaryDistanceNode.get("in_order").asDouble() / 1000.0 : null)
+                        ? summaryDistanceNode.get("free").asDouble() / 1000.0 : 0.0)
+                    .notActive(summaryDistanceNode.has("not_active") && !summaryDistanceNode.get("not_active").isNull() 
+                        ? summaryDistanceNode.get("not_active").asDouble() / 1000.0 : 0.0)
+                    .active(summaryDistanceNode.has("active") && !summaryDistanceNode.get("active").isNull() 
+                        ? summaryDistanceNode.get("active").asDouble() / 1000.0 : 0.0)
                     .build();
             }
             
-            // Calcular tiempo total de actividad sumando status_time solo de viajes con driver_status "in_order" o "free"
             JsonNode detailedGpsNode = jsonResponse.get("detailed_gps");
             Long totalActivityTime = 0L;
             if (detailedGpsNode != null && detailedGpsNode.isArray()) {
                 long totalTimeSeconds = 0;
                 for (JsonNode trip : detailedGpsNode) {
-                    // Solo sumar si driver_status es "in_order" o "free"
                     String driverStatus = trip.has("driver_status") ? trip.get("driver_status").asText() : null;
                     if (("in_order".equals(driverStatus) || "free".equals(driverStatus)) 
                         && trip.has("status_time") && !trip.get("status_time").isNull()) {
@@ -724,36 +844,25 @@ public class FleetDriverServiceImpl implements FleetDriverService {
             return result;
                 
         } catch (Exception e) {
-            log.error("❌ [FleetDriverService] Error obteniendo datos GPS para conductor {}: {}", contractorProfileId, e.getMessage());
             return null;
         }
     }
     
-    /**
-     * Obtiene las órdenes completadas del día actual para un conductor y calcula cantidad y suma total de precios
-     * @param driverId ID del conductor
-     * @return CompletedOrdersResult con count y totalPrice, nunca null (retorna objeto con 0 si no hay datos)
-     */
     private CompletedOrdersResult obtenerOrdenesCompletadasDelDia(String driverId) {
         CompletedOrdersResult result = new CompletedOrdersResult();
         result.count = 0;
         result.totalPrice = 0.0;
         
         if (driverId == null || driverId.isEmpty()) {
-            log.warn("⚠️ [FleetDriverService] driverId es null o vacío para obtener órdenes completadas");
             return result;
         }
         
         try {
-            // Obtener rango de fechas del día actual en America/Lima
             ZoneId limaZone = ZoneId.of("America/Lima");
             DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
             LocalDate fechaHoy = LocalDate.now(limaZone);
             String dateFrom = fechaHoy.atStartOfDay().atZone(limaZone).format(dateFormatter);
             String dateTo = fechaHoy.atTime(23, 59, 59).atZone(limaZone).format(dateFormatter);
-            
-            log.debug("🔍 [FleetDriverService] Obteniendo órdenes completadas para driverId: {}, desde {} hasta {}", 
-                driverId, dateFrom, dateTo);
             
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -764,139 +873,53 @@ public class FleetDriverServiceImpl implements FleetDriverService {
             headers.set("origin", "https://fleet.yango.com");
             headers.set("accept-language", "es-419,es;q=0.9");
             
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("date_from", dateFrom);
-            requestBody.put("date_to", dateTo);
-            requestBody.put("date_type", "booked_at");
-            requestBody.put("driver_id", driverId);
-            requestBody.put("order_statuses", java.util.Arrays.asList("complete"));
+            Map<String, Object> requestBodyMap = new HashMap<>();
+            requestBodyMap.put("date_from", dateFrom);
+            requestBodyMap.put("date_to", dateTo);
+            requestBodyMap.put("driver_id", driverId);
             
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+            String requestBodyJson = objectMapper.writeValueAsString(requestBodyMap);
+            HttpEntity<String> request = new HttpEntity<>(requestBodyJson, headers);
+            
             ResponseEntity<String> response = getRestTemplate().exchange(
-                YANGO_ORDERS_API_URL,
+                YANGO_DRIVER_INCOME_API_URL,
                 HttpMethod.POST,
                 request,
                 String.class
             );
             
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                log.warn("⚠️ [FleetDriverService] Respuesta no exitosa al obtener órdenes para driverId {}: status={}, body={}", 
+                log.error("❌ [FleetDriverService] Error obteniendo income para {}: Status={}, Body={}", 
                     driverId, response.getStatusCode(), response.getBody());
                 return result;
             }
             
-            log.debug("✅ [FleetDriverService] Respuesta exitosa de API órdenes para driverId: {}", driverId);
-            
             JsonNode jsonResponse = objectMapper.readTree(response.getBody());
             JsonNode ordersNode = jsonResponse.get("orders");
             
-            if (ordersNode == null || !ordersNode.isArray()) {
-                log.debug("📋 [FleetDriverService] No hay órdenes en la respuesta para driverId: {}", driverId);
+            if (ordersNode == null) {
+                log.warn("⚠️ [FleetDriverService] No hay orders en respuesta para {}: {}", driverId, jsonResponse.toString());
                 return result;
             }
             
-            int count = 0;
-            double totalPrice = 0.0;
-            
-            // Procesar todas las órdenes (ya filtradas por "complete" en el request)
-            for (JsonNode order : ordersNode) {
-                count++;
-                
-                // Sumar todos los precios
-                double priceCash = order.has("price_cash") && !order.get("price_cash").isNull() 
-                    ? order.get("price_cash").asDouble() : 0.0;
-                double priceCard = order.has("price_card") && !order.get("price_card").isNull() 
-                    ? order.get("price_card").asDouble() : 0.0;
-                double priceTip = order.has("price_tip") && !order.get("price_tip").isNull() 
-                    ? order.get("price_tip").asDouble() : 0.0;
-                double pricePromotion = order.has("price_promotion") && !order.get("price_promotion").isNull() 
-                    ? order.get("price_promotion").asDouble() : 0.0;
-                double priceBonus = order.has("price_bonus") && !order.get("price_bonus").isNull() 
-                    ? order.get("price_bonus").asDouble() : 0.0;
-                double priceOther = order.has("price_other") && !order.get("price_other").isNull() 
-                    ? order.get("price_other").asDouble() : 0.0;
-                
-                totalPrice += priceCash + priceCard + priceTip + pricePromotion + priceBonus + priceOther;
-            }
-            
-            // Si hay más páginas (cursor), procesarlas también
-            JsonNode cursorNode = jsonResponse.get("cursor");
-            while (cursorNode != null && !cursorNode.isNull() && !cursorNode.asText().isEmpty()) {
-                String cursor = cursorNode.asText();
-                requestBody.put("cursor", cursor);
-                
-                request = new HttpEntity<>(requestBody, headers);
-                response = getRestTemplate().exchange(
-                    YANGO_ORDERS_API_URL,
-                    HttpMethod.POST,
-                    request,
-                    String.class
-                );
-                
-                if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                    break;
-                }
-                
-                jsonResponse = objectMapper.readTree(response.getBody());
-                ordersNode = jsonResponse.get("orders");
-                
-                if (ordersNode != null && ordersNode.isArray()) {
-                    for (JsonNode order : ordersNode) {
-                        count++;
-                        
-                        double priceCash = order.has("price_cash") && !order.get("price_cash").isNull() 
-                            ? order.get("price_cash").asDouble() : 0.0;
-                        double priceCard = order.has("price_card") && !order.get("price_card").isNull() 
-                            ? order.get("price_card").asDouble() : 0.0;
-                        double priceTip = order.has("price_tip") && !order.get("price_tip").isNull() 
-                            ? order.get("price_tip").asDouble() : 0.0;
-                        double pricePromotion = order.has("price_promotion") && !order.get("price_promotion").isNull() 
-                            ? order.get("price_promotion").asDouble() : 0.0;
-                        double priceBonus = order.has("price_bonus") && !order.get("price_bonus").isNull() 
-                            ? order.get("price_bonus").asDouble() : 0.0;
-                        double priceOther = order.has("price_other") && !order.get("price_other").isNull() 
-                            ? order.get("price_other").asDouble() : 0.0;
-                        
-                        totalPrice += priceCash + priceCard + priceTip + pricePromotion + priceBonus + priceOther;
-                    }
-                }
-                
-                cursorNode = jsonResponse.get("cursor");
-                if (cursorNode == null || cursorNode.isNull() || cursorNode.asText().isEmpty()) {
-                    break;
-                }
-            }
+            int count = ordersNode.has("count_completed") && !ordersNode.get("count_completed").isNull() 
+                ? ordersNode.get("count_completed").asInt() : 0;
+            double totalPrice = ordersNode.has("price") && !ordersNode.get("price").isNull() 
+                ? ordersNode.get("price").asDouble() : 0.0;
             
             result.count = count;
             result.totalPrice = totalPrice;
             
-            log.debug("✅ [FleetDriverService] Órdenes completadas para driverId {}: count={}, totalPrice={}", 
-                driverId, count, totalPrice);
+            log.info("✅ [FleetDriverService] Órdenes completadas para {}: count={}, totalPrice={}", driverId, count, totalPrice);
             
             return result;
                 
         } catch (Exception e) {
-            log.error("❌ [FleetDriverService] Error obteniendo órdenes completadas para conductor {}: {}", 
-                driverId, e.getMessage(), e);
-            return result; // Retornar objeto con valores 0 en lugar de null
+            log.error("❌ [FleetDriverService] Excepción obteniendo income para {}: {}", driverId, e.getMessage(), e);
+            return result;
         }
     }
     
-    /**
-     * Extrae el número del vehículo desde order.vehicle.number
-     */
-    private String extraerVehicleNumber(JsonNode order) {
-        if (order != null && order.has("vehicle") && !order.get("vehicle").isNull()) {
-            JsonNode vehicle = order.get("vehicle");
-            return vehicle.has("number") ? vehicle.get("number").asText() : null;
-        }
-        return null;
-    }
-    
-    /**
-     * Extrae la ruta (route array con addresses)
-     * Puede estar en order.route o directamente en route
-     */
     private List<DriversInOrderResponse.RoutePoint> extraerRoute(JsonNode routeNode) {
         List<DriversInOrderResponse.RoutePoint> route = new ArrayList<>();
         
@@ -914,9 +937,14 @@ public class FleetDriverServiceImpl implements FleetDriverService {
         return route;
     }
     
-    /**
-     * Crea headers comunes para los endpoints de Yango
-     */
+    private DriversInOrderResponse.SummaryDistance crearSummaryDistancePorDefecto() {
+        return DriversInOrderResponse.SummaryDistance.builder()
+            .free(0.0)
+            .notActive(0.0)
+            .active(0.0)
+            .build();
+    }
+    
     private HttpHeaders crearHeadersDriversPoints() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);

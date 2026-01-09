@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverOrdersRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverCloseResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.DriverTripsSimplifiedResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.MultipleDriversTripsSimplifiedResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.OrderInfoResponse;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
 import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
@@ -30,6 +32,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
@@ -42,6 +47,7 @@ public class DriverOrdersServiceImpl implements DriverOrdersService {
     private final DriverCloseService driverCloseService;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final AtomicLong ultimaLlamadaTimestamp = new AtomicLong(0);
+    private final ExecutorService executorService = Executors.newFixedThreadPool(10);
     
     @Autowired
     public DriverOrdersServiceImpl(
@@ -585,5 +591,98 @@ public class DriverOrdersServiceImpl implements DriverOrdersService {
                 return ZonedDateTime.parse(fechaStr);
             }
         }
+    }
+    
+    private DriverTripsSimplifiedResponse obtenerViajesSimplificados(String driverId, String dateFrom, String dateTo) {
+        DriverOrdersResponse fullResponse = obtenerTodosLosViajes(driverId, dateFrom, dateTo, null);
+        
+        List<DriverTripsSimplifiedResponse.TripSimplified> tripsSimplified = fullResponse.getOrders().stream()
+            .map(order -> DriverTripsSimplifiedResponse.TripSimplified.builder()
+                .status(order.getStatus())
+                .shortId(order.getShortId())
+                .id(order.getId())
+                .driverId(order.getDriverId())
+                .driverFullName(order.getDriverFullName())
+                .endedAt(order.getEndedAt())
+                .bookedAt(order.getBookedAt())
+                .carBrandModel(order.getCarBrandModel())
+                .build())
+            .collect(Collectors.toList());
+        
+        return DriverTripsSimplifiedResponse.builder()
+            .dateFrom(fullResponse.getDateFrom())
+            .dateTo(fullResponse.getDateTo())
+            .trips(tripsSimplified)
+            .build();
+    }
+    
+    @Override
+    public MultipleDriversTripsSimplifiedResponse obtenerViajesSimplificadosMultiples(List<String> driverIds, String dateFrom, String dateTo) {
+        if (driverIds == null || driverIds.isEmpty()) {
+            return MultipleDriversTripsSimplifiedResponse.builder()
+                .dateFrom(dateFrom)
+                .dateTo(dateTo)
+                .drivers(new ArrayList<>())
+                .build();
+        }
+        
+        List<CompletableFuture<MultipleDriversTripsSimplifiedResponse.DriverTrips>> futures = driverIds.stream()
+            .map(driverId -> CompletableFuture.supplyAsync(() -> {
+                try {
+                    DriverTripsSimplifiedResponse response = obtenerViajesSimplificados(driverId, dateFrom, dateTo);
+                    
+                    String driverFullName = null;
+                    String carBrandModel = null;
+                    
+                    if (response.getTrips() != null && !response.getTrips().isEmpty()) {
+                        DriverTripsSimplifiedResponse.TripSimplified firstTrip = response.getTrips().get(0);
+                        driverFullName = firstTrip.getDriverFullName();
+                        carBrandModel = firstTrip.getCarBrandModel();
+                    }
+                    
+                    List<MultipleDriversTripsSimplifiedResponse.TripSimplified> trips = response.getTrips().stream()
+                        .map(trip -> MultipleDriversTripsSimplifiedResponse.TripSimplified.builder()
+                            .status(trip.getStatus())
+                            .id(trip.getId())
+                            .endedAt(trip.getEndedAt())
+                            .bookedAt(trip.getBookedAt())
+                            .build())
+                        .collect(Collectors.toList());
+                    
+                    return MultipleDriversTripsSimplifiedResponse.DriverTrips.builder()
+                        .driverId(driverId)
+                        .driverFullName(driverFullName)
+                        .carBrandModel(carBrandModel)
+                        .trips(trips)
+                        .build();
+                } catch (Exception e) {
+                    log.error("❌ [DriverOrdersService] Error obteniendo viajes para {}: {}", driverId, e.getMessage());
+                    return MultipleDriversTripsSimplifiedResponse.DriverTrips.builder()
+                        .driverId(driverId)
+                        .driverFullName(null)
+                        .carBrandModel(null)
+                        .trips(new ArrayList<>())
+                        .build();
+                }
+            }, executorService))
+            .collect(Collectors.toList());
+        
+        List<MultipleDriversTripsSimplifiedResponse.DriverTrips> drivers = futures.stream()
+            .map(future -> {
+                try {
+                    return future.get();
+                } catch (Exception e) {
+                    log.error("❌ [DriverOrdersService] Error procesando futuro: {}", e.getMessage());
+                    return null;
+                }
+            })
+            .filter(java.util.Objects::nonNull)
+            .collect(Collectors.toList());
+        
+        return MultipleDriversTripsSimplifiedResponse.builder()
+            .dateFrom(dateFrom)
+            .dateTo(dateTo)
+            .drivers(drivers)
+            .build();
     }
 }
