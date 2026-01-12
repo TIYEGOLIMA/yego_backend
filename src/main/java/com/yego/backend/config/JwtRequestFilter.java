@@ -35,6 +35,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     @Value("${jwt.secret}")
     private String jwtSecret;
     
+    @Value("${spring.profiles.active:dev}")
+    private String activeProfile;
+    
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
@@ -42,6 +45,17 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
                                     FilterChain chain) throws ServletException, IOException {
+        
+        // En desarrollo: ignorar rutas de SockJS (handshake de WebSocket con polling)
+        // En producción: no hay SockJS, solo WebSocket nativo
+        boolean isProduction = activeProfile != null && (activeProfile.contains("prod") || activeProfile.contains("production"));
+        if (!isProduction) {
+            String requestUri = request.getRequestURI();
+            if (requestUri != null && isSockJsRoute(requestUri)) {
+                chain.doFilter(request, response);
+                return;
+            }
+        }
         
         final String requestTokenHeader = request.getHeader("Authorization");
         
@@ -132,5 +146,25 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             return false;
         }
     }
+    
+    /**
+     * Verifica si una ruta es de SockJS (handshake de WebSocket con polling)
+     * Solo se usa en desarrollo, en producción no hay SockJS
+     */
+    private boolean isSockJsRoute(String requestUri) {
+        if (requestUri == null) {
+            return false;
+        }
+        
+        // Rutas de SockJS: /ws/info, /ws/{serverId}/{sessionId}/xhr, /ws/{serverId}/{sessionId}/websocket, etc.
+        return requestUri.startsWith("/ws/") && (
+            requestUri.equals("/ws/info") ||
+            requestUri.contains("/xhr") || 
+            requestUri.contains("/websocket") || 
+            requestUri.contains("/xhr_send") || 
+            requestUri.contains("/xhr_streaming") || 
+            requestUri.contains("/eventsource") || 
+            requestUri.contains("/htmlfile")
+        );
+    }
 }
-
