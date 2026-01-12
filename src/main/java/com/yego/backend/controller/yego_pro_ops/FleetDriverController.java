@@ -174,6 +174,7 @@ public class FleetDriverController {
     }
 
     /**
+     * listo
      * Actualiza un cierre de caja existente para un conductor en una fecha específica
      * @param request Datos del cierre actualizados (driverId, fecha, userId opcional, gastos, ingresos, etc.)
      * @return Cierre actualizado
@@ -195,6 +196,7 @@ public class FleetDriverController {
     }
 
     /**
+     *listo
      * Obtiene la lista de reglas de trabajo (work rules) desde la API de Yango
      * @return Lista de reglas de trabajo con información básica
      */
@@ -206,6 +208,7 @@ public class FleetDriverController {
     }
     
     /**
+     * listo
      * Obtiene todos los conductores con status "in_order" y sus detalles
      * Incluye: avatar_url, balance, first_name, last_name, id, status, route, vehicle_number
      * El scheduler actualiza estos datos cada 10 segundos y los envía por WebSocket
@@ -224,6 +227,7 @@ public class FleetDriverController {
     }
 
     /**
+     * listo
      * Obtiene las fechas únicas con sus tipos de turno para un conductor
      * Las fechas no se repiten y pueden tener uno o dos tipos de turno (diurno, nocturno)
      * @param driverId ID del conductor
