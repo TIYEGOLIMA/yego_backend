@@ -1,8 +1,8 @@
 package com.yego.backend.handler.yego_asistencia;
 
+import com.yego.backend.service.yego_principal.FilteredWebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -17,7 +17,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AttendanceNotificationHandler {
     
-    private final SimpMessagingTemplate messagingTemplate;
+    private final FilteredWebSocketService filteredWebSocketService;
     
     /**
      * Enviar actualización de registros de hoy
@@ -34,7 +34,7 @@ public class AttendanceNotificationHandler {
         );
         
         // Enviar al usuario específico
-        messagingTemplate.convertAndSend("/topic/user/" + userId, evento);
+        filteredWebSocketService.convertAndSend("/topic/user/" + userId, evento);
         log.info("✅ [AttendanceNotificationHandler] Actualización de registros de hoy enviada - Usuario: {}, Total: {}", userId, registrosHoy.size());
     }
 }

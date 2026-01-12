@@ -1,5 +1,9 @@
 package com.yego.backend.config;
 
+import com.yego.backend.entity.yego_principal.api.response.ModuleResponse;
+import com.yego.backend.service.yego_principal.ModuleService;
+import com.yego.backend.service.yego_principal.WebSocketModuleMappingService;
+import com.yego.backend.service.yego_principal.WebSocketSessionService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -32,35 +36,63 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     @Value("${jwt.secret}")
     private String jwtSecret;
     
+    private final ModuleService moduleService;
+    private final WebSocketSessionService webSocketSessionService;
+    private final WebSocketModuleMappingService webSocketModuleMappingService;
+    
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
         
-        if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
-            log.info("🔌 [WebSocket] Intentando conectar...");
-            
-            // Obtener token del header Authorization
+        if (accessor == null) {
+            return message;
+        }
+        
+        StompCommand command = accessor.getCommand();
+        
+        // Manejar conexión (CONNECT)
+        if (StompCommand.CONNECT.equals(command)) {
+            return handleConnect(accessor, message);
+        }
+        
+        // Manejar suscripción (SUBSCRIBE)
+        if (StompCommand.SUBSCRIBE.equals(command)) {
+            return handleSubscribe(accessor, message);
+        }
+        
+        // Manejar desconexión (DISCONNECT)
+        if (StompCommand.DISCONNECT.equals(command)) {
+            return handleDisconnect(accessor, message);
+        }
+        
+        return message;
+    }
+    
+    private Message<?> handleConnect(StompHeaderAccessor accessor, Message<?> message) {
             String authHeader = accessor.getFirstNativeHeader("Authorization");
-            log.info("🔍 [WebSocket] Auth header: {}", authHeader != null ? "Presente" : "Ausente");
             
-            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.warn("⚠️ [WebSocket] Token de autenticación requerido");
+            throw new org.springframework.messaging.MessageDeliveryException("Token de autenticación requerido");
+        }
+        
                 String token = authHeader.substring(7);
                 
                 try {
-                    // Validar token JWT
-                    if (validateToken(token)) {
+            if (!validateToken(token)) {
+                log.warn("⚠️ [WebSocket] Token JWT inválido");
+                throw new org.springframework.messaging.MessageDeliveryException("Token JWT inválido");
+            }
+            
                         Claims claims = getClaimsFromToken(token);
-                        // Usar get("username") para consistencia con JwtRequestFilter
                         String username = claims.get("username", String.class);
                         if (username == null) {
-                            // Fallback a subject si username no está presente
                             username = claims.getSubject();
                         }
                         String role = claims.get("role", String.class);
                         Integer userIdInt = claims.get("userId", Integer.class);
                         String userId = userIdInt != null ? userIdInt.toString() : username;
                         
-                        // Crear autenticación
                         UsernamePasswordAuthenticationToken authentication = 
                             new UsernamePasswordAuthenticationToken(
                                 userId, 
@@ -68,29 +100,78 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                                 List.of(new SimpleGrantedAuthority("ROLE_" + role))
                             );
                         
-                        // Establecer en el contexto de seguridad
                         SecurityContextHolder.getContext().setAuthentication(authentication);
                         accessor.setUser(authentication);
                         
-                        log.info("🔐 [WebSocket] Usuario autenticado: {} con rol: {}", username, role);
-                        
-                    } else {
-                        log.warn("⚠️ [WebSocket] Token JWT inválido, rechazando conexión");
-                        throw new org.springframework.messaging.MessageDeliveryException("Token JWT inválido");
+            // Guardar módulos del usuario en la sesión
+            Long userIdLong = userIdInt != null ? userIdInt : (userId != null && userId.matches("\\d+") ? Long.parseLong(userId) : null);
+            if (userIdLong != null) {
+                try {
+                    List<ModuleResponse> userModules = moduleService.obtenerModulosPorUsuario(userIdLong);
+                    String sessionId = accessor.getSessionId();
+                    if (sessionId != null) {
+                        webSocketSessionService.saveUserModules(sessionId, userModules, userId);
+                        log.info("✅ [WebSocket] Usuario autenticado: {} (ID: {}) con rol: {} - Módulos: {}", 
+                            username, userId, role, userModules.size());
                     }
-                    
-                } catch (org.springframework.messaging.MessageDeliveryException e) {
-                    throw e; // Re-lanzar excepciones de entrega
                 } catch (Exception e) {
-                    log.warn("⚠️ [WebSocket] Error validando token: {}, rechazando conexión", e.getMessage());
-                    throw new org.springframework.messaging.MessageDeliveryException("Error validando token: " + e.getMessage());
+                    log.warn("⚠️ [WebSocket] Error obteniendo módulos del usuario {}: {}", userId, e.getMessage());
                 }
-            } else {
-                log.warn("⚠️ [WebSocket] No se proporcionó token de autenticación, rechazando conexión");
-                throw new org.springframework.messaging.MessageDeliveryException("Token de autenticación requerido");
             }
+            
+        } catch (org.springframework.messaging.MessageDeliveryException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("⚠️ [WebSocket] Error validando token: {}", e.getMessage());
+            throw new org.springframework.messaging.MessageDeliveryException("Error validando token: " + e.getMessage());
         }
         
+        return message;
+    }
+    
+    private Message<?> handleSubscribe(StompHeaderAccessor accessor, Message<?> message) {
+        String sessionId = accessor.getSessionId();
+        String destination = accessor.getDestination();
+        
+        if (sessionId == null || destination == null) {
+            return message;
+        }
+        
+        // Normalizar el topic
+        String normalizedTopic = destination.startsWith("/topic/") 
+            ? destination.substring(7) 
+            : destination.startsWith("topic/") 
+                ? destination.substring(6) 
+                : destination;
+        
+        // Topics del sistema siempre permitidos
+        if (normalizedTopic.startsWith("system") || normalizedTopic.startsWith("user/")) {
+            webSocketSessionService.addSubscription(sessionId, destination);
+            return message;
+        }
+        
+        // Verificar acceso para topics de módulos específicos
+        List<ModuleResponse> userModules = webSocketSessionService.getUserModules(sessionId);
+        String userId = webSocketSessionService.getUserId(sessionId);
+        
+        if (userModules == null || userModules.isEmpty() || 
+            !webSocketModuleMappingService.hasAccessToTopic(destination, userModules)) {
+            log.warn("🚫 [WebSocket] Suscripción bloqueada: sesión {} (usuario {}) → {}", 
+                sessionId, userId, destination);
+            return null;
+        }
+        
+        webSocketSessionService.addSubscription(sessionId, destination);
+        log.info("✅ [WebSocket] Suscripción permitida: sesión {} (usuario {}) → {}", sessionId, userId, destination);
+        return message;
+    }
+    
+    private Message<?> handleDisconnect(StompHeaderAccessor accessor, Message<?> message) {
+        String sessionId = accessor.getSessionId();
+        if (sessionId != null) {
+            webSocketSessionService.removeSession(sessionId);
+            log.info("🔌 [WebSocket] Sesión {} desconectada y limpiada", sessionId);
+        }
         return message;
     }
     

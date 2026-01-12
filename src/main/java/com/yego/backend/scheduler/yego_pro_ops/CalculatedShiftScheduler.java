@@ -5,6 +5,7 @@ import com.yego.backend.entity.yego_pro_ops.api.response.DriverKpiResponse;
 import com.yego.backend.handler.yego_pro_ops.FleetDriverNotificationHandler;
 import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.FleetDriverService;
+import com.yego.backend.service.yego_principal.WebSocketSessionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -24,6 +25,7 @@ public class CalculatedShiftScheduler {
     private final FleetDriverService fleetDriverService;
     private final CalculatedShiftService calculatedShiftService;
     private final FleetDriverNotificationHandler fleetDriverNotificationHandler;
+    private final WebSocketSessionService webSocketSessionService;
     
     private static final ZoneId ZONE_UTC_MINUS_5 = ZoneId.of("America/Lima");
     private final Map<String, LocalDateTime> primeraVezVistoActivoHoy = new ConcurrentHashMap<>();
@@ -99,6 +101,13 @@ public class CalculatedShiftScheduler {
      */
     @Scheduled(fixedDelay = 300000, initialDelay = 60000, zone = "America/Lima")
     public void actualizarTodosLosConductoresConViajes() {
+        // Verificar si hay usuarios con acceso al módulo pro-ops antes de procesar
+        Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("pro-ops");
+        if (sessionsWithAccess.isEmpty()) {
+            log.debug("⏭️ [CalculatedShiftScheduler] No hay usuarios con acceso a pro-ops - omitiendo procesamiento de conductores con viajes");
+            return;
+        }
+        
         LocalDateTime ahora = LocalDateTime.now(ZONE_UTC_MINUS_5);
         log.info("🚗 [CalculatedShiftScheduler] Actualizando datos de todos los conductores con viajes en vivo - {}", ahora);
         try {
@@ -126,6 +135,13 @@ public class CalculatedShiftScheduler {
      */
     @Scheduled(fixedDelay = 10000, initialDelay = 5000, zone = "America/Lima")
     public void actualizarConductoresEnOrden() {
+        // Verificar si hay usuarios con acceso al módulo pro-ops antes de procesar
+        Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("pro-ops");
+        if (sessionsWithAccess.isEmpty()) {
+            log.debug("⏭️ [CalculatedShiftScheduler] No hay usuarios con acceso a pro-ops - omitiendo actualización de conductores en orden");
+            return;
+        }
+        
         LocalDateTime ahora = LocalDateTime.now(ZONE_UTC_MINUS_5);
         log.debug("🚗 [CalculatedShiftScheduler] Actualizando conductores con status 'in_order' - {}", ahora);
         try {

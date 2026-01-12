@@ -17,7 +17,7 @@ import java.util.List;
  * Hub de comunicación en tiempo real para todos los microfrontends:
  * - /topic/ticketera/* - Eventos del microfrontend Ticketera
  * - /topic/okr/*       - Eventos del microfrontend OKR  
- * - /topic/marketing/* - Eventos del microfrontend Marketing
+ * - /topic/marketing/* - Eventos del microfrontend Marketingamar
  * - /topic/system/*    - Eventos globales del sistema
  */
 @Configuration
@@ -55,22 +55,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // Registrar interceptor de autenticación
         registration.interceptors(webSocketAuthInterceptor);
     }
+    
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         String[] allowedOrigins = ALLOWED_ORIGINS.toArray(new String[0]);
         
-        // Endpoint principal para WebSocket
+        // Endpoint único para WebSocket
         registry.addEndpoint("/ws")
-                .setAllowedOrigins(allowedOrigins)
-                .withSockJS();
-
-        // Endpoint específico para cada microfrontend
-        registry.addEndpoint("/ws/ticketera")
-                .setAllowedOrigins(allowedOrigins)
-                .withSockJS();
-
-        registry.addEndpoint("/ws/marketing")
                 .setAllowedOrigins(allowedOrigins)
                 .withSockJS();
     }

@@ -1,8 +1,8 @@
 package com.yego.backend.handler.yego_principal;
 
+import com.yego.backend.service.yego_principal.FilteredWebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -16,7 +16,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class UserNotificationHandler {
     
-    private final SimpMessagingTemplate messagingTemplate;
+    private final FilteredWebSocketService filteredWebSocketService;
     
     /**
      * Enviar notificación de logout forzado
@@ -33,7 +33,7 @@ public class UserNotificationHandler {
         );
         
         // Enviar SOLO al usuario específico afectado
-        messagingTemplate.convertAndSend("/topic/user/" + userId, notification);
+        filteredWebSocketService.convertAndSend("/topic/user/" + userId, notification);
         
         log.info("✅ [UserNotificationHandler] Notificación de logout forzado enviada para usuario: {}", username);
     }
@@ -54,7 +54,7 @@ public class UserNotificationHandler {
         );
         
         // Enviar SOLO al usuario específico afectado
-        messagingTemplate.convertAndSend("/topic/user/" + userId, notification);
+        filteredWebSocketService.convertAndSend("/topic/user/" + userId, notification);
         
         log.info("✅ [UserNotificationHandler] Notificación de bloqueo enviada para usuario: {}", username);
     }
@@ -77,7 +77,7 @@ public class UserNotificationHandler {
         );
         
         // Enviar SOLO al usuario específico afectado
-        messagingTemplate.convertAndSend("/topic/user/" + userId, notification);
+        filteredWebSocketService.convertAndSend("/topic/user/" + userId, notification);
         
         log.info("✅ [UserNotificationHandler] Notificación de desactivación de rol enviada para usuario: {}", username);
     }
@@ -98,7 +98,7 @@ public class UserNotificationHandler {
         );
         
         // Enviar al topic del sistema para que todas las sesiones refresquen
-        messagingTemplate.convertAndSend("/topic/system", notification);
+        filteredWebSocketService.convertAndSend("/topic/system", notification);
         
         log.info("✅ [UserNotificationHandler] Notificación de actualización de usuarios enviada: {}", action);
     }

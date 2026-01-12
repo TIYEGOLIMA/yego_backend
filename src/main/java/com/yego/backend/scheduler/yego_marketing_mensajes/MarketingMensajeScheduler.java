@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_marketing_mensajes.entities.MarketingMensaje;
 import com.yego.backend.repository.yego_marketing_mensajes.MarketingMensajeRepository;
 import com.yego.backend.service.WhatsAppService;
+import com.yego.backend.service.yego_principal.WebSocketSessionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -37,6 +38,7 @@ public class MarketingMensajeScheduler {
     private final WhatsAppService whatsAppService;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
+    private final WebSocketSessionService webSocketSessionService;
     
     // URL de la API de Yango
     private static final String YANGO_API_URL = "https://fleet.yango.com/api/fleet/communications/v2/mailings";
@@ -71,11 +73,13 @@ public class MarketingMensajeScheduler {
     public MarketingMensajeScheduler(MarketingMensajeRepository marketingMensajeRepository,
                                      WhatsAppService whatsAppService,
                                      ObjectMapper objectMapper,
-                                     RestTemplate restTemplate) {
+                                     RestTemplate restTemplate,
+                                     WebSocketSessionService webSocketSessionService) {
         this.marketingMensajeRepository = marketingMensajeRepository;
         this.whatsAppService = whatsAppService;
         this.objectMapper = objectMapper;
         this.restTemplate = restTemplate;
+        this.webSocketSessionService = webSocketSessionService;
     }
 
     /**
@@ -85,6 +89,13 @@ public class MarketingMensajeScheduler {
      */
     @Scheduled(fixedDelay = 300000, initialDelay = 60000) // 5 minutos = 300000 ms, inicia después de 1 minuto
     public void verificarYEnviarMensajesProgramados() {
+        // Verificar si hay usuarios con acceso al módulo marketing antes de ejecutar
+        Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("marketing");
+        if (sessionsWithAccess.isEmpty()) {
+            log.debug("⏭️ [MarketingMensajeScheduler] No hay usuarios con acceso a marketing - omitiendo verificación de mensajes programados");
+            return;
+        }
+        
         log.info("⏰ [MarketingMensajeScheduler] Scheduler ejecutándose - Verificando mensajes programados");
         try {
             LocalTime horaActual = LocalTime.now(java.time.ZoneId.of("America/Lima"));

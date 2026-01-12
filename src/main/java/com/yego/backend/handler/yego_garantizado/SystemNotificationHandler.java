@@ -1,9 +1,9 @@
 package com.yego.backend.handler.yego_garantizado;
 
 import com.yego.backend.entity.yego_garantizado.api.response.GarantizadoResponse;
+import com.yego.backend.service.yego_principal.FilteredWebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
@@ -18,7 +18,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SystemNotificationHandler {
 
-    private final SimpMessagingTemplate messagingTemplate;
+    private final FilteredWebSocketService filteredWebSocketService;
 
     /**
      * Envía notificación de estado del sistema a todos los clientes conectados
@@ -36,9 +36,9 @@ public class SystemNotificationHandler {
             );
             
             // Enviar a todos los tópicos del sistema
-            messagingTemplate.convertAndSend("/topic/system", notification);
-            messagingTemplate.convertAndSend("/topic/garantizado", notification);
-            messagingTemplate.convertAndSend("/topic/system-status", notification);
+            filteredWebSocketService.convertAndSend("/topic/system", notification);
+            filteredWebSocketService.convertAndSend("/topic/garantizado", notification);
+            filteredWebSocketService.convertAndSend("/topic/system-status", notification);
             
             log.info("📢 Notificación WebSocket enviada: {}", notification);
         } catch (Exception e) {
@@ -87,10 +87,10 @@ public class SystemNotificationHandler {
         );
 
         // Enviar al topic del sistema
-        messagingTemplate.convertAndSend("/topic/system", data);
+        filteredWebSocketService.convertAndSend("/topic/system", data);
 
         // Enviar a topic específico de garantizado
-        messagingTemplate.convertAndSend("/topic/garantizado", data);
+        filteredWebSocketService.convertAndSend("/topic/garantizado", data);
 
         log.info("✅ [SystemNotificationHandler] Datos completos de garantizado enviados - {} conductores", conductores.size());
     }
@@ -109,10 +109,10 @@ public class SystemNotificationHandler {
         );
         
         // Enviar a topic de garantizado
-        messagingTemplate.convertAndSend("/topic/garantizado", evento);
+        filteredWebSocketService.convertAndSend("/topic/garantizado", evento);
         
         // También enviar al topic del sistema
-        messagingTemplate.convertAndSend("/topic/system", evento);
+        filteredWebSocketService.convertAndSend("/topic/system", evento);
         
         log.info("✅ [SystemNotificationHandler] Estado del procesamiento enviado - Bloqueado: {}", bloqueado);
     }
@@ -127,7 +127,7 @@ public class SystemNotificationHandler {
             "timestamp", LocalDateTime.now().toString()
         );
         
-        messagingTemplate.convertAndSend("/topic/system", notification);
+        filteredWebSocketService.convertAndSend("/topic/system", notification);
         log.info("📤 [SystemNotificationHandler] Sistema: {}", event);
     }
 }

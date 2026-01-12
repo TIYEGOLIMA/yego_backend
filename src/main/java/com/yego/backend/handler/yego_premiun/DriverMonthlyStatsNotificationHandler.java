@@ -1,8 +1,8 @@
 package com.yego.backend.handler.yego_premiun;
 
+import com.yego.backend.service.yego_principal.FilteredWebSocketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -17,7 +17,7 @@ public class DriverMonthlyStatsNotificationHandler {
 
     private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
 
-    private final SimpMessagingTemplate messagingTemplate;
+    private final FilteredWebSocketService filteredWebSocketService;
 
     public void notifyProcessAvailable(YearMonth period) {
         try {
@@ -29,8 +29,8 @@ public class DriverMonthlyStatsNotificationHandler {
                     "timestamp", LocalDateTime.now().format(TIMESTAMP_FORMATTER)
             );
 
-            messagingTemplate.convertAndSend("/topic/yego-premiun", payload);
-            messagingTemplate.convertAndSend("/topic/premium-driver", payload);
+            filteredWebSocketService.convertAndSend("/topic/yego-premiun", payload);
+            filteredWebSocketService.convertAndSend("/topic/premium-driver", payload);
 
             log.info("📢 [DriverMonthlyStatsNotification] Notificación enviada: {}", payload);
         } catch (Exception ex) {

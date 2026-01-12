@@ -7,8 +7,8 @@ import com.yego.backend.entity.yego_ticketerera.api.response.TicketWebSocketResp
 import com.yego.backend.repository.yego_ticketerera.OptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.yego.backend.service.yego_principal.FilteredWebSocketService;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -21,7 +21,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class TicketNotificationHandler {
     
-    private final SimpMessagingTemplate messagingTemplate;
+    private final FilteredWebSocketService filteredWebSocketService;
     private final OptionRepository optionRepository;
     private final JdbcTemplate jdbcTemplate;
     
@@ -34,8 +34,8 @@ public class TicketNotificationHandler {
         // Obtener información completa del ticket
         TicketWebSocketResponse ticketCompleto = obtenerInformacionCompletaTicket(ticket);
         
-        messagingTemplate.convertAndSend("/topic/tickets", ticketCompleto);
-        messagingTemplate.convertAndSend("/topic/new-ticket", ticketCompleto);
+        filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
+        filteredWebSocketService.convertAndSend("/topic/new-ticket", ticketCompleto);
     }
     
     /**
@@ -43,8 +43,8 @@ public class TicketNotificationHandler {
      */
     public void enviarTicketLlamado(TicketWithCategoryResponse ticketCompleto) {
         log.info("📤 [TicketNotificationHandler] Enviando ticket llamado por WebSocket: {}", ticketCompleto.getTicketNumber());
-        messagingTemplate.convertAndSend("/topic/tickets", ticketCompleto);
-        messagingTemplate.convertAndSend("/topic/ticket-called", ticketCompleto);
+        filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
+        filteredWebSocketService.convertAndSend("/topic/ticket-called", ticketCompleto);
     }
     
     /**
@@ -52,8 +52,8 @@ public class TicketNotificationHandler {
      */
     public void enviarTicketIniciado(TicketWithCategoryResponse ticketCompleto) {
         log.info("📤 [TicketNotificationHandler] Enviando ticket iniciado por WebSocket: {}", ticketCompleto.getTicketNumber());
-        messagingTemplate.convertAndSend("/topic/tickets", ticketCompleto);
-        messagingTemplate.convertAndSend("/topic/ticket-started", ticketCompleto);
+        filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
+        filteredWebSocketService.convertAndSend("/topic/ticket-started", ticketCompleto);
     }
     
     /**
@@ -61,8 +61,8 @@ public class TicketNotificationHandler {
      */
     public void enviarTicketCompletado(TicketWithCategoryResponse ticketCompleto) {
         log.info("📤 [TicketNotificationHandler] Enviando ticket completado por WebSocket: {}", ticketCompleto.getTicketNumber());
-        messagingTemplate.convertAndSend("/topic/tickets", ticketCompleto);
-        messagingTemplate.convertAndSend("/topic/ticket-completed", ticketCompleto);
+        filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
+        filteredWebSocketService.convertAndSend("/topic/ticket-completed", ticketCompleto);
     }
     
     /**
@@ -70,8 +70,8 @@ public class TicketNotificationHandler {
      */
     public void enviarTicketCancelado(Ticket ticket) {
         log.info("📤 [TicketNotificationHandler] Enviando ticket cancelado por WebSocket: {}", ticket.getTicketNumber());
-        messagingTemplate.convertAndSend("/topic/tickets", ticket);
-        messagingTemplate.convertAndSend("/topic/ticket-cancelled", ticket);
+        filteredWebSocketService.convertAndSend("/topic/tickets", ticket);
+        filteredWebSocketService.convertAndSend("/topic/ticket-cancelled", ticket);
     }
     
     /**
@@ -84,7 +84,7 @@ public class TicketNotificationHandler {
             "timestamp", java.time.LocalDateTime.now().toString()
         );
         
-        messagingTemplate.convertAndSend("/topic/ticketera", notification);
+        filteredWebSocketService.convertAndSend("/topic/ticketera", notification);
         log.info("📤 [TicketNotificationHandler] Ticketera: {} - Enviado a /topic/ticketera", event);
     }
     
@@ -99,11 +99,18 @@ public class TicketNotificationHandler {
             notification.put("modulosOcupados", modulosEstado.getModulosOcupados());
             notification.put("timestamp", java.time.LocalDateTime.now().toString());
             
-            messagingTemplate.convertAndSend("/topic/ticketera", notification);
-            messagingTemplate.convertAndSend("/topic/modulos-atencion", notification);
-            log.info("📤 [TicketNotificationHandler] Lista de módulos actualizada enviada por WebSocket - Disponibles: {}, Ocupados: {}", 
+            log.info("📤 [TicketNotificationHandler] Enviando módulos actualizados - Disponibles: {}, Ocupados: {}", 
                 modulosEstado.getModulosDisponibles().size(), 
                 modulosEstado.getModulosOcupados().size());
+            log.debug("📦 [TicketNotificationHandler] Contenido del mensaje: type={}, modulosDisponibles={}, modulosOcupados={}", 
+                notification.get("type"), 
+                modulosEstado.getModulosDisponibles().size(), 
+                modulosEstado.getModulosOcupados().size());
+            
+            // Enviar a /topic/modulos-atencion - esto afecta a TODOS los usuarios en sesión con acceso a "tickets"
+            filteredWebSocketService.convertAndSend("/topic/modulos-atencion", notification);
+            
+            log.info("✅ [TicketNotificationHandler] Notificación WebSocket enviada correctamente a /topic/modulos-atencion");
         } catch (Exception e) {
             log.error("❌ [TicketNotificationHandler] Error enviando módulos actualizados por WebSocket: {}", e.getMessage(), e);
         }

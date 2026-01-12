@@ -523,8 +523,8 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                     driverIdsInOrder.add(driverId);
                     if (item.has("balance") && !item.get("balance").isNull()) {
                         balanceMap.put(driverId, item.get("balance").asDouble());
-                    }
                 }
+            }
             }
             
             if (driverIdsInOrder.isEmpty()) {
@@ -629,7 +629,7 @@ public class FleetDriverServiceImpl implements FleetDriverService {
             JsonNode items = null;
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+            JsonNode jsonResponse = objectMapper.readTree(response.getBody());
                 items = jsonResponse.get("items");
             } else {
                 driversListSuccess = false;
@@ -737,7 +737,7 @@ public class FleetDriverServiceImpl implements FleetDriverService {
                             .totalActivityTime(totalActivityTime)
                             .completedTripsCount(tripsCount)
                             .completedTripsTotalPrice(tripsTotalPrice)
-                            .build();
+                    .build();
                     }, executorService);
                 
                 futures.add(future);

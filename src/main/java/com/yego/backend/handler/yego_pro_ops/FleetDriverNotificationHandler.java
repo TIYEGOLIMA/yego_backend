@@ -5,23 +5,33 @@ import com.yego.backend.entity.yego_pro_ops.api.response.DriverKpiResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
+import com.yego.backend.service.yego_principal.FilteredWebSocketService;
+import com.yego.backend.service.yego_principal.WebSocketSessionService;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class FleetDriverNotificationHandler {
     
-    private final SimpMessagingTemplate messagingTemplate;
+    private final FilteredWebSocketService filteredWebSocketService;
+    private final WebSocketSessionService webSocketSessionService;
     
     public void enviarKpisActualizados(DriverKpiResponse kpis) {
         try {
-            messagingTemplate.convertAndSend("/topic/pro-ops/kpis", kpis);
+            // Verificar si hay usuarios con acceso al módulo pro-ops antes de enviar
+            Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("pro-ops");
+            if (sessionsWithAccess.isEmpty()) {
+                log.debug("⏭️ [FleetDriverNotificationHandler] No hay usuarios con acceso a pro-ops - omitiendo envío de KPIs");
+                return;
+            }
+            
+            filteredWebSocketService.convertAndSend("/topic/pro-ops/kpis", kpis);
             log.debug("📤 KPIs enviados por WebSocket: viajeActivo={}, noDisponibles={}, disponibles={}, sinGPS={}", 
                 kpis.getViajeActivo(), kpis.getNoDisponibles(), kpis.getDisponibles(), kpis.getSinGPS());
         } catch (Exception e) {
@@ -35,6 +45,13 @@ public class FleetDriverNotificationHandler {
      */
     public void enviarConductoresConViajes(AllDriversOrdersResponse response) {
         try {
+            // Verificar si hay usuarios con acceso al módulo pro-ops antes de enviar
+            Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("pro-ops");
+            if (sessionsWithAccess.isEmpty()) {
+                log.debug("⏭️ [FleetDriverNotificationHandler] No hay usuarios con acceso a pro-ops - omitiendo envío de conductores con viajes");
+                return;
+            }
+            
             log.info("🚗 [FleetDriverNotificationHandler] Enviando datos de conductores con viajes - {} conductores para fecha {}", 
                 response.getTotalConductores(), response.getFecha());
             
@@ -46,10 +63,10 @@ public class FleetDriverNotificationHandler {
             data.put("timestamp", LocalDateTime.now().toString());
             
             // Enviar a topic específico de pro-ops conductores con viajes
-            messagingTemplate.convertAndSend("/topic/pro-ops/conductores-viajes", data);
+            filteredWebSocketService.convertAndSend("/topic/pro-ops/conductores-viajes", data);
             
             // También enviar al topic general del sistema
-            messagingTemplate.convertAndSend("/topic/system", data);
+            filteredWebSocketService.convertAndSend("/topic/system", data);
             
             log.info("✅ [FleetDriverNotificationHandler] Datos de conductores con viajes enviados por WebSocket - {} conductores", 
                 response.getTotalConductores());
@@ -64,6 +81,13 @@ public class FleetDriverNotificationHandler {
      */
     public void enviarConductoresEnOrden(DriversInOrderResponse response) {
         try {
+            // Verificar si hay usuarios con acceso al módulo pro-ops antes de enviar
+            Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("pro-ops");
+            if (sessionsWithAccess.isEmpty()) {
+                log.debug("⏭️ [FleetDriverNotificationHandler] No hay usuarios con acceso a pro-ops - omitiendo envío de conductores en orden");
+                return;
+            }
+            
             log.debug("🚗 [FleetDriverNotificationHandler] Enviando conductores en orden - {} conductores", response.getTotal());
             
             Map<String, Object> data = new HashMap<>();
@@ -73,7 +97,7 @@ public class FleetDriverNotificationHandler {
             data.put("timestamp", LocalDateTime.now().toString());
             
             // Enviar a topic específico de conductores en orden
-            messagingTemplate.convertAndSend("/topic/pro-ops/conductores-en-orden", data);
+            filteredWebSocketService.convertAndSend("/topic/pro-ops/conductores-en-orden", data);
             
             log.debug("✅ [FleetDriverNotificationHandler] Conductores en orden enviados por WebSocket - {} conductores", response.getTotal());
         } catch (Exception e) {
