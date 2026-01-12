@@ -135,7 +135,6 @@ public class CalculatedShiftScheduler {
      */
     @Scheduled(fixedDelay = 10000, initialDelay = 5000, zone = "America/Lima")
     public void actualizarConductoresEnOrden() {
-        // Verificar si hay usuarios con acceso al módulo pro-ops antes de procesar
         Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("pro-ops");
         if (sessionsWithAccess.isEmpty()) {
             log.debug("⏭️ [CalculatedShiftScheduler] No hay usuarios con acceso a pro-ops - omitiendo actualización de conductores en orden");
