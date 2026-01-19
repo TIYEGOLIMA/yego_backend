@@ -37,7 +37,7 @@ public class CalculatedShiftScheduler {
      * - Omite conductores que ya tienen turnos manuales registrados
      * - Incluye delay entre conductores para evitar saturar la API
      */
-    @Scheduled(cron = "0 0 9 * * *", zone = "America/Lima")
+    @Scheduled(cron = "0 10 8 * * *", zone = "America/Lima")
     public void calcularHorasTurnoDiaAnterior() {
         LocalDateTime ahora = LocalDateTime.now(ZONE_UTC_MINUS_5);
         LocalDate fechaAnterior = ahora.toLocalDate().minusDays(1);
