@@ -14,32 +14,16 @@ import java.util.Optional;
 @Repository
 public interface CalculatedShiftRepository extends JpaRepository<CalculatedShift, Long> {
 
+    /**
+     * 🔧 USO INTERNO: CalculatedShiftService
+     * Obtiene todos los CalculatedShift de un driver para una fecha específica
+     */
     List<CalculatedShift> findByDriverIdAndFecha(String driverId, LocalDate fecha);
-
-    List<CalculatedShift> findByDriverIdAndFechaAndEstado(String driverId, LocalDate fecha, CalculatedShift.EstadoTurno estado);
-
-    @Query("SELECT c FROM CalculatedShift c WHERE c.driverId = :driverId AND c.estado = :estado AND c.horaFin IS NULL")
-    List<CalculatedShift> findActiveShiftsByDriverId(@Param("driverId") String driverId, @Param("estado") CalculatedShift.EstadoTurno estado);
-
-    @Query("SELECT c FROM CalculatedShift c WHERE c.driverId = :driverId AND c.fecha = :fecha AND c.horaInicio = :horaInicio")
-    Optional<CalculatedShift> findByDriverIdAndFechaAndHoraInicio(
-        @Param("driverId") String driverId,
-        @Param("fecha") LocalDate fecha,
-        @Param("horaInicio") LocalDateTime horaInicio
-    );
     
-    @Query("SELECT c FROM CalculatedShift c WHERE c.estado = :estado AND c.horaFin IS NULL AND c.fecha = :fecha")
-    List<CalculatedShift> findActiveShiftsByFecha(
-        @Param("estado") CalculatedShift.EstadoTurno estado,
-        @Param("fecha") LocalDate fecha
-    );
-    
-    @Query("SELECT c FROM CalculatedShift c WHERE c.driverId = :driverId AND c.fecha = :fecha AND c.horaFin IS NULL")
-    List<CalculatedShift> findActiveShiftsByDriverIdAndFecha(
-        @Param("driverId") String driverId,
-        @Param("fecha") LocalDate fecha
-    );
-    
+    /**
+     * 🔧 USO INTERNO: CalculatedShiftService
+     * Obtiene turnos manuales de un driver para una fecha específica
+     */
     @Query("SELECT c FROM CalculatedShift c WHERE c.driverId = :driverId AND c.fecha = :fecha AND c.esManual = true")
     List<CalculatedShift> findByDriverIdAndFechaAndEsManual(
         @Param("driverId") String driverId,
@@ -47,12 +31,47 @@ public interface CalculatedShiftRepository extends JpaRepository<CalculatedShift
     );
     
     /**
+     * 📋 VISTA: DetalleView
      * Obtiene todos los CalculatedShift de un driver agrupados por fecha
      * @param driverId ID del conductor
      * @return Lista de CalculatedShift ordenados por fecha
      */
     @Query("SELECT c FROM CalculatedShift c WHERE c.driverId = :driverId ORDER BY c.fecha ASC")
     List<CalculatedShift> findByDriverIdOrderByFecha(@Param("driverId") String driverId);
+    
+    /**
+     * 📋 VISTA: Resumen de Pagos
+     * Obtiene todos los CalculatedShift agrupados por driver_id
+     * @return Lista de CalculatedShift ordenados por driver_id y fecha
+     */
+    @Query("SELECT c FROM CalculatedShift c ORDER BY c.driverId ASC, c.fecha ASC")
+    List<CalculatedShift> findAllOrderByDriverIdAndFecha();
+    
+    /**
+     * 📋 VISTA: Resumen de Pagos
+     * Obtiene todos los CalculatedShift de una fecha específica agrupados por driver_id
+     * @param fecha Fecha para filtrar los turnos
+     * @return Lista de CalculatedShift ordenados por driver_id
+     */
+    @Query("SELECT c FROM CalculatedShift c WHERE c.fecha = :fecha ORDER BY c.driverId ASC")
+    List<CalculatedShift> findByFechaOrderByDriverId(@Param("fecha") LocalDate fecha);
+    
+    /**
+     * 💰 VISTA: Lista de Turnos Pagados
+     * Obtiene todos los CalculatedShift pagados (pagado = true)
+     * @return Lista de CalculatedShift pagados ordenados por driver_id y fecha
+     */
+    @Query("SELECT c FROM CalculatedShift c WHERE c.pagado = true ORDER BY c.driverId ASC, c.fecha ASC")
+    List<CalculatedShift> findByPagadoTrue();
+    
+    /**
+     * 💰 VISTA: Lista de Turnos Pagados
+     * Obtiene todos los CalculatedShift pagados (pagado = true) para una fecha específica
+     * @param fecha Fecha para filtrar los turnos pagados
+     * @return Lista de CalculatedShift pagados ordenados por driver_id y fecha
+     */
+    @Query("SELECT c FROM CalculatedShift c WHERE c.pagado = true AND c.fecha = :fecha ORDER BY c.driverId ASC, c.fecha ASC")
+    List<CalculatedShift> findByPagadoTrueAndFecha(@Param("fecha") LocalDate fecha);
     
 }
 

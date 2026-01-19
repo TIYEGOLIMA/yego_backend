@@ -1,16 +1,15 @@
 package com.yego.backend.controller.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverCloseRequest;
-import com.yego.backend.entity.yego_pro_ops.api.request.DriverOrdersRequest;
 import com.yego.backend.entity.yego_pro_ops.api.request.MultipleDriversTripsRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverCloseResponse;
-import com.yego.backend.entity.yego_pro_ops.api.response.DriverKpiResponse;
-import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.DriverPaymentSummaryResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.DriverTripsSimplifiedResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.PaidShiftsResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.MultipleDriversTripsSimplifiedResponse;
-import com.yego.backend.entity.yego_pro_ops.api.response.WorkRulesResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
 import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
@@ -19,11 +18,14 @@ import com.yego.backend.service.yego_pro_ops.FleetDriverService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
@@ -38,33 +40,8 @@ public class FleetDriverController {
     private final DriverCloseService driverCloseService;
     private final CalculatedShiftService calculatedShiftService;
     
-    @GetMapping("/kpis")
-    public ResponseEntity<DriverKpiResponse> obtenerKpis() {
-        return ResponseEntity.ok(fleetDriverService.obtenerKpisActuales());
-    }
-
     /**
-     * Obtiene la lista completa de conductores usando la API de contractors de Yango
-     * @param workRuleIds Lista opcional de IDs de reglas de trabajo para filtrar conductores
-     * @return Lista de conductores con información detallada
-     */
-    @GetMapping("/drivers")
-    public ResponseEntity<DriverListResponse> obtenerListaConductores(
-            @RequestParam(required = false) List<String> work_rule_ids) {
-        log.info("📋 [FleetDriverController] Obteniendo lista de conductores - work_rule_ids: {}", work_rule_ids);
-        DriverListResponse response = fleetDriverService.obtenerListaConductores(work_rule_ids);
-        log.info("✅ [FleetDriverController] Lista de conductores obtenida: {} conductores", 
-            response.getContractors() != null ? response.getContractors().size() : 0);
-        return ResponseEntity.ok(response);
-    }
-    
-    @PostMapping("/driver/orders")
-    public ResponseEntity<DriverOrdersResponse> obtenerOrdenesDelDia(@Valid @RequestBody DriverOrdersRequest request) {
-        log.info("📋 [FleetDriverController] Obteniendo órdenes para driver_id: {}", request.getDriverId());
-        return ResponseEntity.ok(driverOrdersService.obtenerOrdenesDelDia(request));
-    }
-    
-    /**
+     * 📋 VISTA: DetalleView
      * Obtiene solo los viajes completos con atributos específicos (distancia, efectivo, tarjeta, precio)
      * O devuelve el cierre de caja si ya existe un registro para esa fecha
      * Soporta paginación mediante cursor para cargar más resultados
@@ -92,32 +69,9 @@ public class FleetDriverController {
     }
     
     /**
-     * Obtiene TODOS los viajes (completos y cancelados) sin filtrar por status
-     * Útil para cálculos de turnos donde se necesitan todos los viajes para determinar hora de inicio y fin
-     * @param driverId ID del conductor
-     * @param dateFrom Fecha inicial (formato: "2025-12-10T00:00:00-05:00")
-     * @param dateTo Fecha final (formato: "2025-12-10T23:59:59-05:00")
-     * @param cursor Cursor opcional para paginación (obtenido de la respuesta anterior)
-     * @return Respuesta con lista de TODOS los viajes (sin filtrar por status)
-     */
-    @GetMapping("/driver/viajes-todos")
-    public ResponseEntity<DriverOrdersResponse> obtenerTodosLosViajes(
-            @RequestParam String driverId,
-            @RequestParam(required = false) String dateFrom,
-            @RequestParam(required = false) String dateTo,
-            @RequestParam(required = false) String cursor) {
-        log.info("🚗 [FleetDriverController] Obteniendo TODOS los viajes (sin filtro) para driver_id: {}, desde: {}, hasta: {}, cursor: {}", 
-            driverId, dateFrom, dateTo, cursor != null ? "presente" : "no presente");
-        
-        DriverOrdersResponse response = driverOrdersService.obtenerTodosLosViajes(driverId, dateFrom, dateTo, cursor);
-        log.info("✅ [FleetDriverController] Total de viajes devueltos: {}, hasMore: {}", 
-            response.getOrders().size(), response.getHasMore());
-        
-        return ResponseEntity.ok(response);
-    }
-
-    /**
+     * 🔧 USO INTERNO: WebSocket (FleetDriverNotificationHandler)
      * Obtiene viajes simplificados para múltiples conductores en una sola llamada
+     * Se usa para enviar datos por WebSocket, NO directamente desde las vistas del frontend
      * @param request Request con driver_ids, date_from y date_to
      * @return Respuesta con viajes agrupados por conductor
      */
@@ -136,6 +90,33 @@ public class FleetDriverController {
     }
 
     /**
+     * 🚗 VISTA: MonitoreoEnVivoView
+     * Obtiene viajes simplificados para un conductor en una fecha específica
+     * Solo requiere driver_id y fecha (formato: YYYY-MM-DD)
+     * Calcula automáticamente el rango del día (00:00:00 a 23:59:59) en zona horaria de Lima
+     * Usado para mostrar viajes de "Ayer" en el modal de la vista de monitoreo
+     * @param driverId ID del conductor
+     * @param fecha Fecha en formato "YYYY-MM-DD" (ej: "2025-12-10")
+     * @return Respuesta con viajes simplificados del conductor
+     */
+    @GetMapping("/driver/viajes-simplificados-por-fecha")
+    public ResponseEntity<DriverTripsSimplifiedResponse> obtenerViajesSimplificadosPorFecha(
+            @RequestParam String driverId,
+            @RequestParam String fecha) {
+        long startTime = System.currentTimeMillis();
+        log.info("🚗 [FleetDriverController] Obteniendo viajes simplificados para driver_id: {}, fecha: {}", driverId, fecha);
+        
+        DriverTripsSimplifiedResponse response = driverOrdersService.obtenerViajesSimplificadosPorFecha(driverId, fecha);
+        
+        long totalTime = System.currentTimeMillis() - startTime;
+        log.info("✅ [FleetDriverController] Viajes simplificados obtenidos: {} viajes - Tiempo total: {} ms ({:.2f} seg)", 
+            response.getTrips() != null ? response.getTrips().size() : 0, totalTime, String.format("%.2f", totalTime / 1000.0));
+        
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 📋 VISTA: DetalleView
      * Registra un cierre de caja para un conductor en una fecha específica
      * @param request Datos del cierre (driverId, fecha, userId opcional, gastos, ingresos, etc.)
      * @return Cierre registrado
@@ -152,29 +133,33 @@ public class FleetDriverController {
     }
 
     /**
+     * 📋 VISTA: DetalleView
      * Obtiene un cierre de caja existente por driver_id y fecha
      * @param driverId ID del conductor
      * @param fecha Fecha del cierre (formato: "2025-12-14")
      * @return Cierre encontrado o 404 si no existe
      */
     @GetMapping("/driver/cierre")
-    public ResponseEntity<DriverCloseResponse> obtenerCierre(
+    public ResponseEntity<?> obtenerCierre(
             @RequestParam String driverId,
             @RequestParam String fecha) {
         log.info("🔍 [FleetDriverController] Buscando cierre para driver_id: {}, fecha: {}", driverId, fecha);
-        return driverCloseService.obtenerCierrePorDriverIdYFecha(driverId, fecha)
-            .map(response -> {
-                log.info("✅ [FleetDriverController] Cierre encontrado con ID: {}", response.getId());
-                return ResponseEntity.ok(response);
-            })
-            .orElseGet(() -> {
-                log.info("ℹ️ [FleetDriverController] No se encontró cierre para driver_id: {} y fecha: {}", driverId, fecha);
-                return ResponseEntity.notFound().build();
-            });
+        Optional<DriverCloseResponse> cierreOpt = driverCloseService.obtenerCierrePorDriverIdYFecha(driverId, fecha);
+        
+        if (cierreOpt.isPresent()) {
+            DriverCloseResponse response = cierreOpt.get();
+            log.info("✅ [FleetDriverController] Cierre encontrado con ID: {}", response.getId());
+            return ResponseEntity.ok(response);
+        } else {
+            log.info("ℹ️ [FleetDriverController] No se encontró cierre para driver_id: {} y fecha: {}", driverId, fecha);
+            Map<String, String> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Cierre no encontrado");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+        }
     }
 
     /**
-     * listo
+     * 📋 VISTA: DetalleView
      * Actualiza un cierre de caja existente para un conductor en una fecha específica
      * @param request Datos del cierre actualizados (driverId, fecha, userId opcional, gastos, ingresos, etc.)
      * @return Cierre actualizado
@@ -196,22 +181,10 @@ public class FleetDriverController {
     }
 
     /**
-     *listo
-     * Obtiene la lista de reglas de trabajo (work rules) desde la API de Yango
-     * @return Lista de reglas de trabajo con información básica
-     */
-    @GetMapping("/work-rules")
-    public ResponseEntity<WorkRulesResponse> obtenerReglasTrabajo() {
-        log.info("📋 [FleetDriverController] Obteniendo reglas de trabajo");
-        WorkRulesResponse response = fleetDriverService.obtenerReglasTrabajo();
-        return ResponseEntity.ok(response);
-    }
-    
-    /**
-     * listo
-     * Obtiene todos los conductores con status "in_order" y sus detalles
-     * Incluye: avatar_url, balance, first_name, last_name, id, status, route, vehicle_number
-     * El scheduler actualiza estos datos cada 10 segundos y los envía por WebSocket
+     * 🚗 VISTA: MonitoreoEnVivoView
+     * Obtiene todos los conductores con status "in_order" y "free" con sus detalles
+     * Incluye: avatar_url, balance, first_name, last_name, id, status, vehicle_number, viajes del día
+     * El scheduler actualiza estos datos cada 5 minutos y los envía por WebSocket
      * @param page Número de página (default: 0, primera página)
      * @param limit Cantidad de conductores por página (default: 4)
      * @return Respuesta con lista de conductores en orden y sus detalles
@@ -220,14 +193,19 @@ public class FleetDriverController {
     public ResponseEntity<DriversInOrderResponse> obtenerConductoresEnOrden(
             @RequestParam(defaultValue = "0") Integer page,
             @RequestParam(defaultValue = "4") Integer limit) {
+        long startTime = System.currentTimeMillis();
         log.info("🚗 [FleetDriverController] Obteniendo conductores con status 'in_order' - page: {}, limit: {}", page, limit);
+        
         DriversInOrderResponse response = fleetDriverService.obtenerConductoresEnOrden(page, limit);
-        log.info("✅ [FleetDriverController] Se encontraron {} conductores en orden (página {})", response.getTotal(), page);
+        
+        long totalTime = System.currentTimeMillis() - startTime;
+        log.info("✅ [FleetDriverController] Se encontraron {} conductores en orden (página {}) - Tiempo total: {} ms ({:.2f} seg)", 
+            response.getTotal(), page, totalTime, String.format("%.2f", totalTime / 1000.0));
         return ResponseEntity.ok(response);
     }
 
     /**
-     * listo
+     * 📋 VISTA: DetalleView
      * Obtiene las fechas únicas con sus tipos de turno para un conductor
      * Las fechas no se repiten y pueden tener uno o dos tipos de turno (diurno, nocturno)
      * @param driverId ID del conductor
@@ -240,6 +218,46 @@ public class FleetDriverController {
         FechasConTiposTurnoResponse response = calculatedShiftService.obtenerFechasConTiposTurno(driverId);
         log.info("✅ [FleetDriverController] Se encontraron {} fechas únicas para driver_id: {}", 
                 response.getFechas().size(), driverId);
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 💰 VISTA: Resumen de Pagos
+     * Obtiene el resumen de pagos de todos los conductores con:
+     * - driver_id
+     * - avatar_url
+     * - nombre
+     * - telefono
+     * - monto_total_pagar (suma de monto_total de turnos no pagados)
+     * - cantidad_turnos
+     * - lista de turnos con sus detalles
+     * @param fecha Fecha para filtrar los turnos (formato: "YYYY-MM-DD", ejemplo: "2026-01-15")
+     * @return Respuesta con lista de conductores y sus turnos de la fecha especificada
+     */
+    @GetMapping("/drivers/resumen-pagos")
+    public ResponseEntity<DriverPaymentSummaryResponse> obtenerResumenPagos(
+            @RequestParam String fecha) {
+        log.info("💰 [FleetDriverController] Obteniendo resumen de pagos de todos los conductores para fecha: {}", fecha);
+        DriverPaymentSummaryResponse response = calculatedShiftService.obtenerResumenPagos(fecha);
+        log.info("✅ [FleetDriverController] Resumen de pagos obtenido para {} conductores en fecha {}", 
+                response.getConductores() != null ? response.getConductores().size() : 0, fecha);
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * 💰 VISTA: Lista de Turnos Pagados
+     * Obtiene todos los turnos que ya están pagados (pagado = true)
+     * @param fecha Fecha opcional para filtrar los turnos pagados (formato: "YYYY-MM-DD", null para todos)
+     * @return Respuesta con lista de turnos pagados y el total
+     */
+    @GetMapping("/drivers/turnos-pagados")
+    public ResponseEntity<PaidShiftsResponse> obtenerTurnosPagados(
+            @RequestParam(required = false) String fecha) {
+        log.info("💰 [FleetDriverController] Obteniendo turnos pagados{}", 
+            fecha != null ? " para fecha: " + fecha : "");
+        PaidShiftsResponse response = calculatedShiftService.obtenerTurnosPagados(fecha);
+        log.info("✅ [FleetDriverController] Se encontraron {} conductores con turnos pagados{}", 
+                response.getTotalConductores(), fecha != null ? " para fecha: " + fecha : "");
         return ResponseEntity.ok(response);
     }
 }

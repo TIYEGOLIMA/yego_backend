@@ -48,7 +48,14 @@ public class CalculatedShift {
 
     @Column(name = "duracion_minutos")
     private Integer duracionMinutos;
-
+    
+    @Column(name = "monto_total")
+    private Double montoTotal; // Cantidad total que hizo el conductor en ese turno (suma de precios de viajes)
+    
+    @Column(name = "pagado", nullable = false)
+    @Builder.Default
+    private Boolean pagado = false; // Indica si ya se le pagó al conductor
+    
     @Column(name = "es_manual", nullable = false)
     @Builder.Default
     private Boolean esManual = false;

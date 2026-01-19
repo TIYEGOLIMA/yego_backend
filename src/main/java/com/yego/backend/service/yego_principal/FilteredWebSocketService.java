@@ -42,7 +42,7 @@ public class FilteredWebSocketService {
         // Topics del sistema siempre se envían
         if (normalizedTopic.startsWith("system") || normalizedTopic.startsWith("user/")) {
             messagingTemplate.convertAndSend(destination, payload);
-            log.info("📤 [FilteredWebSocket] Mensaje enviado a topic de sistema: {}", destination);
+            log.debug("📤 [FilteredWebSocket] Mensaje enviado a topic de sistema: {}", destination);
             return;
         }
         
@@ -68,7 +68,7 @@ public class FilteredWebSocketService {
             }
             messagingTemplate.convertAndSend("/topic/system", systemPayload);
             
-            log.info("📤 [FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'tickets': {}", 
+            log.debug("📤 [FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'tickets': {}", 
                 destination, sessionsWithAccess.size(), sessionsWithAccess);
             return;
         }
@@ -93,7 +93,7 @@ public class FilteredWebSocketService {
             }
             messagingTemplate.convertAndSend("/topic/system", systemPayload);
             
-            log.info("📤 [FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'garantizado': {}", 
+            log.debug("📤 [FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'garantizado': {}", 
                 destination, sessionsWithAccess.size(), sessionsWithAccess);
             return;
         }
@@ -118,7 +118,7 @@ public class FilteredWebSocketService {
             }
             messagingTemplate.convertAndSend("/topic/system", systemPayload);
             
-            log.info("📤 [FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'pro-ops': {}", 
+            log.debug("📤 [FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'pro-ops': {}", 
                 destination, sessionsWithAccess.size(), sessionsWithAccess);
             return;
         }
@@ -134,7 +134,7 @@ public class FilteredWebSocketService {
         // Enviar mensaje - solo usuarios con acceso están suscritos
         // Con SimpleBroker, convertAndSend envía a todas las sesiones suscritas al topic
         messagingTemplate.convertAndSend(destination, payload);
-        log.info("📤 [FilteredWebSocket] Mensaje enviado a topic {} - {} sesiones suscritas: {}", 
+        log.debug("📤 [FilteredWebSocket] Mensaje enviado a topic {} - {} sesiones suscritas: {}", 
             destination, subscribedSessions.size(), subscribedSessions);
     }
 }

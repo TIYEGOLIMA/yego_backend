@@ -37,20 +37,11 @@ public class DriverTripsSimplifiedResponse {
         @JsonProperty("id")
         private String id;
         
-        @JsonProperty("driver_id")
-        private String driverId;
-        
-        @JsonProperty("driver_full_name")
-        private String driverFullName;
-        
         @JsonProperty("ended_at")
         private String endedAt;
         
         @JsonProperty("booked_at")
         private String bookedAt;
-        
-        @JsonProperty("car_brand_model")
-        private String carBrandModel;
     }
 }
 

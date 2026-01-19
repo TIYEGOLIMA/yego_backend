@@ -46,12 +46,15 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
                                     FilterChain chain) throws ServletException, IOException {
         
-        // Ignorar rutas de SockJS (handshake de WebSocket)
-        // Estas rutas no requieren token JWT, la autenticación se hace después en STOMP CONNECT
-        String requestUri = request.getRequestURI();
-        if (requestUri != null && isSockJsRoute(requestUri)) {
-            chain.doFilter(request, response);
-            return;
+        // En desarrollo: ignorar rutas de SockJS (handshake de WebSocket con polling)
+        // En producción: no hay SockJS, solo WebSocket nativo
+        boolean isProduction = activeProfile != null && (activeProfile.contains("prod") || activeProfile.contains("production"));
+        if (!isProduction) {
+            String requestUri = request.getRequestURI();
+            if (requestUri != null && isSockJsRoute(requestUri)) {
+                chain.doFilter(request, response);
+                return;
+            }
         }
         
         final String requestTokenHeader = request.getHeader("Authorization");
@@ -145,8 +148,8 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     }
     
     /**
-     * Verifica si una ruta es de SockJS (handshake de WebSocket)
-     * Estas rutas no requieren token JWT, la autenticación se hace después en STOMP CONNECT
+     * Verifica si una ruta es de SockJS (handshake de WebSocket con polling)
+     * Solo se usa en desarrollo, en producción no hay SockJS
      */
     private boolean isSockJsRoute(String requestUri) {
         if (requestUri == null) {

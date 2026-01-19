@@ -11,12 +11,10 @@ import java.util.Optional;
 @Repository
 public interface DriverCloseRepository extends JpaRepository<DriverClose, Long> {
 
-    List<DriverClose> findByDriverId(String driverId);
-
-    List<DriverClose> findByDriverIdAndFecha(String driverId, LocalDate fecha);
-
+    /**
+     * 📋 VISTA: DetalleView
+     * Obtiene el cierre más reciente de un driver para una fecha específica
+     */
     Optional<DriverClose> findFirstByDriverIdAndFechaOrderByIdDesc(String driverId, LocalDate fecha);
-
-    List<DriverClose> findByFecha(LocalDate fecha);
 }
 

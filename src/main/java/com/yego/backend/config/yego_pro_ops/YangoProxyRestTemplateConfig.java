@@ -47,13 +47,17 @@ public class YangoProxyRestTemplateConfig {
     @Bean(name = "yangoProxyRestTemplate")
     public RestTemplate yangoProxyRestTemplate() {
         if (proxyConfig.isEnabled() && proxyConfig.getProxies() != null && !proxyConfig.getProxies().isEmpty()) {
+            log.info("✅ [YangoProxyRestTemplateConfig] Rotación de proxies HABILITADA - {} proxies disponibles", 
+                proxyConfig.getProxies().size());
             CloseableHttpClient httpClient = createHttpClientWithProxy();
             HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
             factory.setConnectTimeout(java.time.Duration.ofSeconds(30));
             factory.setConnectionRequestTimeout(java.time.Duration.ofSeconds(30));
             return new RestTemplate(factory);
+        } else {
+            log.warn("⚠️ [YangoProxyRestTemplateConfig] Rotación de proxies DESHABILITADA - usando conexión directa");
+            return new RestTemplate();
         }
-        return new RestTemplate();
     }
     
     private CloseableHttpClient createHttpClientWithProxy() {
@@ -101,8 +105,11 @@ public class YangoProxyRestTemplateConfig {
         
         try {
             ProxyInfo proxyInfo = parseProxy(proxyString);
+            // Log solo cuando cambia el proxy para no saturar (cada N requests)
+            if (index % 10 == 0 || log.isDebugEnabled()) {
             log.debug("🔄 [YangoProxyRestTemplateConfig] Seleccionado proxy {}/{}: {}:{}", 
                 index + 1, proxies.size(), proxyInfo.host, proxyInfo.port);
+            }
             return proxyInfo;
         } catch (Exception e) {
             log.error("❌ [YangoProxyRestTemplateConfig] Error parseando proxy en índice {}: {}", index, e.getMessage());
@@ -201,11 +208,9 @@ public class YangoProxyRestTemplateConfig {
                 }
                 
                 HttpHost proxy = new HttpHost("http", proxyInfo.host, proxyInfo.port);
-                // Log solo en nivel debug para no saturar los logs, pero útil para debugging
-                if (log.isTraceEnabled()) {
-                    log.trace("🔄 [RotatingProxyRoutePlanner] Usando proxy: {}:{} para target: {}:{}", 
+                // Log en nivel debug para verificar rotación de proxies (útil para debugging)
+                log.debug("🔄 [RotatingProxyRoutePlanner] Usando proxy {}:{} para target {}:{}", 
                         proxyInfo.host, proxyInfo.port, normalizedTarget.getHostName(), normalizedTarget.getPort());
-                }
                 
                 return new HttpRoute(normalizedTarget, proxy);
             }

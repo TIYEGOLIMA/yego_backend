@@ -43,8 +43,11 @@ public class DriversInOrderResponse {
         @JsonProperty("status")
         private String status;
         
-        @JsonProperty("route")
-        private List<RoutePoint> route;
+        @JsonProperty("vehicle_number")
+        private String vehicleNumber; // Número de vehículo (marca y modelo)
+        
+        @JsonProperty("viajes")
+        private List<TripSimplified> viajes; // Viajes del día de HOY
         
         @JsonProperty("summary_distance")
         private SummaryDistance summaryDistance;
@@ -63,9 +66,21 @@ public class DriversInOrderResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class RoutePoint {
-        @JsonProperty("address")
-        private String address;
+    public static class TripSimplified {
+        @JsonProperty("status")
+        private String status;
+        
+        @JsonProperty("short_id")
+        private Long shortId;
+        
+        @JsonProperty("id")
+        private String id;
+        
+        @JsonProperty("ended_at")
+        private String endedAt;
+        
+        @JsonProperty("booked_at")
+        private String bookedAt;
     }
     
     @Data

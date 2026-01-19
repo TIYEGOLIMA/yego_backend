@@ -21,12 +21,6 @@ public class OrderInfoResponse {
     @JsonProperty("id")
     private String id;
     
-    @JsonProperty("driver_id")
-    private String driverId;
-    
-    @JsonProperty("driver_full_name")
-    private String driverFullName;
-    
     @JsonProperty("ended_at")
     private String endedAt;
     

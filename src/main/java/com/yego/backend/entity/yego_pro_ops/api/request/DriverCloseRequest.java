@@ -8,6 +8,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -60,5 +62,8 @@ public class DriverCloseRequest {
 
     @JsonProperty("resta")
     private Double resta;
+
+    @JsonProperty("turnoIds")
+    private List<Long> turnoIds; // IDs de los turnos del conductor para esta fecha
 }
 
