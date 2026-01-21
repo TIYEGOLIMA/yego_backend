@@ -8,10 +8,11 @@ import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
 import com.yego.backend.repository.yego_pro_ops.CalculatedShiftRepository;
 import com.yego.backend.repository.yego_pro_ops.DriverCloseRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
+import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
 import com.yego.backend.service.yego_pro_ops.FleetDriverService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,17 +28,26 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class DriverCloseServiceImpl implements DriverCloseService {
 
     private final DriverCloseRepository driverCloseRepository;
     private final UserRepository userRepository;
     private final CalculatedShiftRepository calculatedShiftRepository;
+    private final CalculatedShiftService calculatedShiftService;
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     
-    // 🔍 PROBE: Verificación de inicialización
-    {
-        log.info("✅ [DriverCloseService] Inicializado correctamente - Dependencias: DriverCloseRepository, UserRepository, CalculatedShiftRepository");
+    // ==================== CONSTRUCTOR ====================
+    
+    public DriverCloseServiceImpl(
+            DriverCloseRepository driverCloseRepository,
+            UserRepository userRepository,
+            CalculatedShiftRepository calculatedShiftRepository,
+            @Lazy CalculatedShiftService calculatedShiftService) {
+        this.driverCloseRepository = driverCloseRepository;
+        this.userRepository = userRepository;
+        this.calculatedShiftRepository = calculatedShiftRepository;
+        this.calculatedShiftService = calculatedShiftService;
+        log.info("✅ [DriverCloseService] Inicializado correctamente - Dependencias: DriverCloseRepository, UserRepository, CalculatedShiftRepository, CalculatedShiftService (Lazy)");
     }
     
     /**
@@ -64,6 +74,31 @@ public class DriverCloseServiceImpl implements DriverCloseService {
                     request.getDriverId(), request.getFecha());
                 driverCloseRepository.delete(existingClose);
             });
+        
+        // 🔄 NUEVO: Si no hay turnos calculados, calcularlos automáticamente antes de liquidar
+        // Usar obtenerOCalcularTurnos que es más eficiente (marca como manual automáticamente)
+        List<CalculatedShift> turnosExistentes = calculatedShiftRepository.findByDriverIdAndFecha(
+            request.getDriverId(), fecha);
+        
+        if (turnosExistentes.isEmpty()) {
+            log.info("🔄 [DriverCloseService] No se encontraron turnos calculados para driver_id: {} y fecha: {}. Calculando turnos automáticamente...", 
+                request.getDriverId(), fecha);
+            try {
+                // Usar obtenerOCalcularTurnos que es más eficiente y marca como manual
+                String fechaStr = fecha.format(DATE_FORMATTER);
+                turnosExistentes = calculatedShiftService.obtenerOCalcularTurnos(request.getDriverId(), fechaStr);
+                log.info("✅ [DriverCloseService] Turnos calculados exitosamente para driver_id: {} y fecha: {} ({} turnos encontrados)", 
+                    request.getDriverId(), fecha, turnosExistentes.size());
+                
+                if (turnosExistentes.isEmpty()) {
+                    log.warn("⚠️ [DriverCloseService] No se encontraron turnos después de calcular. El conductor puede no tener viajes para esta fecha.");
+                }
+            } catch (Exception e) {
+                log.error("❌ [DriverCloseService] Error calculando turnos automáticamente para driver_id: {} y fecha: {}: {}", 
+                    request.getDriverId(), fecha, e.getMessage(), e);
+                // Continuar con el proceso aunque falle el cálculo (puede que el usuario quiera liquidar sin turnos)
+            }
+        }
         
         // Obtener los IDs de los turnos (del request si están, o buscar automáticamente)
         List<Long> turnoIds = request.getTurnoIds() != null && !request.getTurnoIds().isEmpty()
@@ -95,6 +130,9 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .totalIngresos(toBigDecimal(request.getTotalIngresos()))
             .totalGastos(toBigDecimal(request.getTotalGastos()))
             .resta(toBigDecimal(request.getResta()))
+            .odometroInicial(request.getOdometroInicial())
+            .odometroFinal(request.getOdometroFinal())
+            .diferenciaOdometro(request.getDiferenciaOdometro())
             .calculatedShiftIds(calculatedShiftIds)
             .build();
 
@@ -155,6 +193,9 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         cierreExistente.setTotalIngresos(toBigDecimal(request.getTotalIngresos()));
         cierreExistente.setTotalGastos(toBigDecimal(request.getTotalGastos()));
         cierreExistente.setResta(toBigDecimal(request.getResta()));
+        cierreExistente.setOdometroInicial(request.getOdometroInicial());
+        cierreExistente.setOdometroFinal(request.getOdometroFinal());
+        cierreExistente.setDiferenciaOdometro(request.getDiferenciaOdometro());
         
         // Actualizar los CalculatedShift IDs si hay registros para esta fecha
         // Usar turnoIds del request si están disponibles, sino buscar automáticamente
@@ -229,6 +270,9 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .totalIngresos(cierre.getTotalIngresos())
             .totalGastos(cierre.getTotalGastos())
             .resta(cierre.getResta())
+            .odometroInicial(cierre.getOdometroInicial())
+            .odometroFinal(cierre.getOdometroFinal())
+            .diferenciaOdometro(cierre.getDiferenciaOdometro())
             .tiposTurno(obtenerTiposTurnoDesdeIds(cierre.getCalculatedShiftIds()))
             .createdAt(cierre.getCreatedAt())
             .updatedAt(cierre.getUpdatedAt())

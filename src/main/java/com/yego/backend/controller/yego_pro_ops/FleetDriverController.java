@@ -4,12 +4,14 @@ import com.yego.backend.entity.yego_pro_ops.api.request.DriverCloseRequest;
 import com.yego.backend.entity.yego_pro_ops.api.request.MultipleDriversTripsRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverCloseResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.DriverSimpleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverPaymentSummaryResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverTripsSimplifiedResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.PaidShiftsResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.MultipleDriversTripsSimplifiedResponse;
+import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
 import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
@@ -205,6 +207,45 @@ public class FleetDriverController {
     }
 
     /**
+     * 📋 ENDPOINT PRINCIPAL: Obtener o calcular turnos
+     * Verifica si hay turnos en module_calculated_shifts para un driver y fecha.
+     * Si no hay, calcula automáticamente y marca como es_manual = true.
+     * @param driverId ID del conductor
+     * @param fecha Fecha del turno (formato: "YYYY-MM-DD")
+     * @return Mensaje de éxito indicando que los turnos están listos
+     */
+    @GetMapping("/driver/calcular-turnos")
+    public ResponseEntity<Map<String, Object>> calcularTurnosManualmente(
+            @RequestParam String driverId,
+            @RequestParam String fecha) {
+        log.info("📋 [FleetDriverController] Obteniendo o calculando turnos para driver_id: {}, fecha: {}", driverId, fecha);
+        
+        try {
+            List<CalculatedShift> turnos = calculatedShiftService.obtenerOCalcularTurnos(driverId, fecha);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("message", "Turnos calculados exitosamente");
+            response.put("driverId", driverId);
+            response.put("fecha", fecha);
+            response.put("cantidadTurnos", turnos.size());
+            
+            log.info("✅ [FleetDriverController] Se encontraron {} turno(s) para driver_id: {} y fecha: {}", 
+                turnos.size(), driverId, fecha);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("❌ [FleetDriverController] Error obteniendo o calculando turnos para driver_id: {}, fecha: {}: {}", 
+                driverId, fecha, e.getMessage(), e);
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("message", "Error al calcular turnos: " + e.getMessage());
+            errorResponse.put("driverId", driverId);
+            errorResponse.put("fecha", fecha);
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    /**
      * 📋 VISTA: DetalleView
      * Obtiene las fechas únicas con sus tipos de turno para un conductor
      * Las fechas no se repiten y pueden tener uno o dos tipos de turno (diurno, nocturno)
@@ -258,6 +299,35 @@ public class FleetDriverController {
         PaidShiftsResponse response = calculatedShiftService.obtenerTurnosPagados(fecha);
         log.info("✅ [FleetDriverController] Se encontraron {} conductores con turnos pagados{}", 
                 response.getTotalConductores(), fecha != null ? " para fecha: " + fecha : "");
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 📋 ENDPOINT: Lista de conductores simplificada
+     * Obtiene una lista de todos los conductores con solo: nombre, telefono, driver_id y avatar_url
+     * @return Lista de conductores con información básica
+     */
+    @GetMapping("/drivers")
+    public ResponseEntity<DriverSimpleResponse> obtenerListaConductores(
+            @RequestParam(required = false) String nombre,
+            @RequestParam(required = false) String fecha) {
+        
+        // Si se proporciona nombre y fecha, buscar por nombre y filtrar por turnos manuales
+        if (nombre != null && !nombre.trim().isEmpty() && fecha != null && !fecha.trim().isEmpty()) {
+            log.info("🔍 [FleetDriverController] Buscando conductores por nombre: '{}', fecha: {}", nombre, fecha);
+            DriverSimpleResponse response = fleetDriverService.buscarConductoresPorNombre(nombre, fecha);
+            
+            // Si hay un mensaje de error, devolverlo
+            if (response.getMensaje() != null && !response.getMensaje().isEmpty()) {
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            return ResponseEntity.ok(response);
+        }
+        
+        // Si no se proporciona nombre, devolver lista completa
+        log.info("📋 [FleetDriverController] Obteniendo lista de conductores");
+        DriverSimpleResponse response = fleetDriverService.obtenerListaConductoresSimplificada();
         return ResponseEntity.ok(response);
     }
 }

@@ -43,6 +43,12 @@ public class DriverPaymentSummaryResponse {
         @JsonProperty("cantidad_turnos")
         private Integer cantidadTurnos; // Cantidad de turnos que tiene el conductor
         
+        @JsonProperty("cantidad_viajes")
+        private Integer cantidadViajes; // Total de viajes que tuvo el conductor en todos sus turnos
+        
+        @JsonProperty("viajes_por_hora")
+        private Double viajesPorHora; // KPI: cantidad de viajes por hora (cantidad_viajes / (duracion_total_minutos / 60))
+        
         @JsonProperty("turnos")
         private List<TurnoInfo> turnos; // Lista de turnos del conductor
     }

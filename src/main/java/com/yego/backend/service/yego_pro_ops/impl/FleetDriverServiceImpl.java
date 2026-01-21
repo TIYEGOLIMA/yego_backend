@@ -3,7 +3,10 @@ package com.yego.backend.service.yego_pro_ops.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverListRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.DriverSimpleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
+import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
+import com.yego.backend.repository.yego_pro_ops.CalculatedShiftRepository;
 import com.yego.backend.service.yego_pro_ops.FleetDriverService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -39,15 +42,18 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     private static final String EMPTY_STRING = "";
     
     private final com.yego.backend.service.yego_pro_ops.DriverOrdersService driverOrdersService;
+    private final CalculatedShiftRepository calculatedShiftRepository;
     private final ExecutorService executorService = Executors.newFixedThreadPool(20);
     
     public FleetDriverServiceImpl(
             RestTemplate restTemplate,
             @Qualifier("yangoProxyRestTemplate") RestTemplate yangoProxyRestTemplate,
             com.yego.backend.config.yego_pro_ops.ProxyConfig proxyConfig,
-            com.yego.backend.service.yego_pro_ops.DriverOrdersService driverOrdersService) {
+            com.yego.backend.service.yego_pro_ops.DriverOrdersService driverOrdersService,
+            CalculatedShiftRepository calculatedShiftRepository) {
         super(restTemplate, yangoProxyRestTemplate, proxyConfig);
         this.driverOrdersService = driverOrdersService;
+        this.calculatedShiftRepository = calculatedShiftRepository;
         log.info("✅ [FleetDriverService] Inicializado correctamente - ExecutorService: {} threads", 
             executorService.getClass().getSimpleName());
     }
@@ -92,6 +98,123 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
         } catch (Exception e) {
             log.error("❌ Error obteniendo lista de conductores: {}", e.getMessage(), e);
             return crearDriverListResponseVacio();
+        }
+    }
+    @Override
+    public DriverSimpleResponse obtenerListaConductoresSimplificada() {
+        log.info("📋 [FleetDriverService] Obteniendo lista de conductores simplificada");
+        
+        try {
+            DriverListResponse driverList = obtenerListaConductores(null);
+            
+            if (driverList == null || driverList.getContractors() == null) {
+                log.warn("⚠️ [FleetDriverService] No se encontraron conductores");
+                return DriverSimpleResponse.builder()
+                    .conductores(new ArrayList<>())
+                    .build();
+            }
+            
+            List<DriverSimpleResponse.DriverInfo> conductores = driverList.getContractors().stream()
+                .filter(contractor -> contractor.getId() != null && !contractor.getId().isEmpty())
+                .map(contractor -> DriverSimpleResponse.DriverInfo.builder()
+                    .driverId(contractor.getId())
+                    .nombre(contractor.getFullName())
+                    .telefono(contractor.getPhone())
+                    .avatarUrl(contractor.getAvatarUrl())
+                    .build())
+                .collect(Collectors.toList());
+            
+            log.info("✅ [FleetDriverService] Se encontraron {} conductores", conductores.size());
+            return DriverSimpleResponse.builder()
+                .conductores(conductores)
+                .build();
+        } catch (Exception e) {
+            log.error("❌ [FleetDriverService] Error obteniendo lista de conductores simplificada: {}", e.getMessage(), e);
+            return DriverSimpleResponse.builder()
+                .conductores(new ArrayList<>())
+                .build();
+        }
+    }
+
+    @Override
+    public DriverSimpleResponse buscarConductoresPorNombre(String nombre, String fecha) {
+        log.info("🔍 [FleetDriverService] Buscando conductores por nombre: '{}', fecha: {}", nombre, fecha);
+        
+        try {
+            LocalDate fechaLocal = LocalDate.parse(fecha, DATE_FORMATTER);
+            DriverListResponse driverList = obtenerListaConductores(null);
+            
+            if (driverList == null || driverList.getContractors() == null) {
+                log.warn("⚠️ [FleetDriverService] No se encontraron conductores");
+                return DriverSimpleResponse.builder()
+                    .conductores(new ArrayList<>())
+                    .mensaje("No se encontraron conductores")
+                    .build();
+            }
+            
+            String nombreBusqueda = nombre != null ? nombre.trim().toLowerCase() : "";
+            List<DriverSimpleResponse.DriverInfo> conductoresFiltrados = new ArrayList<>();
+            DriverListResponse.ContractorResponse conductorUnico = null;
+            
+            // Filtrar por nombre y verificar turnos manuales en un solo paso
+            for (DriverListResponse.ContractorResponse contractor : driverList.getContractors()) {
+                if (contractor.getId() == null || contractor.getId().isEmpty()) {
+                    continue;
+                }
+                
+                // Filtrar por nombre
+                String nombreCompleto = contractor.getFullName() != null 
+                    ? contractor.getFullName().toLowerCase() 
+                    : "";
+                if (!nombreBusqueda.isEmpty() && !nombreCompleto.contains(nombreBusqueda)) {
+                    continue;
+                }
+                
+                // Verificar turnos manuales
+                List<CalculatedShift> turnosManuales = calculatedShiftRepository
+                    .findByDriverIdAndFechaAndEsManual(contractor.getId(), fechaLocal);
+                
+                if (!turnosManuales.isEmpty()) {
+                    // Si es el único resultado, devolver mensaje de error
+                    if (conductorUnico == null && conductoresFiltrados.isEmpty()) {
+                        conductorUnico = contractor;
+                    }
+                    log.debug("⚠️ [FleetDriverService] Conductor {} ya tiene turnos manuales - excluido", 
+                        contractor.getId());
+                    continue;
+                }
+                
+                // Agregar conductor válido
+                conductoresFiltrados.add(DriverSimpleResponse.DriverInfo.builder()
+                    .driverId(contractor.getId())
+                    .nombre(contractor.getFullName())
+                    .telefono(contractor.getPhone())
+                    .avatarUrl(contractor.getAvatarUrl())
+                    .build());
+            }
+            
+            // Si solo había un conductor y tiene turnos manuales, devolver mensaje de error
+            if (conductorUnico != null && conductoresFiltrados.isEmpty()) {
+                log.warn("⚠️ [FleetDriverService] Conductor {} ({}) ya procesado para {}", 
+                    conductorUnico.getId(), conductorUnico.getFullName(), fechaLocal);
+                return DriverSimpleResponse.builder()
+                    .conductores(new ArrayList<>())
+                    .mensaje("Conductor ya procesado para el día de hoy")
+                    .build();
+            }
+            
+            log.info("✅ [FleetDriverService] Se encontraron {} conductores que coinciden con '{}' y no tienen turnos manuales", 
+                conductoresFiltrados.size(), nombre);
+            
+            return DriverSimpleResponse.builder()
+                .conductores(conductoresFiltrados)
+                .build();
+        } catch (Exception e) {
+            log.error("❌ [FleetDriverService] Error buscando conductores por nombre: {}", e.getMessage(), e);
+            return DriverSimpleResponse.builder()
+                .conductores(new ArrayList<>())
+                .mensaje("Error al buscar conductores: " + e.getMessage())
+                .build();
         }
     }
 

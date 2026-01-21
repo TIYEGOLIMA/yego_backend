@@ -1,6 +1,7 @@
 package com.yego.backend.service.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.DriverSimpleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
 
 import java.util.List;
@@ -29,5 +30,21 @@ public interface FleetDriverService {
     default DriversInOrderResponse obtenerConductoresEnOrden() {
         return obtenerConductoresEnOrden(0, Integer.MAX_VALUE);
     }
+    
+    /**
+     * 📋 ENDPOINT: Lista de conductores simplificada
+     * Obtiene una lista de todos los conductores con solo: nombre, telefono, driver_id y avatar_url
+     * @return Lista de conductores con información básica
+     */
+    DriverSimpleResponse obtenerListaConductoresSimplificada();
+    
+    /**
+     * 📋 ENDPOINT: Buscar conductores por nombre
+     * Busca conductores por nombre (búsqueda parcial) y filtra los que ya tienen turnos manuales del día
+     * @param nombre Nombre o parte del nombre a buscar
+     * @param fecha Fecha para verificar turnos manuales (formato: "YYYY-MM-DD")
+     * @return Lista de conductores filtrados o mensaje de error si ya está procesado
+     */
+    DriverSimpleResponse buscarConductoresPorNombre(String nombre, String fecha);
 }
 

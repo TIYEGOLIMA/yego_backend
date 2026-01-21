@@ -42,5 +42,15 @@ public interface CalculatedShiftService {
      * @return Respuesta con lista de turnos pagados
      */
     PaidShiftsResponse obtenerTurnosPagados(String fecha);
+    
+    /**
+     * 📋 ENDPOINT: Obtener o calcular turnos
+     * Verifica si hay turnos calculados para un driver y fecha.
+     * Si no hay, calcula automáticamente y luego devuelve la lista.
+     * @param driverId ID del conductor
+     * @param fecha Fecha del turno (formato: "YYYY-MM-DD")
+     * @return Lista de turnos calculados para ese driver y fecha
+     */
+    java.util.List<com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift> obtenerOCalcularTurnos(String driverId, String fecha);
 }
 

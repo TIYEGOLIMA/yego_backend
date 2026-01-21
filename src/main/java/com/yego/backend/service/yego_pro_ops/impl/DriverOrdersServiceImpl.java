@@ -81,7 +81,7 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
                 log.warn("⚠️ [DriverOrdersService] ExecutorService no terminó en 30 segundos, forzando cierre");
                 executorService.shutdownNow();
             }
-        } catch (InterruptedException e) {
+                } catch (InterruptedException e) {
             log.error("❌ [DriverOrdersService] Error cerrando ExecutorService", e);
             executorService.shutdownNow();
             Thread.currentThread().interrupt();
@@ -103,8 +103,8 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
             esperarSiEsNecesario();
             
             ResponseEntity<String> response = ejecutarConRetryCookies(
-                YANGO_ORDERS_API_URL,
-                HttpMethod.POST,
+                YANGO_ORDERS_API_URL, 
+                HttpMethod.POST, 
                 requestBodyJson,
                 this::crearHeadersConCookie
             );
@@ -335,8 +335,8 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
                 } else {
                     log.warn("⚠️ [DriverOrdersService] Respuesta HTTP no exitosa. Status: {}", response.getStatusCode());
                     cursorActual = null;
-                }
-            } catch (Exception e) {
+                    }
+                } catch (Exception e) {
                 log.error("❌ [DriverOrdersService] Error en paginación: {}", e.getMessage());
                 cursorActual = null;
             }
@@ -391,7 +391,7 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
                     if (soloCompletos) {
                         String status = obtenerTexto(orderNode, "status");
                         if (!STATUS_COMPLETE.equalsIgnoreCase(status)) {
-                            continue;
+                        continue;
                         }
                     }
                     
@@ -439,7 +439,7 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
             return null;
         }
     }
-    
+
     // ==================== PRIVATE METHODS: SIMPLIFIED TRIPS ====================
     
     private DriverTripsSimplifiedResponse obtenerViajesSimplificados(String driverId, String dateFrom, String dateTo) {
@@ -559,7 +559,7 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
                 return ZonedDateTime.parse(fechaStr, API_DATE_FORMATTER);
             } catch (Exception e2) {
                 try {
-                    return ZonedDateTime.parse(fechaStr);
+                return ZonedDateTime.parse(fechaStr);
                 } catch (Exception e3) {
                     return java.time.Instant.parse(fechaStr).atZone(ZoneId.of("UTC+3"));
                 }

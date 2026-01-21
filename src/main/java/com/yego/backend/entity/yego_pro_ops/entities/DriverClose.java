@@ -70,6 +70,15 @@ public class DriverClose {
     @Column(name = "resta", precision = 10, scale = 2)
     private BigDecimal resta;
 
+    @Column(name = "odometro_inicial")
+    private Integer odometroInicial;
+
+    @Column(name = "odometro_final")
+    private Integer odometroFinal;
+
+    @Column(name = "diferencia_odometro")
+    private Integer diferenciaOdometro;
+
     @Column(name = "calculated_shift_ids", length = 255)
     private String calculatedShiftIds; // IDs de CalculatedShift separados por coma (ej: "1,2" para identificar los registros de turnos)
 

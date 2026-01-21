@@ -63,6 +63,15 @@ public class DriverCloseRequest {
     @JsonProperty("resta")
     private Double resta;
 
+    @JsonProperty("odometroInicial")
+    private Integer odometroInicial;
+
+    @JsonProperty("odometroFinal")
+    private Integer odometroFinal;
+
+    @JsonProperty("diferenciaOdometro")
+    private Integer diferenciaOdometro;
+
     @JsonProperty("turnoIds")
     private List<Long> turnoIds; // IDs de los turnos del conductor para esta fecha
 }

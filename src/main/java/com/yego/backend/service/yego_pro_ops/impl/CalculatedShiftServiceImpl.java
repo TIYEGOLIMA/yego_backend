@@ -13,6 +13,7 @@ import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
 import com.yego.backend.service.yego_pro_ops.FleetDriverService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,7 +34,6 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class CalculatedShiftServiceImpl implements CalculatedShiftService {
 
     // ==================== CONSTANTS ====================
@@ -52,12 +52,13 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     private static final int HORA_FIN_DIURNO = 18;
     private static final int HORA_INICIO_NOCTURNO = 18;
     private static final int HORA_FIN_NOCTURNO = 5;
+    private static final int HORA_LIMITE_EXTENSION_NOCTURNO = 8; // Los turnos nocturnos pueden extenderse hasta las 8:00 AM
     private static final int HORA_MEDIANOCHE = 0;
     private static final int MINUTO_FIN_DIA = 59;
     private static final int SEGUNDO_FIN_DIA = 59;
     
-    private static final long DELAY_ENTRE_CONDUCTORES_MS = 2000; // 2 segundos
-    private static final int LOG_PROGRESO_CADA_N = 5; // Log cada 5 conductores
+    private static final long DELAY_ENTRE_CONDUCTORES_MS = 2000; // 2 segu conductoresndos
+    private static final int LOG_PROGRESO_CADA_N = 5; // Log cada 5
     private static final long INACTIVIDAD_MAXIMA_HORAS = 5; // 5 horas de inactividad para cerrar el turno
     private static final long INACTIVIDAD_MAXIMA_MINUTOS = INACTIVIDAD_MAXIMA_HORAS * 60; // 300 minutos
     
@@ -67,10 +68,16 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     private final DriverOrdersService driverOrdersService;
     private final FleetDriverService fleetDriverService;
     
-    // ==================== INITIALIZATION ====================
+    // ==================== CONSTRUCTOR ====================
     
-    {
-        log.info("✅ [CalculatedShiftService] Inicializado correctamente - Zona horaria: {}, Dependencias: DriverOrdersService, FleetDriverService", 
+    public CalculatedShiftServiceImpl(
+            CalculatedShiftRepository calculatedShiftRepository,
+            @Lazy DriverOrdersService driverOrdersService,
+            FleetDriverService fleetDriverService) {
+        this.calculatedShiftRepository = calculatedShiftRepository;
+        this.driverOrdersService = driverOrdersService;
+        this.fleetDriverService = fleetDriverService;
+        log.info("✅ [CalculatedShiftService] Inicializado correctamente - Zona horaria: {}, Dependencias: DriverOrdersService (Lazy), FleetDriverService", 
             LIMA_ZONE);
     }
     
@@ -116,41 +123,22 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     }
     
     private boolean debeConsultarDiaAnterior(ViajesDelDia viajesDelDia, List<OrderInfoResponse> viajesNocturnosActual) {
-        // Obtener el primer viaje del día (sin importar si es madrugada o diurno)
-        LocalDateTime primerViajeDelDia = obtenerPrimerViajeDelDia(viajesDelDia);
+        // LÓGICA SIMPLE:
+        // 1. Si hay viajes de madrugada (00:00 - 04:59) → SIEMPRE consultar día anterior
+        // 2. Si NO hay viajes de madrugada → NO consultar día anterior (partir del primer viaje del día)
         
-        // Obtener el primer viaje nocturno del día actual
-        LocalDateTime primerViajeNocturnoActual = viajesNocturnosActual.isEmpty()
-            ? null
-            : obtenerPrimerViaje(viajesNocturnosActual);
-        
-        // Si no hay viajes del día pero hay viajes nocturnos del día actual, verificar si son tempranos
-        if (primerViajeDelDia == null) {
-            if (primerViajeNocturnoActual != null) {
-                int horaPrimerViajeNocturno = primerViajeNocturnoActual.getHour();
-                // Si el primer viaje nocturno es antes de las 6 AM, consultar el día anterior
-                if (horaPrimerViajeNocturno < HORA_INICIO_DIURNO) {
-                    log.info("📅 [CalculatedShiftService] No hay viajes del día, pero hay viajes nocturnos a las {} (antes de las 6 AM). Se consultará el día anterior.", 
-                        primerViajeNocturnoActual.toLocalTime());
-                    return true;
-                }
+        if (!viajesDelDia.viajesMadrugada.isEmpty()) {
+            LocalDateTime primerViajeMadrugada = obtenerPrimerViaje(viajesDelDia.viajesMadrugada);
+            if (primerViajeMadrugada != null) {
+                log.info("📅 [CalculatedShiftService] Hay {} viajes de madrugada (primer viaje: {}). Consultando día anterior para determinar inicio del turno.", 
+                    viajesDelDia.viajesMadrugada.size(), primerViajeMadrugada.toLocalTime());
+                return true;
             }
-            log.info("📅 [CalculatedShiftService] No hay viajes del día. No se consultará el día anterior.");
-            return false;
         }
         
-        int horaPrimerViaje = primerViajeDelDia.getHour();
-        
-        // Si el primer viaje del día es a las 00, 1, 2, 3, 4, o 5 AM, consultar el día anterior
-        if (horaPrimerViaje < HORA_INICIO_DIURNO) {
-            log.info("📅 [CalculatedShiftService] Primer viaje del día es a las {} (antes de las 6 AM). Se consultará el día anterior.", 
-                primerViajeDelDia.toLocalTime());
-            return true;
-        }
-        
-        // Si el primer viaje es después de las 5 AM, no consultar el día anterior
-        log.info("📅 [CalculatedShiftService] Primer viaje del día es a las {} (después de las 5 AM). No se consultará el día anterior.", 
-            primerViajeDelDia.toLocalTime());
+        // No hay viajes de madrugada, no consultar día anterior
+        // El turno partirá del primer viaje del día (diurno o nocturno)
+        log.info("📅 [CalculatedShiftService] No hay viajes de madrugada. No se consultará el día anterior. El turno partirá del primer viaje del día.");
         return false;
     }
     
@@ -268,6 +256,56 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     }
     
     @Override
+    public List<CalculatedShift> obtenerOCalcularTurnos(String driverId, String fecha) {
+        log.info("📋 [CalculatedShiftService] Obteniendo o calculando turnos para driver_id: {}, fecha: {}", driverId, fecha);
+        
+        try {
+            LocalDate fechaLocal = parsearFecha(fecha);
+            if (fechaLocal == null) {
+                log.error("❌ [CalculatedShiftService] Fecha inválida: {}", fecha);
+                throw new IllegalArgumentException("Fecha inválida. Formato esperado: YYYY-MM-DD");
+            }
+            
+            // Verificar si ya hay turnos calculados para este driver y fecha
+            List<CalculatedShift> turnosExistentes = calculatedShiftRepository.findByDriverIdAndFecha(driverId, fechaLocal);
+            
+            if (turnosExistentes.isEmpty()) {
+                log.info("🔄 [CalculatedShiftService] No se encontraron turnos calculados para driver_id: {} y fecha: {}. Calculando automáticamente...", 
+                    driverId, fechaLocal);
+                
+                // Calcular turnos automáticamente
+                calcularYGuardarHorasTurno(driverId, fechaLocal);
+                
+                // Re-buscar los turnos después de calcularlos
+                turnosExistentes = calculatedShiftRepository.findByDriverIdAndFecha(driverId, fechaLocal);
+                
+                if (turnosExistentes.isEmpty()) {
+                    log.warn("⚠️ [CalculatedShiftService] No se encontraron turnos después de calcular. El conductor puede no tener viajes para esta fecha.");
+                    return new ArrayList<>();
+                }
+                
+                // Marcar los turnos como manuales (calculados manualmente, no por el scheduler)
+                for (CalculatedShift turno : turnosExistentes) {
+                    turno.setEsManual(true);
+                }
+                calculatedShiftRepository.saveAll(turnosExistentes);
+                log.info("✅ [CalculatedShiftService] Turnos calculados exitosamente y marcados como manuales. Se encontraron {} turno(s) para driver_id: {} y fecha: {}", 
+                    turnosExistentes.size(), driverId, fechaLocal);
+            } else {
+                log.info("✅ [CalculatedShiftService] Se encontraron {} turno(s) existente(s) para driver_id: {} y fecha: {}", 
+                    turnosExistentes.size(), driverId, fechaLocal);
+            }
+            
+            return turnosExistentes;
+            
+        } catch (Exception e) {
+            log.error("❌ [CalculatedShiftService] Error obteniendo o calculando turnos para driver_id: {} y fecha: {}: {}", 
+                driverId, fecha, e.getMessage(), e);
+            throw new RuntimeException("Error al obtener o calcular turnos: " + e.getMessage(), e);
+        }
+    }
+    
+    @Override
     public PaidShiftsResponse obtenerTurnosPagados(String fecha) {
         log.info("💰 [CalculatedShiftService] Obteniendo turnos pagados{}", 
             fecha != null ? " para fecha: " + fecha : "");
@@ -343,12 +381,18 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             .sum();
         montoTotalPagado = Math.round(montoTotalPagado * 100.0) / 100.0;
         
+        // Calcular total de viajes y viajes por hora a nivel de conductor
+        Integer cantidadViajesTotal = calcularCantidadViajesTotal(turnos);
+        Double viajesPorHoraPromedio = calcularViajesPorHoraPromedio(turnos);
+        
         return PaidShiftsResponse.ConductorTurnosPagadosInfo.builder()
             .driverId(driverId)
             .avatarUrl(info.avatarUrl)
             .nombre(info.nombre)
             .telefono(info.telefono)
             .cantidadTurnos(turnos.size())
+            .cantidadViajes(cantidadViajesTotal)
+            .viajesPorHora(viajesPorHoraPromedio)
             .montoTotalPagado(montoTotalPagado)
             .turnos(turnosInfo)
             .build();
@@ -439,6 +483,10 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         ConductorInfo info = infoConductores.getOrDefault(driverId, new ConductorInfo());
         List<DriverPaymentSummaryResponse.TurnoInfo> turnosInfo = mapearTurnosAInfo(turnos);
         
+        // Calcular total de viajes y viajes por hora a nivel de conductor
+        Integer cantidadViajesTotal = calcularCantidadViajesTotal(turnos);
+        Double viajesPorHoraPromedio = calcularViajesPorHoraPromedio(turnos);
+        
         return DriverPaymentSummaryResponse.ConductorPaymentInfo.builder()
             .driverId(driverId)
             .avatarUrl(info.avatarUrl)
@@ -446,6 +494,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             .telefono(info.telefono)
             .montoTotalPagar(montoTotalPagar)
             .cantidadTurnos(turnos.size())
+            .cantidadViajes(cantidadViajesTotal)
+            .viajesPorHora(viajesPorHoraPromedio)
             .turnos(turnosInfo)
             .build();
     }
@@ -457,6 +507,41 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             .sum();
         
         return Math.round(montoTotal * 100.0) / 100.0;
+    }
+    
+    /**
+     * Calcula la cantidad de viajes por hora para un turno individual
+     * Fórmula: cantidadViajes / (duracionMinutos / 60.0)
+     */
+    private Double calcularViajesPorHora(Integer cantidadViajes, Integer duracionMinutos) {
+        if (cantidadViajes == null || cantidadViajes == 0 || duracionMinutos == null || duracionMinutos == 0) {
+            return 0.0;
+        }
+        double horas = duracionMinutos / 60.0;
+        double viajesPorHora = cantidadViajes / horas;
+        return Math.round(viajesPorHora * 100.0) / 100.0; // Redondear a 2 decimales
+    }
+    
+    /**
+     * Calcula el total de viajes de todos los turnos de un conductor
+     */
+    private Integer calcularCantidadViajesTotal(List<CalculatedShift> turnos) {
+        return turnos.stream()
+            .mapToInt(turno -> turno.getCantidadViajes() != null ? turno.getCantidadViajes() : 0)
+            .sum();
+    }
+    
+    /**
+     * Calcula el promedio de viajes por hora a nivel de conductor
+     * Fórmula: cantidadViajesTotal / (duracionTotalMinutos / 60.0)
+     */
+    private Double calcularViajesPorHoraPromedio(List<CalculatedShift> turnos) {
+        Integer cantidadViajesTotal = calcularCantidadViajesTotal(turnos);
+        Integer duracionTotalMinutos = turnos.stream()
+            .mapToInt(turno -> turno.getDuracionMinutos() != null ? turno.getDuracionMinutos() : 0)
+            .sum();
+        
+        return calcularViajesPorHora(cantidadViajesTotal, duracionTotalMinutos);
     }
     
     private List<DriverPaymentSummaryResponse.TurnoInfo> mapearTurnosAInfo(List<CalculatedShift> turnos) {
@@ -730,9 +815,9 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     private List<OrderInfoResponse> obtenerViajesNocturnosRango(
             String driverId, LocalDate fechaInicio, LocalDate fechaFin, String tipo) {
         
-        // Consultar desde 1 hora antes de las 18:00 (17:00) para capturar viajes tempranos
+        // Consultar desde 2 horas antes de las 18:00 (16:00) para capturar viajes tempranos
         // que puedan pertenecer al turno nocturno si están dentro del rango de inactividad
-        ZonedDateTime inicioBusqueda = fechaInicio.atTime(HORA_INICIO_NOCTURNO - 1, 0, 0).atZone(LIMA_ZONE);
+        ZonedDateTime inicioBusqueda = fechaInicio.atTime(HORA_INICIO_NOCTURNO - 2, 0, 0).atZone(LIMA_ZONE);
         ZonedDateTime finNocturno = fechaFin.atTime(HORA_FIN_NOCTURNO - 1, MINUTO_FIN_DIA, SEGUNDO_FIN_DIA).atZone(LIMA_ZONE);
         
         DriverOrdersResponse respuesta = driverOrdersService.obtenerViajesCompletos(
@@ -800,13 +885,9 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         List<OrderInfoResponse> todosViajesOrdenados = ordenarViajesPorFechaInicio(todosViajes);
         
         // Buscar viajes anteriores que terminen cerca del inicio del primer viaje nocturno
+        // Iterar desde el final hacia atrás para encontrar viajes anteriores al primer viaje nocturno
         for (int i = todosViajesOrdenados.size() - 1; i >= 0; i--) {
             OrderInfoResponse viaje = todosViajesOrdenados.get(i);
-            
-            // Si ya llegamos a un viaje nocturno, detener la búsqueda
-            if (viajesNocturnos.contains(viaje)) {
-                break;
-            }
             
             LocalDateTime inicioViaje = obtenerFechaInicioViaje(viaje);
             LocalDateTime finViaje = obtenerFechaFinViaje(viaje);
@@ -815,22 +896,41 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                 continue;
             }
             
-            // Solo considerar viajes antes de las 18:00 (17:00 - 17:59)
+            // Si este viaje es el primer viaje nocturno o posterior, detener la búsqueda
+            // (ya no hay viajes anteriores que considerar)
+            if (inicioViaje.isAfter(inicioPrimerViajeNocturno) || inicioViaje.equals(inicioPrimerViajeNocturno)) {
+                // Si es un viaje nocturno pero es el primero o posterior, detener
+                if (viajesNocturnos.contains(viaje)) {
+                    break;
+                }
+                // Si no es nocturno pero es posterior al primer viaje nocturno, también detener
+                continue;
+            }
+            
+            // Solo considerar viajes antes de las 18:00 (desde las 16:00 en adelante para capturar más viajes)
             int horaViaje = inicioViaje.getHour();
-            if (horaViaje >= 17 && horaViaje < HORA_INICIO_NOCTURNO) {
-                // Calcular el gap entre el fin de este viaje y el inicio del primer viaje nocturno
+            if (horaViaje >= 16 && horaViaje < HORA_INICIO_NOCTURNO) {
+                // Calcular el gap entre el fin de este viaje y el punto de referencia (inicio del siguiente viaje incluido)
                 long minutosGap = Duration.between(finViaje, puntoReferencia).toMinutes();
                 
-                // Si el gap es menor a 4 horas, este viaje pertenece al turno nocturno
+                // Si el gap es menor a 5 horas (INACTIVIDAD_MAXIMA_MINUTOS), este viaje pertenece al turno nocturno
                 if (minutosGap >= 0 && minutosGap < INACTIVIDAD_MAXIMA_MINUTOS) {
                     viajesAnteriores.add(0, viaje); // Agregar al inicio para mantener orden cronológico
                     puntoReferencia = inicioViaje; // Actualizar punto de referencia para buscar más hacia atrás
                     log.info("🌙 [CalculatedShiftService] Viaje anterior a las {} (fin: {}) incluido en turno nocturno - gap: {} minutos con viaje a las {}", 
                         inicioViaje.toLocalTime(), finViaje.toLocalTime(), minutosGap, inicioPrimerViajeNocturno.toLocalTime());
+                } else if (minutosGap < 0) {
+                    // Si el viaje termina después del punto de referencia, no debería estar aquí
+                    // pero continuar buscando hacia atrás
+                    continue;
                 } else {
-                    // Si el gap es mayor a 4 horas, detener la búsqueda hacia atrás
+                    // Si el gap es mayor a 5 horas, detener la búsqueda hacia atrás
+                    log.debug("⏸️ [CalculatedShiftService] Gap demasiado grande ({} minutos) - deteniendo búsqueda hacia atrás", minutosGap);
                     break;
                 }
+            } else if (horaViaje < 16) {
+                // Si el viaje es antes de las 16:00, detener la búsqueda (muy lejos del turno nocturno)
+                break;
             }
         }
         
@@ -971,6 +1071,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         if (!viajesMadrugadaNoEnNocturno.isEmpty()) {
             log.info("🌙 [CalculatedShiftService] Viajes de madrugada ({} viajes, primer viaje: {}) no pertenecen al turno nocturno del día anterior. Agregando al turno nocturno del día actual.", 
                 viajesMadrugadaNoEnNocturno.size(), primerViajeMadrugada);
+            log.info("🌙 [CalculatedShiftService] Estos viajes de madrugada crearán un turno nocturno del día actual que empezará desde: {}", 
+                primerViajeMadrugada);
             viajesNocturnos.viajesNocturnosActual.addAll(viajesMadrugadaNoEnNocturno);
             viajesDelDia.viajesMadrugada.clear();
         } else {
@@ -1095,26 +1197,37 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     }
     
     private void guardarTurnosPorSeparado(String driverId, LocalDate fecha, ViajesDelDia viajesDelDia, ViajesNocturnos viajesNocturnos) {
-        if (!viajesDelDia.viajesDiurnos.isEmpty()) {
-            procesarTurno(driverId, fecha, viajesDelDia.viajesDiurnos, CalculatedShift.TipoTurno.diurno);
+        // Guardar primero el turno más temprano (nocturno del día anterior)
+        if (!viajesNocturnos.viajesNocturnosAnterior.isEmpty()) {
+            // SIEMPRE guardar con la fecha del día que se está calculando (fecha)
+            // Si estamos calculando para el día 20 y hay viajes de madrugada, consultamos el día 19
+            // solo para saber desde dónde empezó, pero el turno completo se registra como del día 20
+            LocalDateTime finTurnoNocturno = obtenerUltimoFinViaje(viajesNocturnos.viajesNocturnosAnterior);
+            
+            log.info("🌙 [CalculatedShiftService] Turno nocturno del día anterior (termina en {}) NO se unificó con turno diurno del día actual. Guardando con fecha del día calculado: {} (se consultó día anterior {} solo para determinar inicio).", 
+                finTurnoNocturno, fecha, viajesNocturnos.fechaAnterior);
+            
+            procesarTurno(driverId, fecha, viajesNocturnos.viajesNocturnosAnterior, 
+                CalculatedShift.TipoTurno.nocturno);
+            
+            // Si hay un gap grande (>5 horas) entre el turno nocturno y el diurno,
+            // NO guardar el turno diurno porque ya se cerró el turno anterior por desconexión
+            if (!viajesDelDia.viajesDiurnos.isEmpty()) {
+                LocalDateTime inicioTurnoDiurno = obtenerPrimerViaje(viajesDelDia.viajesDiurnos);
+                if (finTurnoNocturno != null && inicioTurnoDiurno != null) {
+                    long minutosGap = Duration.between(finTurnoNocturno, inicioTurnoDiurno).toMinutes();
+                    if (minutosGap >= INACTIVIDAD_MAXIMA_MINUTOS) {
+                        log.info("⏸️ [CalculatedShiftService] Gap de {} minutos ({} horas) entre turno nocturno ({}) y diurno ({}). NO se guardará el turno diurno porque ya se cerró el turno anterior por desconexión.", 
+                            minutosGap, minutosGap / 60.0, finTurnoNocturno, inicioTurnoDiurno);
+                        return; // No guardar el turno diurno
+                    }
+                }
+            }
         }
         
-        if (!viajesNocturnos.viajesNocturnosAnterior.isEmpty()) {
-            // El turno nocturno del día anterior siempre se guarda con la fecha del día anterior
-            // porque si no se unificó con el turno diurno del día actual, significa que son turnos separados
-            LocalDate fechaParaGuardar = viajesNocturnos.fechaAnterior;
-            
-            LocalDateTime finTurnoNocturno = obtenerUltimoFinViaje(viajesNocturnos.viajesNocturnosAnterior);
-            if (finTurnoNocturno != null) {
-                log.info("🌙 [CalculatedShiftService] Turno nocturno del día anterior (termina en {}) NO se unificó con turno diurno del día actual. Guardando con fecha del día anterior: {}.", 
-                    finTurnoNocturno, fechaParaGuardar);
-            } else {
-                log.info("🌙 [CalculatedShiftService] Guardando turno nocturno del día anterior con fecha del día anterior: {}.", 
-                    fechaParaGuardar);
-            }
-            
-            procesarTurno(driverId, fechaParaGuardar, viajesNocturnos.viajesNocturnosAnterior, 
-                CalculatedShift.TipoTurno.nocturno);
+        // Si no hay turno nocturno del día anterior, o el gap es menor a 5 horas, guardar el turno diurno
+        if (!viajesDelDia.viajesDiurnos.isEmpty()) {
+            procesarTurno(driverId, fecha, viajesDelDia.viajesDiurnos, CalculatedShift.TipoTurno.diurno);
         }
     }
     
@@ -1268,7 +1381,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                                       HorasTurno horasTurno, List<OrderInfoResponse> viajes) {
         CalculatedShift turno = obtenerOCrearTurno(driverId, fecha, tipoTurno);
         Double montoTotal = calcularMontoTotal(viajes);
-        actualizarTurno(turno, tipoTurno, horasTurno, fecha, montoTotal);
+        Integer cantidadViajes = viajes != null ? viajes.size() : 0;
+        actualizarTurno(turno, tipoTurno, horasTurno, fecha, montoTotal, cantidadViajes);
         guardarTurno(turno, driverId, fecha, tipoTurno, horasTurno, montoTotal);
     }
     
@@ -1390,32 +1504,35 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             return viajesNocturnos;
         }
         
-        LocalDateTime ultimoViajeNocturno = obtenerUltimoViaje(viajesNocturnos);
-        if (ultimoViajeNocturno == null) {
-            return viajesNocturnos;
+        // Obtener la hora de fin del último viaje nocturno (no solo la hora de inicio)
+        LocalDateTime ultimoFinViaje = obtenerUltimoFinViaje(viajesNocturnos);
+        if (ultimoFinViaje == null) {
+            LocalDateTime ultimoViajeNocturno = obtenerUltimoViaje(viajesNocturnos);
+            if (ultimoViajeNocturno == null) {
+                return viajesNocturnos;
+            }
+            ultimoFinViaje = ultimoViajeNocturno; // Fallback a la hora de inicio si no hay fin
         }
         
-        int horaUltimoViaje = ultimoViajeNocturno.getHour();
-        int minutoUltimoViaje = ultimoViajeNocturno.getMinute();
+        int horaUltimoViaje = ultimoFinViaje.getHour();
         
-        // Si el último viaje termina entre las 4:00 AM y las 7:59 AM, buscar viajes adicionales
+        // Si el último viaje termina entre las 3:00 AM y las 7:59 AM, buscar viajes adicionales
         // Esto cubre turnos que terminan cerca del amanecer y pueden extenderse
-        boolean debeExtender = (horaUltimoViaje == 4) || 
-                               (horaUltimoViaje == 5) || 
-                               (horaUltimoViaje == 6) ||
-                               (horaUltimoViaje == 7);
+        // Incluimos las 3:00 AM porque puede haber viajes después de las 5 AM con gap menor a 5 horas
+        // El límite es hasta las 7:59 AM porque los turnos nocturnos pueden extenderse hasta las 8:00 AM
+        boolean debeExtender = (horaUltimoViaje >= 3 && horaUltimoViaje < HORA_LIMITE_EXTENSION_NOCTURNO);
         
         if (!debeExtender) {
             return viajesNocturnos;
         }
         
         log.info("🌙 [CalculatedShiftService] Turno nocturno termina a las {} - buscando viajes adicionales después de las 5 AM para extender el turno", 
-            ultimoViajeNocturno.toLocalTime());
+            ultimoFinViaje.toLocalTime());
         
-        // Buscar viajes adicionales desde las 5 AM hasta las 12 PM (mediodía) para asegurar que encontramos todos los viajes continuos
-        LocalDate fechaSiguiente = fecha.plusDays(1);
+        // Buscar viajes adicionales desde las 5 AM hasta las 8:00 AM para extender el turno nocturno
+        // Solo buscar viajes completados (estado "completed")
         ZonedDateTime inicioBusqueda = fecha.atTime(HORA_INICIO_DIURNO, 0, 0).atZone(LIMA_ZONE);
-        ZonedDateTime finBusqueda = fechaSiguiente.atTime(12, 0, 0).atZone(LIMA_ZONE); // Buscar hasta las 12 PM
+        ZonedDateTime finBusqueda = fecha.atTime(HORA_LIMITE_EXTENSION_NOCTURNO, 0, 0).atZone(LIMA_ZONE); // Buscar hasta las 8:00 AM
         
         DriverOrdersResponse respuesta = driverOrdersService.obtenerViajesCompletos(
             driverId,
@@ -1425,6 +1542,9 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         );
         
         List<OrderInfoResponse> viajesAdicionales = respuesta.getOrders() != null ? respuesta.getOrders() : new ArrayList<>();
+        
+        log.info("📊 [CalculatedShiftService] Buscando viajes adicionales desde {} hasta {} - encontrados: {} viajes", 
+            inicioBusqueda.toLocalTime(), finBusqueda.toLocalTime(), viajesAdicionales.size());
         
         if (viajesAdicionales.isEmpty()) {
             log.info("📊 [CalculatedShiftService] No se encontraron viajes adicionales después de las 5 AM");
@@ -1436,12 +1556,6 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         
         // Mantener todos los viajes nocturnos originales y agregar solo los adicionales que pertenecen al turno continuo
         List<OrderInfoResponse> viajesExtendidos = new ArrayList<>(viajesNocturnos);
-        
-        // Obtener la hora de fin del último viaje nocturno (no solo la hora de inicio)
-        LocalDateTime ultimoFinViaje = obtenerUltimoFinViaje(viajesNocturnos);
-        if (ultimoFinViaje == null) {
-            ultimoFinViaje = ultimoViajeNocturno; // Fallback a la hora de inicio si no hay fin
-        }
         
         log.info("🌙 [CalculatedShiftService] Último viaje nocturno termina a las {} - buscando viajes continuos", 
             ultimoFinViaje.toLocalTime());
@@ -1520,11 +1634,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                 })
                 .collect(Collectors.toList());
         } else if (tipoTurno == CalculatedShift.TipoTurno.nocturno) {
-            // Para turnos nocturnos, incluir viajes que:
-            // 1. Empiecen a las 18:00 o después
-            // 2. O crucen las 18:00 (empiecen antes pero terminen después de las 18:00)
-            LocalDateTime inicioNocturno = fecha.atTime(HORA_INICIO_NOCTURNO, 0, 0);
-            LocalDateTime limiteDiurno = fecha.atTime(HORA_FIN_DIURNO, 0, 0);
+            // Para turnos nocturnos, usar la fecha real de cada viaje para determinar si es nocturno
+            // No usar la fecha pasada como parámetro porque los viajes pueden ser del día anterior
             return viajes.stream()
                 .filter(v -> {
                     LocalDateTime inicioViaje = obtenerFechaInicioViaje(v);
@@ -1534,13 +1645,29 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                         return false;
                     }
                     
-                    // Si empieza a las 18:00 o después, es nocturno
+                    // Usar la fecha real del viaje para determinar los límites
+                    LocalDate fechaViaje = inicioViaje.toLocalDate();
+                    LocalDateTime inicioNocturno = fechaViaje.atTime(HORA_INICIO_NOCTURNO, 0, 0);
+                    LocalDateTime limiteDiurno = fechaViaje.atTime(HORA_FIN_DIURNO, 0, 0);
+                    
+                    // Si empieza a las 18:00 o después del día del viaje, es nocturno
                     if (!inicioViaje.isBefore(inicioNocturno)) {
                         return true;
                     }
                     
                     // Si cruza las 18:00 (termina después de las 18:00 aunque empiece antes), es nocturno
-                    if (finViaje != null && finViaje.isAfter(limiteDiurno)) {
+                    if (finViaje != null) {
+                        LocalDate fechaFinViaje = finViaje.toLocalDate();
+                        LocalDateTime limiteDiurnoFin = fechaFinViaje.atTime(HORA_FIN_DIURNO, 0, 0);
+                        if (finViaje.isAfter(limiteDiurnoFin)) {
+                            return true;
+                        }
+                    }
+                    
+                    // También incluir viajes de madrugada (00:00 - 07:59) que son parte del turno nocturno
+                    // Incluimos hasta las 7:59 AM porque un turno nocturno puede extenderse hasta las 8:00 AM
+                    int horaInicio = inicioViaje.getHour();
+                    if (horaInicio < HORA_LIMITE_EXTENSION_NOCTURNO) {
                         return true;
                     }
                     
@@ -1730,12 +1857,13 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     }
     
     private void actualizarTurno(CalculatedShift turno, CalculatedShift.TipoTurno tipoTurno, HorasTurno horasTurno, 
-                                 LocalDate fecha, Double montoTotal) {
+                                 LocalDate fecha, Double montoTotal, Integer cantidadViajes) {
         turno.setTipoTurno(tipoTurno);
         turno.setHoraInicio(horasTurno.horaInicio);
         turno.setHoraFin(horasTurno.horaFin);
         turno.setEstado(horasTurno.estado);
         turno.setDuracionMinutos(horasTurno.duracionMinutos);
+        turno.setCantidadViajes(cantidadViajes);
         turno.setMontoTotal(montoTotal);
         // pagado se mantiene en false por defecto (se puede actualizar manualmente después)
         
@@ -1751,9 +1879,9 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         CalculatedShift saved = calculatedShiftRepository.save(turno);
         calculatedShiftRepository.flush();
         
-        log.info("✅ [CalculatedShiftService] Turno {} guardado - ID: {}, driver_id: {}, fecha: {}, inicio: {}, fin: {}, duracion: {} min, monto: {} soles, pagado: {}", 
+        log.info("✅ [CalculatedShiftService] Turno {} guardado - ID: {}, driver_id: {}, fecha: {}, inicio: {}, fin: {}, duracion: {} min, cantidad_viajes: {}, monto: {} soles, pagado: {}", 
             tipoTurno, saved.getId(), driverId, fecha, horasTurno.horaInicio, horasTurno.horaFin, 
-            horasTurno.duracionMinutos, montoTotal, saved.getPagado());
+            horasTurno.duracionMinutos, saved.getCantidadViajes(), montoTotal, saved.getPagado());
     }
     
     // ==================== PRIVATE METHODS: BATCH PROCESSING ====================
@@ -1796,6 +1924,14 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                     continue;
                 }
                 
+                // Verificar si el conductor ya tiene turnos pagados para esta fecha (liquidados manualmente)
+                if (tieneTurnosPagados(driverId, fechaAnterior)) {
+                    log.info("⏭️ [CalculatedShiftService] Omitiendo conductor {} ({}) - Ya tiene turno(s) pagado(s) (liquidado manualmente) para fecha {}", 
+                        driverName, driverId, fechaAnterior);
+                    totalOmitidos++;
+                    continue;
+                }
+                
                 log.debug("🔄 [CalculatedShiftService] Procesando conductor {} ({})...", driverName, driverId);
                 calcularYGuardarHorasTurno(driverId, fechaAnterior);
                 totalProcesados++;
@@ -1819,6 +1955,31 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         List<CalculatedShift> turnosManuales = calculatedShiftRepository
             .findByDriverIdAndFechaAndEsManual(driverId, fecha);
         return !turnosManuales.isEmpty();
+    }
+    
+    /**
+     * Verifica si un conductor ya tiene turnos pagados para una fecha específica
+     * Esto evita que el scheduler recalcule turnos que ya fueron liquidados manualmente
+     * @param driverId ID del conductor
+     * @param fecha Fecha a verificar
+     * @return true si tiene turnos pagados, false en caso contrario
+     */
+    private boolean tieneTurnosPagados(String driverId, LocalDate fecha) {
+        List<CalculatedShift> turnos = calculatedShiftRepository.findByDriverIdAndFecha(driverId, fecha);
+        if (turnos.isEmpty()) {
+            return false;
+        }
+        
+        // Verificar si todos los turnos están pagados
+        boolean todosPagados = turnos.stream()
+            .allMatch(turno -> turno.getPagado() != null && turno.getPagado());
+        
+        if (todosPagados) {
+            log.debug("✅ [CalculatedShiftService] Conductor {} tiene {} turno(s) pagado(s) para fecha {}", 
+                driverId, turnos.size(), fecha);
+        }
+        
+        return todosPagados;
     }
     
     private void aplicarDelayEntreConductores(int totalProcesados, int totalOmitidos, int totalConductores) {

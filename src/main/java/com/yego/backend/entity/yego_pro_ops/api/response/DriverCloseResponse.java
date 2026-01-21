@@ -71,6 +71,15 @@ public class DriverCloseResponse {
     @JsonProperty("resta")
     private BigDecimal resta;
 
+    @JsonProperty("odometroInicial")
+    private Integer odometroInicial;
+
+    @JsonProperty("odometroFinal")
+    private Integer odometroFinal;
+
+    @JsonProperty("diferenciaOdometro")
+    private Integer diferenciaOdometro;
+
     @JsonProperty("tiposTurno")
     private List<String> tiposTurno; // Lista de tipos de turno (ej: ["diurno", "nocturno"])
 

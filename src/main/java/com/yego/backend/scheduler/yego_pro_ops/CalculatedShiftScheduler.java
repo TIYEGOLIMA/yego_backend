@@ -28,8 +28,8 @@ public class CalculatedShiftScheduler {
 
     /**
      * Scheduler para calcular y guardar las horas de turno del día anterior
-     * Se ejecuta todos los días a las 9:00 AM para procesar el día anterior
-     * Cron: 0 0 9 * * * (segundo=0, minuto=0, hora=9, día=*, mes=*, día_semana=*)
+     * Se ejecuta todos los días a las 5:00 AM para procesar el día anterior
+     * Cron: 0 0 5 * * * (segundo=0, minuto=0, hora=5, día=*, mes=*, día_semana=*)
      * 
      * Este scheduler procesa TODOS los conductores uno por uno:
      * - Calcula turnos diurnos y nocturnos del día anterior
@@ -37,12 +37,12 @@ public class CalculatedShiftScheduler {
      * - Omite conductores que ya tienen turnos manuales registrados
      * - Incluye delay entre conductores para evitar saturar la API
      */
-    @Scheduled(cron = "0 10 8 * * *", zone = "America/Lima")
+    @Scheduled(cron = "0 0 5 * * *", zone = "America/Lima")
     public void calcularHorasTurnoDiaAnterior() {
         LocalDateTime ahora = LocalDateTime.now(ZONE_UTC_MINUS_5);
         LocalDate fechaAnterior = ahora.toLocalDate().minusDays(1);
         
-        log.info("⏰ [CalculatedShiftScheduler] ⏰⏰⏰ SCHEDULER DIARIO EJECUTÁNDOSE A LAS 9:00 AM - {} ⏰⏰⏰", ahora);
+        log.info("⏰ [CalculatedShiftScheduler] ⏰⏰⏰ SCHEDULER DIARIO EJECUTÁNDOSE A LAS 5:00 AM - {} ⏰⏰⏰", ahora);
         log.info("📅 [CalculatedShiftScheduler] Procesando turnos del día anterior: {}", fechaAnterior);
         
         try {
