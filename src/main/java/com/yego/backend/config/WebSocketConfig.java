@@ -6,8 +6,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
-import org.springframework.scheduling.TaskScheduler;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -58,13 +56,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         
         // Prefijo para mensajes de usuario específico
         config.setUserDestinationPrefix("/user");
-        
-        // Configurar TaskScheduler para heartbeat
-        TaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
-        ((ThreadPoolTaskScheduler) taskScheduler).setPoolSize(1);
-        ((ThreadPoolTaskScheduler) taskScheduler).setThreadNamePrefix("ws-heartbeat-");
-        ((ThreadPoolTaskScheduler) taskScheduler).initialize();
-        config.setTaskScheduler(taskScheduler);
         
         log.info("✅ [WebSocket] Broker configurado con heartbeat cada 10 segundos");
     }
