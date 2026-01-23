@@ -43,13 +43,17 @@ public class YangoProxyRestTemplateConfig {
     private final AtomicInteger proxyIndex = new AtomicInteger(0);
     private final Random random = new Random();
     
+    // Guardar referencias para cerrar al hacer shutdown
+    private CloseableHttpClient httpClient;
+    private PoolingHttpClientConnectionManager connectionManager;
+    
     
     @Bean(name = "yangoProxyRestTemplate")
     public RestTemplate yangoProxyRestTemplate() {
         if (proxyConfig.isEnabled() && proxyConfig.getProxies() != null && !proxyConfig.getProxies().isEmpty()) {
             log.info("✅ [YangoProxyRestTemplateConfig] Rotación de proxies HABILITADA - {} proxies disponibles", 
                 proxyConfig.getProxies().size());
-            CloseableHttpClient httpClient = createHttpClientWithProxy();
+            this.httpClient = createHttpClientWithProxy();
             HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
             factory.setConnectTimeout(java.time.Duration.ofSeconds(30));
             factory.setConnectionRequestTimeout(java.time.Duration.ofSeconds(30));
@@ -66,10 +70,12 @@ public class YangoProxyRestTemplateConfig {
             .register("https", SSLConnectionSocketFactory.getSystemSocketFactory())
             .build();
         
-        PoolingHttpClientConnectionManager connectionManager = 
+        this.connectionManager = 
             new PoolingHttpClientConnectionManager(socketFactoryRegistry);
-        connectionManager.setMaxTotal(200);
-        connectionManager.setDefaultMaxPerRoute(20);
+        // Reducir conexiones para evitar saturar Nginx (768 worker_connections)
+        // Máximo 50 conexiones totales, 5 por ruta para distribuir mejor
+        connectionManager.setMaxTotal(50);
+        connectionManager.setDefaultMaxPerRoute(5);
         
         RequestConfig requestConfig = RequestConfig.custom()
             .setConnectTimeout(Timeout.ofSeconds(30))
@@ -231,5 +237,32 @@ public class YangoProxyRestTemplateConfig {
             
             return new HttpHost(scheme, target.getHostName(), defaultPort);
         }
+    }
+    
+    /**
+     * Cierra todas las conexiones HTTP al hacer shutdown
+     * Se ejecuta automáticamente cuando Spring destruye el bean
+     */
+    @jakarta.annotation.PreDestroy
+    public void cleanup() {
+        log.info("🧹 [YangoProxyRestTemplateConfig] Cerrando conexiones HTTP...");
+        try {
+            if (connectionManager != null) {
+                log.info("🔄 [YangoProxyRestTemplateConfig] Cerrando ConnectionManager y todas las conexiones activas...");
+                connectionManager.close();
+                connectionManager = null;
+                log.info("✅ [YangoProxyRestTemplateConfig] ConnectionManager cerrado");
+            }
+            
+            if (httpClient != null) {
+                log.info("🔄 [YangoProxyRestTemplateConfig] Cerrando HttpClient...");
+                httpClient.close();
+                httpClient = null;
+                log.info("✅ [YangoProxyRestTemplateConfig] HttpClient cerrado");
+            }
+        } catch (Exception e) {
+            log.error("❌ [YangoProxyRestTemplateConfig] Error cerrando conexiones HTTP: {}", e.getMessage(), e);
+        }
+        log.info("✅ [YangoProxyRestTemplateConfig] Limpieza de conexiones HTTP completada");
     }
 }

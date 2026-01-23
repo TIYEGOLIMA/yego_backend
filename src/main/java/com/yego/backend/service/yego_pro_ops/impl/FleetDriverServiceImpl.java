@@ -481,29 +481,56 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
         return new FechaRango(dateFrom, dateTo, fechaHoyStr);
             }
             
+    // Procesar conductores en lotes para evitar saturar conexiones HTTP
+    private static final int BATCH_SIZE = 10; // Procesar máximo 10 conductores a la vez
+    
     private List<CompletableFuture<DriversInOrderResponse.DriverInOrderInfo>> crearFuturesParaConductores(
             JsonNode items, Map<String, Double> balanceMap, FechaRango fechaRango) {
         List<CompletableFuture<DriversInOrderResponse.DriverInOrderInfo>> futures = new ArrayList<>();
+        List<JsonNode> itemsList = new ArrayList<>();
+        
+        // Convertir JsonNode array a lista
+        for (JsonNode item : items) {
+            itemsList.add(item);
+        }
+        
+        // Procesar en lotes para limitar conexiones simultáneas
+        for (int i = 0; i < itemsList.size(); i += BATCH_SIZE) {
+            int endIndex = Math.min(i + BATCH_SIZE, itemsList.size());
+            List<JsonNode> batch = itemsList.subList(i, endIndex);
             
-            for (JsonNode item : items) {
+            for (JsonNode item : batch) {
                 JsonNode driver = item.has("driver") ? item.get("driver") : item;
-            String driverId = obtenerTexto(driver, "id");
-            
-            if (driverId == null || driverId.isEmpty()) {
-                continue;
+                String driverId = obtenerTexto(driver, "id");
+                
+                if (driverId == null || driverId.isEmpty()) {
+                    continue;
+                }
+                
+                final String finalDriverId = driverId;
+                final JsonNode finalDriver = driver;
+                final Double balanceFromPoints = balanceMap.get(finalDriverId);
+                final String vehicleNumber = obtenerVehicleNumber(finalDriver);
+                
+                CompletableFuture<DriversInOrderResponse.DriverInOrderInfo> future = CompletableFuture
+                    .supplyAsync(() -> procesarConductorCompleto(
+                        finalDriverId, finalDriver, balanceFromPoints, vehicleNumber, fechaRango), 
+                        executorService);
+                
+                futures.add(future);
             }
             
-            final String finalDriverId = driverId;
-            final JsonNode finalDriver = driver;
-            final Double balanceFromPoints = balanceMap.get(finalDriverId);
-            final String vehicleNumber = obtenerVehicleNumber(finalDriver);
-            
-            CompletableFuture<DriversInOrderResponse.DriverInOrderInfo> future = CompletableFuture
-                .supplyAsync(() -> procesarConductorCompleto(
-                    finalDriverId, finalDriver, balanceFromPoints, vehicleNumber, fechaRango), 
-                    executorService);
-            
-            futures.add(future);
+            // Esperar a que el lote actual termine antes de procesar el siguiente
+            // Esto limita las conexiones HTTP simultáneas
+            if (i + BATCH_SIZE < itemsList.size()) {
+                try {
+                    CompletableFuture.allOf(futures.subList(Math.max(0, futures.size() - batch.size()), futures.size())
+                        .toArray(new CompletableFuture[0])).get();
+                    log.debug("✅ [FleetDriverService] Lote de {} conductores procesado, continuando con siguiente lote...", batch.size());
+                } catch (Exception e) {
+                    log.warn("⚠️ [FleetDriverService] Error esperando lote: {}", e.getMessage());
+                }
+            }
         }
         
         return futures;

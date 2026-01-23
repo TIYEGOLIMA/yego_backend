@@ -55,7 +55,8 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
     // ==================== FIELDS ====================
     
     private final DriverCloseService driverCloseService;
-    private final ExecutorService executorService = Executors.newFixedThreadPool(10);
+    // Reducir threads para evitar saturar Nginx (768 worker_connections)
+    private final ExecutorService executorService = Executors.newFixedThreadPool(5);
     private final java.util.concurrent.ConcurrentHashMap<String, CacheEntry> viajesSimplificadosCache = 
         new java.util.concurrent.ConcurrentHashMap<>();
     
