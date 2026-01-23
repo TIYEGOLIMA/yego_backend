@@ -50,6 +50,12 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         
         StompCommand command = accessor.getCommand();
         
+        // Actualizar última actividad para cualquier comando (excepto CONNECT que ya lo hace)
+        String sessionId = accessor.getSessionId();
+        if (sessionId != null && !StompCommand.CONNECT.equals(command)) {
+            webSocketSessionService.updateLastActivity(sessionId);
+        }
+        
         // Manejar conexión (CONNECT)
         if (StompCommand.CONNECT.equals(command)) {
             return handleConnect(accessor, message);
@@ -114,6 +120,10 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                         log.debug("✅ [WebSocket] Usuario autenticado: {} (ID: {}) con rol: {} - Módulos: {}", 
                             username, userId, role, userModules.size());
                     }
+                } catch (IllegalStateException e) {
+                    // Límite de conexiones alcanzado
+                    log.error("❌ [WebSocket] Límite de conexiones alcanzado para usuario {}: {}", userId, e.getMessage());
+                    throw new org.springframework.messaging.MessageDeliveryException("Límite de conexiones alcanzado. Intente más tarde.");
                 } catch (Exception e) {
                     log.warn("⚠️ [WebSocket] Error obteniendo módulos del usuario {}: {}", userId, e.getMessage());
                 }

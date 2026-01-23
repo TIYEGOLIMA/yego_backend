@@ -1,10 +1,13 @@
 package com.yego.backend.config;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -21,6 +24,7 @@ import java.util.List;
  * - /topic/marketing/* - Eventos del microfrontend Marketingamar
  * - /topic/system/*    - Eventos globales del sistema
  */
+@Slf4j
 @Configuration
 @EnableWebSocketMessageBroker
 @RequiredArgsConstructor
@@ -44,20 +48,44 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
-        // Habilitar broker simple para tópicos
-        config.enableSimpleBroker("/topic", "/queue");
+        // Habilitar broker simple para tópicos con heartbeat
+        // Heartbeat cada 10 segundos para detectar conexiones muertas
+        config.enableSimpleBroker("/topic", "/queue")
+                .setHeartbeatValue(new long[]{10000, 10000}); // Enviar cada 10s, esperar respuesta cada 10s
         
         // Prefijo para mensajes destinados a métodos anotados con @MessageMapping
         config.setApplicationDestinationPrefixes("/app");
         
         // Prefijo para mensajes de usuario específico
         config.setUserDestinationPrefix("/user");
+        
+        // Configurar TaskScheduler para heartbeat
+        TaskScheduler taskScheduler = new ThreadPoolTaskScheduler();
+        ((ThreadPoolTaskScheduler) taskScheduler).setPoolSize(1);
+        ((ThreadPoolTaskScheduler) taskScheduler).setThreadNamePrefix("ws-heartbeat-");
+        ((ThreadPoolTaskScheduler) taskScheduler).initialize();
+        config.setTaskScheduler(taskScheduler);
+        
+        log.info("✅ [WebSocket] Broker configurado con heartbeat cada 10 segundos");
     }
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
         // Registrar interceptor de autenticación
         registration.interceptors(webSocketAuthInterceptor);
+        
+        // Limitar threads del canal de entrada para evitar saturación
+        registration.taskExecutor().corePoolSize(4);
+        registration.taskExecutor().maxPoolSize(8);
+        registration.taskExecutor().queueCapacity(100);
+    }
+    
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        // Limitar threads del canal de salida
+        registration.taskExecutor().corePoolSize(4);
+        registration.taskExecutor().maxPoolSize(8);
+        registration.taskExecutor().queueCapacity(100);
     }
     
 
