@@ -16,7 +16,9 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Configuración de WebSocket para el Backend Principal
+ * Configuración de WebSocket
+ * - Desarrollo: SockJS con fallback a polling
+ * - Producción: Solo WebSocket nativo
  * 
  * Hub de comunicación en tiempo real para todos los microfrontends:
  * - /topic/ticketera/* - Eventos del microfrontend Ticketera
@@ -59,7 +61,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // Configurar TaskScheduler explícitamente si está disponible
         if (taskScheduler != null) {
             brokerRegistration.setTaskScheduler(taskScheduler);
-            log.info("✅ [WebSocket] Broker configurado con heartbeat cada 10 segundos y TaskScheduler");
+            log.info("✅ [WebSocket] Broker configurado con heartbeat cada 10 segundos");
         } else {
             log.warn("⚠️ [WebSocket] TaskScheduler no disponible, heartbeat puede no funcionar correctamente");
         }
@@ -89,7 +91,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registration.taskExecutor().maxPoolSize(8);
         registration.taskExecutor().queueCapacity(100);
     }
-    
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
@@ -98,13 +99,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         // Detectar si es producción
         boolean isProduction = activeProfile != null && (activeProfile.contains("prod") || activeProfile.contains("production"));
         
-        log.info("🔌 [WebSocket] Configurando endpoint /ws - Perfil activo: {} - Producción: {}", activeProfile, isProduction);
-        log.info("🔌 [WebSocket] Orígenes permitidos: {}", String.join(", ", ALLOWED_ORIGINS));
+        log.info("🔌 [WebSocket] Configurando endpoint /ws - Perfil: {} - Producción: {}", activeProfile, isProduction);
         
-        // En producción: solo WebSocket nativo (sin SockJS)
-        // En desarrollo: SockJS con fallback a polling
         if (isProduction) {
-            // Producción: solo WebSocket nativo (sin SockJS)
+            // Producción: Solo WebSocket nativo (sin SockJS)
             registry.addEndpoint("/ws")
                     .setAllowedOrigins(allowedOrigins);
             log.info("✅ [WebSocket] Endpoint /ws configurado para PRODUCCIÓN (WebSocket nativo)");

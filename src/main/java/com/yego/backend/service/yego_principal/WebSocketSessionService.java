@@ -12,6 +12,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * Servicio para gestionar sesiones WebSocket
+ * Maneja conexiones, suscripciones y limpieza automática de sesiones inactivas
+ */
 @Slf4j
 @Service
 public class WebSocketSessionService {
@@ -25,6 +29,7 @@ public class WebSocketSessionService {
     // Timeout agresivo cuando se alcanza el límite: 30 minutos sin actividad
     private static final int AGGRESSIVE_CLEANUP_TIMEOUT_MINUTES = 30; // 30 minutos
     
+    // Almacenamiento de sesiones WebSocket
     private final Map<String, List<ModuleResponse>> sessionModules = new ConcurrentHashMap<>();
     private final Map<String, String> sessionUserIds = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> sessionSubscriptions = new ConcurrentHashMap<>();
