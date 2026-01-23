@@ -208,9 +208,9 @@ public class YangoProxyRestTemplateConfig {
                 }
                 
                 HttpHost proxy = new HttpHost("http", proxyInfo.host, proxyInfo.port);
-                // Log en nivel debug para verificar rotación de proxies (útil para debugging)
-                log.debug("🔄 [RotatingProxyRoutePlanner] Usando proxy {}:{} para target {}:{}", 
-                        proxyInfo.host, proxyInfo.port, normalizedTarget.getHostName(), normalizedTarget.getPort());
+                // Log en nivel info para identificar qué proxy se está usando cuando hay errores
+                log.info("🔄 [RotatingProxyRoutePlanner] Usando proxy {}:{} (usuario: {}) para target {}:{}", 
+                        proxyInfo.host, proxyInfo.port, proxyInfo.username, normalizedTarget.getHostName(), normalizedTarget.getPort());
                 
                 return new HttpRoute(normalizedTarget, proxy);
             }

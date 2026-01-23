@@ -213,6 +213,32 @@ public abstract class BaseYangoApiService {
             } catch (HttpClientErrorException e) {
                 ultimoError = e;
                 int statusCode = e.getStatusCode().value();
+                String responseBody = e.getResponseBodyAsString();
+                
+                // Verificar si el error es del proxy (contiene mensaje sobre proxy)
+                boolean esErrorProxy = responseBody != null && (
+                    responseBody.contains("proxy") || 
+                    responseBody.contains("Proxy") ||
+                    responseBody.contains("update your proxy address") ||
+                    responseBody.contains("proxy username") ||
+                    responseBody.contains("proxy port")
+                );
+                
+                if (esErrorProxy) {
+                    log.error("❌ [BaseYangoApiService] Error de PROXY con cookie #{}: {} - {}", 
+                        i + 1, statusCode, responseBody != null && responseBody.length() > 200 
+                            ? responseBody.substring(0, 200) + "..." 
+                            : responseBody);
+                    log.warn("🔄 [BaseYangoApiService] El proxy está rechazando la conexión. Intentando con siguiente cookie...");
+                    
+                    // Esperar un poco antes de intentar con la siguiente cookie
+                    try {
+                        Thread.sleep(2000); // 2 segundos entre intentos cuando hay error de proxy
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                    continue; // Intentar con siguiente cookie
+                }
                 
                 // Si es 401 (Unauthorized), 403 (Forbidden) o 429 (Too Many Requests), probar con otra cookie
                 // 401 generalmente significa que la cookie expiró o no es válida
@@ -252,14 +278,37 @@ public abstract class BaseYangoApiService {
                 
             } catch (Exception e) {
                 ultimoError = e;
-                log.warn("🔄 [BaseYangoApiService] Error con cookie #{}: {}, intentando con siguiente cookie...", 
-                    i + 1, e.getMessage());
+                String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                 
-                // Esperar un poco antes de intentar con la siguiente cookie
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
+                // Verificar si el error es del proxy
+                boolean esErrorProxy = errorMessage.toLowerCase().contains("proxy") || 
+                                     errorMessage.contains("update your proxy address") ||
+                                     errorMessage.contains("proxy username") ||
+                                     errorMessage.contains("proxy port") ||
+                                     errorMessage.contains("407") || // Proxy Authentication Required
+                                     e.getClass().getSimpleName().contains("Proxy");
+                
+                if (esErrorProxy) {
+                    log.error("❌ [BaseYangoApiService] Error de PROXY con cookie #{}: {} - {}", 
+                        i + 1, e.getClass().getSimpleName(), errorMessage);
+                    log.warn("🔄 [BaseYangoApiService] El proxy está rechazando la conexión. Intentando con siguiente cookie...");
+                    
+                    // Esperar más tiempo cuando hay error de proxy
+                    try {
+                        Thread.sleep(2000); // 2 segundos entre intentos cuando hay error de proxy
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                } else {
+                    log.warn("🔄 [BaseYangoApiService] Error con cookie #{}: {}, intentando con siguiente cookie...", 
+                        i + 1, errorMessage);
+                    
+                    // Esperar un poco antes de intentar con la siguiente cookie
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
                 }
                 continue; // Intentar con siguiente cookie
             }

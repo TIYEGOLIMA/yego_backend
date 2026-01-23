@@ -37,7 +37,7 @@ public class CalculatedShiftScheduler {
      * - Omite conductores que ya tienen turnos manuales registrados
      * - Incluye delay entre conductores para evitar saturar la API
      */
-    @Scheduled(cron = "0 43 11 * * *", zone = "America/Lima")
+    @Scheduled(cron = "0 0 9 * * *", zone = "America/Lima")
     public void calcularHorasTurnoDiaAnterior() {
         LocalDateTime ahora = LocalDateTime.now(ZONE_UTC_MINUS_5);
         LocalDate fechaAnterior = ahora.toLocalDate().minusDays(1);
@@ -66,7 +66,7 @@ public class CalculatedShiftScheduler {
      * También actualiza automáticamente los viajes simplificados de estos conductores
      * fixedDelay: 300000 ms = 5 minutos (300 segundos)
      */
-    @Scheduled(fixedDelay = 300000, initialDelay = 60000, zone = "America/Lima")
+    @Scheduled(fixedDelay = 800000, initialDelay = 60000, zone = "America/Lima")
     public void actualizarConductoresEnOrden() {
         LocalDateTime ahora = LocalDateTime.now(ZONE_UTC_MINUS_5);
         log.info("⏰ [CalculatedShiftScheduler] ⏰⏰⏰ SCHEDULER WEBSOCKET EJECUTÁNDOSE - {} ⏰⏰⏰", ahora);

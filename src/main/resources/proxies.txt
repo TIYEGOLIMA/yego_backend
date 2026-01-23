@@ -17,11 +17,9 @@
 108.165.218.129:5868:jdpfhdfy:hlijf10bm6mr
 50.114.242.112:6349:jdpfhdfy:hlijf10bm6mr
 85.198.47.48:6316:jdpfhdfy:hlijf10bm6mr
-92.112.171.94:6062:jdpfhdfy:hlijf10bm6mr
 108.165.63.133:5870:jdpfhdfy:hlijf10bm6mr
 108.165.205.11:5248:jdpfhdfy:hlijf10bm6mr
 92.112.170.90:6059:jdpfhdfy:hlijf10bm6mr
-92.112.200.161:6744:jdpfhdfy:hlijf10bm6mr
 92.112.170.174:6143:jdpfhdfy:hlijf10bm6mr
 50.114.84.86:7325:jdpfhdfy:hlijf10bm6mr
 185.72.242.140:5823:jdpfhdfy:hlijf10bm6mr
@@ -39,7 +37,6 @@
 108.165.205.20:5257:jdpfhdfy:hlijf10bm6mr
 185.72.242.223:5906:jdpfhdfy:hlijf10bm6mr
 23.129.253.211:6829:jdpfhdfy:hlijf10bm6mr
-92.112.171.123:6091:jdpfhdfy:hlijf10bm6mr
 108.165.53.98:6837:jdpfhdfy:hlijf10bm6mr
 92.112.170.44:6013:jdpfhdfy:hlijf10bm6mr
 85.198.47.204:6472:jdpfhdfy:hlijf10bm6mr
@@ -49,7 +46,6 @@
 85.198.45.244:6168:jdpfhdfy:hlijf10bm6mr
 23.129.252.244:6512:jdpfhdfy:hlijf10bm6mr
 108.165.197.196:6435:jdpfhdfy:hlijf10bm6mr
-92.112.200.146:6729:jdpfhdfy:hlijf10bm6mr
 108.165.218.103:5842:jdpfhdfy:hlijf10bm6mr
 108.165.63.53:5790:jdpfhdfy:hlijf10bm6mr
 92.112.175.105:6378:jdpfhdfy:hlijf10bm6mr
@@ -72,7 +68,6 @@
 166.0.102.34:5273:jdpfhdfy:hlijf10bm6mr
 185.72.240.1:7037:jdpfhdfy:hlijf10bm6mr
 185.72.240.91:7127:jdpfhdfy:hlijf10bm6mr
-92.112.200.130:6713:jdpfhdfy:hlijf10bm6mr
 92.112.170.74:6043:jdpfhdfy:hlijf10bm6mr
 23.129.252.148:6416:jdpfhdfy:hlijf10bm6mr
 50.114.84.164:7403:jdpfhdfy:hlijf10bm6mr
@@ -83,9 +78,7 @@
 185.72.241.230:7522:jdpfhdfy:hlijf10bm6mr
 108.165.63.234:5971:jdpfhdfy:hlijf10bm6mr
 50.114.84.153:7392:jdpfhdfy:hlijf10bm6mr
-92.112.172.203:6475:jdpfhdfy:hlijf10bm6mr
 23.129.252.176:6444:jdpfhdfy:hlijf10bm6mr
-92.112.200.143:6726:jdpfhdfy:hlijf10bm6mr
 108.165.197.147:6386:jdpfhdfy:hlijf10bm6mr
 23.26.154.71:6808:jdpfhdfy:hlijf10bm6mr
 108.165.53.68:6807:jdpfhdfy:hlijf10bm6mr
@@ -98,4 +91,10 @@
 85.198.45.10:5934:jdpfhdfy:hlijf10bm6mr
 85.198.47.206:6474:jdpfhdfy:hlijf10bm6mr
 108.165.197.247:6486:jdpfhdfy:hlijf10bm6mr
-
+108.165.197.113:6352:jdpfhdfy:hlijf10bm6mr
+104.252.109.72:7005:jdpfhdfy:hlijf10bm6mr
+108.165.218.200:5939:jdpfhdfy:hlijf10bm6mr
+45.38.101.27:5960:jdpfhdfy:hlijf10bm6mr
+104.253.91.18:6451:jdpfhdfy:hlijf10bm6mr
+45.38.89.17:5952:jdpfhdfy:hlijf10bm6mr
+45.38.89.49:5984:jdpfhdfy:hlijf10bm6mr
