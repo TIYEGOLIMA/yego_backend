@@ -111,9 +111,9 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
                 log.warn("⚠️ [FleetDriverService] No se encontraron conductores");
                 return DriverSimpleResponse.builder()
                     .conductores(new ArrayList<>())
-                    .build();
-            }
-            
+            .build();
+    }
+    
             List<DriverSimpleResponse.DriverInfo> conductores = driverList.getContractors().stream()
                 .filter(contractor -> contractor.getId() != null && !contractor.getId().isEmpty())
                 .map(contractor -> DriverSimpleResponse.DriverInfo.builder()
@@ -160,16 +160,16 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             for (DriverListResponse.ContractorResponse contractor : driverList.getContractors()) {
                 if (contractor.getId() == null || contractor.getId().isEmpty()) {
                     continue;
-                }
-                
+    }
+    
                 // Filtrar por nombre
                 String nombreCompleto = contractor.getFullName() != null 
                     ? contractor.getFullName().toLowerCase() 
                     : "";
                 if (!nombreBusqueda.isEmpty() && !nombreCompleto.contains(nombreBusqueda)) {
                     continue;
-                }
-                
+    }
+    
                 // Verificar turnos manuales
                 List<CalculatedShift> turnosManuales = calculatedShiftRepository
                     .findByDriverIdAndFechaAndEsManual(contractor.getId(), fechaLocal);
@@ -178,7 +178,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
                     // Si es el único resultado, devolver mensaje de error
                     if (conductorUnico == null && conductoresFiltrados.isEmpty()) {
                         conductorUnico = contractor;
-                    }
+        }
                     log.debug("⚠️ [FleetDriverService] Conductor {} ya tiene turnos manuales - excluido", 
                         contractor.getId());
                     continue;
@@ -214,8 +214,8 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             return DriverSimpleResponse.builder()
                 .conductores(new ArrayList<>())
                 .mensaje("Error al buscar conductores: " + e.getMessage())
-                .build();
-        }
+            .build();
+    }
     }
 
     private DriverListRequest crearDriverListRequest(List<String> workRuleIds) {
@@ -276,7 +276,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
                 .attestationIssues(obtenerListaTexto(contractorNode, "attestation_issues"))
                 .unblockDate(obtenerTexto(contractorNode, "unblock_date"))
                 .photocheckRestrictions(obtenerListaTexto(contractorNode, "photocheck_restrictions"))
-                .build();
+                    .build();
         } catch (Exception e) {
             log.error("❌ Error mapeando contractor: {}", e.getMessage(), e);
             return null;
@@ -293,7 +293,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             .last(obtenerTexto(nameNode, "last"))
             .middle(obtenerTexto(nameNode, "middle"))
             .build();
-    }
+            }
 
     // ==================== MONITOREO EN VIVO VIEW ====================
     
@@ -348,7 +348,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             return crearRespuestaVaciaConductores();
         }
     }
-    
+
     private JsonNode obtenerConductoresInOrderDesdeAPI() {
         try {
             Map<String, Object> requestBody = new HashMap<>();
@@ -363,13 +363,13 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             
             ResponseEntity<String> response = ejecutarConRetryCookies(
                 YANGO_API_URL, 
-                HttpMethod.POST, 
+                HttpMethod.POST,
                 requestBody,
                 this::crearHeadersDriversPointsConCookie
             );
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-            JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+                JsonNode jsonResponse = objectMapper.readTree(response.getBody());
                 return jsonResponse.get("items");
             }
             return null;
@@ -400,7 +400,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
         
         if (startIndex >= total) {
             return null;
-        }
+                }
         
         List<String> driverIdsPaginated = driverIds.subList(startIndex, endIndex);
         Map<String, Double> balanceMapPaginated = new HashMap<>();
@@ -442,11 +442,11 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
         } catch (Exception e) {
             log.error("❌ [FleetDriverService] Error en obtenerDetallesConductores (después de {} ms): {}", 
                 System.currentTimeMillis() - startTime, e.getMessage(), e);
-                return DriversInOrderResponse.builder()
-                    .conductores(new ArrayList<>())
-                    .total(0)
-                    .build();
-            }
+            return DriversInOrderResponse.builder()
+                .conductores(new ArrayList<>())
+                .total(0)
+                .build();
+        }
     }
     
     private JsonNode obtenerItemsDesdeDriversList(List<String> driverIds) {
@@ -457,13 +457,13 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             
             ResponseEntity<String> response = ejecutarConRetryCookies(
                 YANGO_DRIVERS_LIST_API_URL,
-                HttpMethod.POST,
+                HttpMethod.POST, 
                 requestBody,
                 this::crearHeadersDriversListConCookie
             );
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                JsonNode jsonResponse = objectMapper.readTree(response.getBody());
+            JsonNode jsonResponse = objectMapper.readTree(response.getBody());
                 return jsonResponse.get("items");
             }
             return null;
@@ -479,8 +479,8 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
         String dateTo = fechaHoy.atTime(23, 59, 59).atZone(LIMA_ZONE).toInstant().toString();
         String fechaHoyStr = fechaHoy.format(DATE_FORMATTER);
         return new FechaRango(dateFrom, dateTo, fechaHoyStr);
-    }
-    
+            }
+            
     private List<CompletableFuture<DriversInOrderResponse.DriverInOrderInfo>> crearFuturesParaConductores(
             JsonNode items, Map<String, Double> balanceMap, FechaRango fechaRango) {
         List<CompletableFuture<DriversInOrderResponse.DriverInOrderInfo>> futures = new ArrayList<>();
@@ -796,8 +796,8 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             .conductores(new ArrayList<>())
             .total(0)
             .build();
-    }
-    
+                }
+                
     private DriverListResponse crearDriverListResponseVacio() {
         return DriverListResponse.builder().contractors(new ArrayList<>()).build();
                 }

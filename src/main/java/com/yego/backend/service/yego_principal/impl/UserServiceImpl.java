@@ -24,9 +24,9 @@ import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 
 @Slf4j
 @Service
@@ -37,6 +37,7 @@ public class UserServiceImpl implements UserService {
     private final RoleRepository roleRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final UserNotificationHandler userNotificationHandler;
+    private final ObjectMapper objectMapper;
     
     @Override
     @Transactional
@@ -123,17 +124,14 @@ public class UserServiceImpl implements UserService {
             }
         }
         
-        // Filtrar usuarios según el rol ANTES de paginar
-        List<User> filteredUsers = filtrarUsuariosPorRol(allUsers, userRole);
-        
         // Calcular paginación manual
-        int totalElements = filteredUsers.size();
+        int totalElements = allUsers.size();
         int totalPages = (int) Math.ceil((double) totalElements / limit);
         int startIndex = (page - 1) * limit;
         int endIndex = Math.min(startIndex + limit, totalElements);
         
         // Obtener solo los usuarios de la página actual
-        List<User> pagedUsers = filteredUsers.subList(startIndex, endIndex);
+        List<User> pagedUsers = allUsers.subList(startIndex, endIndex);
         
         List<UserResponseCompleteDto> users = pagedUsers.stream()
                 .map(this::mapToUserResponseCompleteDto)
@@ -176,69 +174,9 @@ public class UserServiceImpl implements UserService {
             users = userRepository.findAll();
         }
         
-        // Filtrar usuarios según el rol
-        List<User> filteredUsers = filtrarUsuariosPorRol(users, userRole);
-        
-        return filteredUsers.stream()
+        return users.stream()
                 .map(this::mapToResponseDto)
                 .collect(Collectors.toList());
-    }
-    
-    /**
-     * Filtra usuarios según el rol del usuario autenticado
-     */
-    private List<User> filtrarUsuariosPorRol(List<User> users, String userRole) {
-        switch (userRole) {
-            case "SUPERADMIN":
-            case "superadmin":
-                // SUPERADMIN ve todos los usuarios
-                log.info("SUPERADMIN: mostrando todos los usuarios");
-                return users;
-                
-            case "ADMIN":
-            case "admin":
-                // ADMIN ve todos menos SUPERADMIN
-                log.info("ADMIN: mostrando todos menos SUPERADMIN");
-                return users.stream()
-                        .filter(user -> {
-                            String roleName = user.getRoleName();
-                            if (roleName == null) return true; // Incluir si no tiene rol
-                            return !"superadmin".equalsIgnoreCase(roleName.trim());
-                        })
-                        .collect(Collectors.toList());
-                
-            case "SUPERVISOR":
-            case "supervisor":
-                // SUPERVISOR solo ve SUPERVISOR, OPERADOR y SAC
-                log.info("👁️ SUPERVISOR: filtrando usuarios para mostrar solo OPERADOR, SAC y SUPERVISOR");
-                log.info("👁️ Total de usuarios antes del filtro: {}", users.size());
-                List<User> filtered = users.stream()
-                        .filter(user -> {
-                            String roleName = user.getRoleName();
-                            if (roleName == null) {
-                                log.debug("⚠️ Usuario {} no tiene rol asignado", user.getUsername());
-                                return false;
-                            }
-                            String normalizedRole = roleName.toLowerCase().trim();
-                            boolean matches = "operador".equals(normalizedRole) || 
-                                             "sac".equals(normalizedRole) || 
-                                             "supervisor".equals(normalizedRole);
-                            if (matches) {
-                                log.debug("✅ Usuario {} con rol {} incluido", user.getUsername(), roleName);
-                            } else {
-                                log.debug("❌ Usuario {} con rol {} excluido", user.getUsername(), roleName);
-                            }
-                            return matches;
-                        })
-                        .collect(Collectors.toList());
-                log.info("👁️ Total de usuarios después del filtro: {}", filtered.size());
-                return filtered;
-                
-            default:
-                // Cualquier otro rol no ve usuarios
-                log.warn("Rol {} no tiene permisos para ver usuarios", userRole);
-                return List.of();
-        }
     }
     
     @Override
@@ -259,63 +197,65 @@ public class UserServiceImpl implements UserService {
     
     @Override
     @Transactional
-    public UserResponseDto update(Long id, UpdateUserDto updateUserDto) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
-        
-        // Verificar conflictos de username
-        if (updateUserDto.getUsername() != null && !updateUserDto.getUsername().equals(user.getUsername())) {
-            if (userRepository.findByUsername(updateUserDto.getUsername()).isPresent()) {
-                throw new IllegalStateException("El nombre de usuario ya existe");
+    public ResponseEntity<?> update(Long id, UpdateUserDto updateUserDto) {
+        try {
+            // Validar campos obligatorios y formato
+            ResponseEntity<?> validationError = validateUpdateUserDto(updateUserDto);
+            if (validationError != null) {
+                return validationError;
             }
-        }
-        
-        // Verificar conflictos de email
-        if (updateUserDto.getEmail() != null && !updateUserDto.getEmail().equals(user.getEmail())) {
-            if (userRepository.findByEmail(updateUserDto.getEmail()).isPresent()) {
-                throw new IllegalStateException("El email ya existe");
+            
+            User user = userRepository.findById(id)
+                    .orElse(null);
+            
+            if (user == null) {
+                return badRequest("Usuario no encontrado");
             }
-        }
-        
-        // Actualizar campos
-        if (updateUserDto.getUsername() != null) {
-            user.setUsername(updateUserDto.getUsername());
-        }
-        if (updateUserDto.getEmail() != null) {
-            user.setEmail(updateUserDto.getEmail());
-        }
-        if (updateUserDto.getName() != null) {
-            user.setName(updateUserDto.getName());
-        }
-        if (updateUserDto.getRoleId() != null) {
+            
+            // Verificar conflictos de username
+            if (!updateUserDto.getUsername().equals(user.getUsername()) 
+                    && userRepository.findByUsername(updateUserDto.getUsername()).isPresent()) {
+                return badRequest("El nombre de usuario ya existe");
+            }
+            
+            // Verificar conflictos de email
+            if (!updateUserDto.getEmail().equals(user.getEmail()) 
+                    && userRepository.findByEmail(updateUserDto.getEmail()).isPresent()) {
+                return badRequest("El email ya existe");
+            }
+            
+            // Verificar que el rol existe y tiene nombre válido
             Role role = roleRepository.findById(updateUserDto.getRoleId())
-                    .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + updateUserDto.getRoleId() + " no encontrado"));
-            user.setRole(role);
-        }
-
-        if (updateUserDto.getLastName() != null) {
-            user.setLastName(updateUserDto.getLastName());
-        }
-        
-        // Hash password si se proporciona
-        if (updateUserDto.getPassword() != null) {
-            if (!validatePassword(updateUserDto.getPassword())) {
-                throw new IllegalArgumentException("La contraseña no cumple con los requisitos de seguridad");
+                    .orElse(null);
+            if (role == null) {
+                return badRequest("Rol con ID " + updateUserDto.getRoleId() + " no encontrado");
             }
-            user.setPassword(passwordEncoder.encode(updateUserDto.getPassword()));
+            if (isNullOrEmpty(role.getName())) {
+                return badRequest("El rol no tiene un nombre válido");
+            }
+            
+            // Actualizar entidad desde DTO
+            User updatedUser = updateEntityFromDto(user, updateUserDto);
+            
+            User savedUser = userRepository.save(updatedUser);
+            
+            // Verificar si el usuario actualizado está logueado y enviar notificación
+            verificarYEnviarLogoutForzado(savedUser);
+            
+            // Enviar notificación WebSocket para refrescar tabla
+            userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
+            
+            log.info("✅ Usuario YEGO Principal actualizado: {}", savedUser.getUsername());
+            
+            return ResponseEntity.ok(mapToResponseDto(savedUser));
+            
+        } catch (Exception e) {
+            log.error("❌ Error actualizando usuario: {}", e.getMessage());
+            ErrorResponseDto error = ErrorResponseDto.builder()
+                    .message(e.getMessage())
+                    .build();
+            return ResponseEntity.badRequest().body(error);
         }
-        
-        User savedUser = userRepository.save(user);
-        
-        // Verificar si el usuario actualizado está logueado y enviar notificación
-        verificarYEnviarLogoutForzado(savedUser);
-        
-        // Enviar notificación WebSocket para refrescar tabla
-        userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
-        
-        log.info("✅ Usuario YEGO Principal actualizado: {}", savedUser.getUsername());
-        
-        return mapToResponseDto(savedUser);
     }
     
     @Override
@@ -393,18 +333,121 @@ public class UserServiceImpl implements UserService {
         return hasUpperCase && hasLowerCase && hasNumbers && hasSpecialChar && isLongEnough;
     }
     
+    /**
+     * Valida el DTO de actualización de usuario
+     */
+    private ResponseEntity<?> validateUpdateUserDto(UpdateUserDto updateUserDto) {
+        // Validar campos obligatorios
+        if (isNullOrEmpty(updateUserDto.getUsername())) {
+            return badRequest("El nombre de usuario es obligatorio");
+        }
+        if (isNullOrEmpty(updateUserDto.getEmail())) {
+            return badRequest("El email es obligatorio");
+        }
+        if (isNullOrEmpty(updateUserDto.getName())) {
+            return badRequest("El nombre es obligatorio");
+        }
+        if (isNullOrEmpty(updateUserDto.getLastName())) {
+            return badRequest("El apellido es obligatorio");
+        }
+        if (isNullOrEmpty(updateUserDto.getDni())) {
+            return badRequest("El DNI es obligatorio");
+        }
+        if (updateUserDto.getRoleId() == null) {
+            return badRequest("El rol es obligatorio");
+        }
+        
+        // Validar formato y longitud
+        if (updateUserDto.getUsername().length() < 2 || updateUserDto.getUsername().length() > 255) {
+            return badRequest("El nombre de usuario debe tener entre 2 y 255 caracteres");
+        }
+        if (!updateUserDto.getEmail().matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
+            return badRequest("El formato del email no es válido");
+        }
+        if (updateUserDto.getName().length() > 255) {
+            return badRequest("El nombre no puede exceder 255 caracteres");
+        }
+        if (updateUserDto.getLastName().length() > 255) {
+            return badRequest("El apellido no puede exceder 255 caracteres");
+        }
+        if (updateUserDto.getDni().length() < 8 || updateUserDto.getDni().length() > 12) {
+            return badRequest("El documento debe tener entre 8 y 12 caracteres");
+        }
+        if (updateUserDto.getPassword() != null && updateUserDto.getPassword().length() < 6) {
+            return badRequest("La contraseña debe tener al menos 6 caracteres");
+        }
+        
+        return null; // Validación exitosa
+    }
+    
+    /**
+     * Helper para verificar si un string es null o vacío
+     */
+    private boolean isNullOrEmpty(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+    
+    /**
+     * Helper para crear respuesta de error
+     */
+    private ResponseEntity<ErrorResponseDto> badRequest(String message) {
+        ErrorResponseDto error = ErrorResponseDto.builder()
+                .message(message)
+                .build();
+        return ResponseEntity.badRequest().body(error);
+    }
+    
+    /**
+     * Actualiza la entidad User con los datos del DTO
+     */
+    private User updateEntityFromDto(User user, UpdateUserDto updateUserDto) {
+        if (updateUserDto.getUsername() != null) {
+            user.setUsername(updateUserDto.getUsername());
+        }
+        if (updateUserDto.getEmail() != null) {
+            user.setEmail(updateUserDto.getEmail());
+        }
+        if (updateUserDto.getName() != null) {
+            user.setName(updateUserDto.getName());
+        }
+        if (updateUserDto.getLastName() != null) {
+            user.setLastName(updateUserDto.getLastName());
+        }
+        if (updateUserDto.getDni() != null) {
+            user.setDni(updateUserDto.getDni());
+        }
+        if (updateUserDto.getRoleId() != null) {
+            Role role = roleRepository.findById(updateUserDto.getRoleId())
+                    .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + updateUserDto.getRoleId() + " no encontrado"));
+            user.setRole(role);
+        }
+        if (updateUserDto.getPassword() != null) {
+            if (!validatePassword(updateUserDto.getPassword())) {
+                throw new IllegalArgumentException("La contraseña no cumple con los requisitos de seguridad");
+            }
+            user.setPassword(passwordEncoder.encode(updateUserDto.getPassword()));
+        }
+        if (updateUserDto.getActive() != null) {
+            user.setActive(updateUserDto.getActive());
+        }
+        return user;
+    }
+    
+    /**
+     * Convierte la entidad User a UserResponseDto
+     */
     private UserResponseDto mapToResponseDto(User user) {
         return UserResponseDto.builder()
                 .id(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .name(user.getName())
-                .lastName(user.getLastName())
-                .dni(user.getDni())
-                .role(user.getRoleId())
-                .roleName(user.getRoleName())
-                .moduleId(user.getModuleId())
-                .active(user.getActive())
+                .username(user.getUsername() != null ? user.getUsername() : "")
+                .email(user.getEmail() != null ? user.getEmail() : "")
+                .name(user.getName() != null ? user.getName() : "")
+                .lastName(user.getLastName() != null ? user.getLastName() : "")
+                .dni(user.getDni() != null ? user.getDni() : "")
+                .role(user.getRoleId() != null ? user.getRoleId() : 0L)
+                .roleName(user.getRoleName() != null ? user.getRoleName() : "")
+                .moduleId(user.getModuleId() != null ? user.getModuleId() : 0L)
+                .active(user.getActive() != null ? user.getActive() : false)
                 .lastLogin(user.getLastLogin())
                 .createdAt(user.getCreatedAt())
                 .build();
@@ -476,15 +519,15 @@ public class UserServiceImpl implements UserService {
                     .build());
             }
             
-            // Consultar API externa
-            String apiUrl = "http://167.235.28.114:5000/api/v2/dni/" + dni;
+            // Consultar API externa (Factiliza)
+            String apiUrl = "https://api.factiliza.com/pe/v1/dni/info/" + dni;
             log.info("🌐 [UserService] Consultando API: {}", apiUrl);
             
             HttpClient client = HttpClient.newHttpClient();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(apiUrl))
-                    .header("Authorization", "Basic c3lzdGVtM3c6NkVpWmpwaWp4a1hUZUFDbw==")
                     .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NTkiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJjb25zdWx0b3IifQ.NaoAXramusCzks7mRCzWFWcMiBaSA0d8rNBgw-OVeYg")
                     .GET()
                     .build();
             
@@ -497,22 +540,52 @@ public class UserServiceImpl implements UserService {
                 String responseBody = response.body();
                 log.info("📋 [UserService] Respuesta API: {}", responseBody);
                 
-                // Extraer datos del JSON
-                String nombres = extraerCampoJson(responseBody, "nombres");
-                String apellidoPaterno = extraerCampoJson(responseBody, "apellido_paterno");
-                String apellidoMaterno = extraerCampoJson(responseBody, "apellido_materno");
-                
-                String nombreCompleto = nombres + " " + apellidoPaterno + 
-                    (apellidoMaterno != null && !apellidoMaterno.isEmpty() ? " " + apellidoMaterno : "");
-                
-                return ResponseEntity.ok(DniResponseDto.builder()
-                    .success(true)
-                    .dni(dni)
-                    .nombres(nombres)
-                    .apellidoPaterno(apellidoPaterno)
-                    .apellidoMaterno(apellidoMaterno)
-                    .nombreCompleto(nombreCompleto.trim())
-                    .build());
+                try {
+                    // Parsear JSON con ObjectMapper
+                    JsonNode rootNode = objectMapper.readTree(responseBody);
+                    
+                    // Verificar si la respuesta es exitosa
+                    boolean success = rootNode.has("success") && rootNode.get("success").asBoolean();
+                    if (!success) {
+                        String message = rootNode.has("message") ? rootNode.get("message").asText() : "Error en la consulta";
+                        log.error("❌ [UserService] API retornó success=false: {}", message);
+                        return ResponseEntity.ok(DniResponseDto.builder()
+                            .success(false)
+                            .dni(dni)
+                            .error(message)
+                            .build());
+                    }
+                    
+                    // Extraer datos del objeto "data"
+                    JsonNode dataNode = rootNode.get("data");
+                    if (dataNode == null || dataNode.isNull()) {
+                        log.error("❌ [UserService] No se encontró el objeto 'data' en la respuesta");
+                        return ResponseEntity.ok(DniResponseDto.builder()
+                            .success(false)
+                            .dni(dni)
+                            .error("No se encontraron datos en la respuesta")
+                            .build());
+                    }
+                    
+                    String nombres = dataNode.has("nombres") ? dataNode.get("nombres").asText() : "";
+                    String apellidoPaterno = dataNode.has("apellido_paterno") ? dataNode.get("apellido_paterno").asText() : "";
+                    String apellidoMaterno = dataNode.has("apellido_materno") ? dataNode.get("apellido_materno").asText() : "";
+                    
+                    return ResponseEntity.ok(DniResponseDto.builder()
+                        .success(true)
+                        .nombres(nombres)
+                        .apellidoPaterno(apellidoPaterno)
+                        .apellidoMaterno(apellidoMaterno)
+                        .build());
+                        
+                } catch (Exception e) {
+                    log.error("❌ [UserService] Error parseando respuesta JSON: {}", e.getMessage());
+                    return ResponseEntity.ok(DniResponseDto.builder()
+                        .success(false)
+                        .dni(dni)
+                        .error("Error parseando respuesta: " + e.getMessage())
+                        .build());
+                }
                 
             } else {
                 log.error("❌ [UserService] Error en API DNI: status {}", response.statusCode());
@@ -533,24 +606,6 @@ public class UserServiceImpl implements UserService {
         }
     }
     
-    /**
-     * Extrae un campo del JSON de respuesta de forma simple
-     */
-    private String extraerCampoJson(String json, String campo) {
-        try {
-            String patron = "\"" + campo + "\"\\s*:\\s*\"([^\"]+)\"";
-            Pattern pattern = Pattern.compile(patron);
-            Matcher matcher = pattern.matcher(json);
-            
-            if (matcher.find()) {
-                return matcher.group(1);
-            }
-            return "";
-        } catch (Exception e) {
-            log.warn("⚠️ [UserService] Error extrayendo campo {}: {}", campo, e.getMessage());
-            return "";
-        }
-    }
     
 }
 

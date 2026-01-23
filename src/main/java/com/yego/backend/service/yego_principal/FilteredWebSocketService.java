@@ -123,8 +123,19 @@ public class FilteredWebSocketService {
             return;
         }
         
+        // Para topics de ticketera, SIEMPRE enviar sin verificar sesiones
+        // porque SimpleBroker envía a TODAS las sesiones suscritas automáticamente
+        if (destination.contains("ticket") || destination.contains("ticketera")) {
+            log.info("📤 [FilteredWebSocket] Enviando mensaje a topic de ticketera {} (SimpleBroker enviará a todas las sesiones suscritas)", destination);
+            messagingTemplate.convertAndSend(destination, payload);
+            log.info("✅ [FilteredWebSocket] Mensaje enviado a topic {}", destination);
+            return;
+        }
+        
         // Para otros topics, verificar si hay sesiones suscritas (ya filtradas por acceso)
         Set<String> subscribedSessions = webSocketSessionService.getSessionsSubscribedTo(destination);
+        
+        log.info("🔍 [FilteredWebSocket] Verificando sesiones para topic: {} - Sesiones encontradas: {}", destination, subscribedSessions.size());
         
         if (subscribedSessions.isEmpty()) {
             log.warn("🚫 [FilteredWebSocket] No hay sesiones suscritas al topic: {} - NO ENVIANDO MENSAJE", destination);
@@ -133,9 +144,10 @@ public class FilteredWebSocketService {
         
         // Enviar mensaje - solo usuarios con acceso están suscritos
         // Con SimpleBroker, convertAndSend envía a todas las sesiones suscritas al topic
-        messagingTemplate.convertAndSend(destination, payload);
-        log.debug("📤 [FilteredWebSocket] Mensaje enviado a topic {} - {} sesiones suscritas: {}", 
+        log.info("📤 [FilteredWebSocket] Enviando mensaje a topic {} - {} sesiones suscritas: {}", 
             destination, subscribedSessions.size(), subscribedSessions);
+        messagingTemplate.convertAndSend(destination, payload);
+        log.info("✅ [FilteredWebSocket] Mensaje enviado correctamente a topic {}", destination);
     }
 }
 

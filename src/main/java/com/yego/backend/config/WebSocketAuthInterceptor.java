@@ -111,7 +111,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     String sessionId = accessor.getSessionId();
                     if (sessionId != null) {
                         webSocketSessionService.saveUserModules(sessionId, userModules, userId);
-                        log.info("✅ [WebSocket] Usuario autenticado: {} (ID: {}) con rol: {} - Módulos: {}", 
+                        log.debug("✅ [WebSocket] Usuario autenticado: {} (ID: {}) con rol: {} - Módulos: {}", 
                             username, userId, role, userModules.size());
                     }
                 } catch (Exception e) {
@@ -150,19 +150,42 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             return message;
         }
         
-        // Verificar acceso para topics de módulos específicos
+        // Obtener información del usuario
         List<ModuleResponse> userModules = webSocketSessionService.getUserModules(sessionId);
         String userId = webSocketSessionService.getUserId(sessionId);
         
+        // Obtener el rol del usuario desde el contexto de seguridad
+        String userRole = null;
+        if (accessor.getUser() != null && accessor.getUser() instanceof org.springframework.security.core.Authentication) {
+            org.springframework.security.core.Authentication auth = (org.springframework.security.core.Authentication) accessor.getUser();
+            if (auth.getAuthorities() != null && !auth.getAuthorities().isEmpty()) {
+                userRole = auth.getAuthorities().iterator().next().getAuthority();
+                if (userRole != null && userRole.startsWith("ROLE_")) {
+                    userRole = userRole.substring(5); // Remover prefijo "ROLE_"
+                }
+            }
+        }
+        
+        // Permitir que usuarios TABLET y TABLET2 se suscriban a topics de ticketera sin verificar módulo
+        // Esto es necesario porque las tabletas de rating no tienen el módulo "Tickets" en su lista
+        if ((userRole != null && (userRole.equals("TABLET1") || userRole.equals("TABLET2") || userRole.equals("TV"))) 
+            && (normalizedTopic.startsWith("ticket") || normalizedTopic.startsWith("ticketera") 
+                || normalizedTopic.startsWith("modulos-atencion"))) {
+            webSocketSessionService.addSubscription(sessionId, destination);
+            log.debug("✅ [WebSocket] Suscripción permitida para TABLET: sesión {} (usuario {}) → {}", sessionId, userId, destination);
+            return message;
+        }
+        
+        // Verificar acceso para topics de módulos específicos
         if (userModules == null || userModules.isEmpty() || 
             !webSocketModuleMappingService.hasAccessToTopic(destination, userModules)) {
-            log.warn("🚫 [WebSocket] Suscripción bloqueada: sesión {} (usuario {}) → {}", 
-                sessionId, userId, destination);
+            log.warn("🚫 [WebSocket] Suscripción bloqueada: sesión {} (usuario {}, rol {}) → {}", 
+                sessionId, userId, userRole, destination);
             return null;
         }
         
         webSocketSessionService.addSubscription(sessionId, destination);
-        log.info("✅ [WebSocket] Suscripción permitida: sesión {} (usuario {}) → {}", sessionId, userId, destination);
+        log.debug("✅ [WebSocket] Suscripción permitida: sesión {} (usuario {}) → {}", sessionId, userId, destination);
         return message;
     }
     
@@ -170,7 +193,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         String sessionId = accessor.getSessionId();
         if (sessionId != null) {
             webSocketSessionService.removeSession(sessionId);
-            log.info("🔌 [WebSocket] Sesión {} desconectada y limpiada", sessionId);
+            log.debug("🔌 [WebSocket] Sesión {} desconectada y limpiada", sessionId);
         }
         return message;
     }

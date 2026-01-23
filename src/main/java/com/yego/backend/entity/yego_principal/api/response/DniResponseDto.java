@@ -1,5 +1,6 @@
 package com.yego.backend.entity.yego_principal.api.response;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -9,6 +10,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class DniResponseDto {
     
     private boolean success;
@@ -16,6 +18,5 @@ public class DniResponseDto {
     private String nombres;
     private String apellidoPaterno;
     private String apellidoMaterno;
-    private String nombreCompleto;
     private String error;
 }

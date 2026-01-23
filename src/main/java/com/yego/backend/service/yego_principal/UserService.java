@@ -34,7 +34,7 @@ public interface UserService {
     /**
      * Actualizar usuario
      */
-    UserResponseDto update(Long id, UpdateUserDto updateUserDto);
+    ResponseEntity<?> update(Long id, UpdateUserDto updateUserDto);
     
     /**
      * Eliminar usuario (soft delete)

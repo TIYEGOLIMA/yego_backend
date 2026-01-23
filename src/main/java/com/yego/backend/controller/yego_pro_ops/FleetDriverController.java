@@ -150,10 +150,10 @@ public class FleetDriverController {
         
         if (cierreOpt.isPresent()) {
             DriverCloseResponse response = cierreOpt.get();
-            log.info("✅ [FleetDriverController] Cierre encontrado con ID: {}", response.getId());
-            return ResponseEntity.ok(response);
+                log.info("✅ [FleetDriverController] Cierre encontrado con ID: {}", response.getId());
+                return ResponseEntity.ok(response);
         } else {
-            log.info("ℹ️ [FleetDriverController] No se encontró cierre para driver_id: {} y fecha: {}", driverId, fecha);
+                log.info("ℹ️ [FleetDriverController] No se encontró cierre para driver_id: {} y fecha: {}", driverId, fecha);
             Map<String, String> errorResponse = new HashMap<>();
             errorResponse.put("message", "Cierre no encontrado");
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
@@ -205,7 +205,7 @@ public class FleetDriverController {
             response.getTotal(), page, totalTime, String.format("%.2f", totalTime / 1000.0));
         return ResponseEntity.ok(response);
     }
-
+    
     /**
      * 📋 ENDPOINT PRINCIPAL: Obtener o calcular turnos
      * Verifica si hay turnos en module_calculated_shifts para un driver y fecha.
@@ -231,7 +231,7 @@ public class FleetDriverController {
             
             log.info("✅ [FleetDriverController] Se encontraron {} turno(s) para driver_id: {} y fecha: {}", 
                 turnos.size(), driverId, fecha);
-            return ResponseEntity.ok(response);
+        return ResponseEntity.ok(response);
         } catch (Exception e) {
             log.error("❌ [FleetDriverController] Error obteniendo o calculando turnos para driver_id: {}, fecha: {}: {}", 
                 driverId, fecha, e.getMessage(), e);

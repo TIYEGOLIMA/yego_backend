@@ -1,6 +1,8 @@
 package com.yego.backend.service.yego_ticketerera.impl;
 
 import com.yego.backend.service.yego_ticketerera.DriverConsultaService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -25,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 public class DriverConsultaServiceImpl implements DriverConsultaService {
 
     private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
     
     // Cache para evitar consultas repetidas
     private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
@@ -97,15 +100,15 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
         log.info("📄 [DriverConsultaService] DNI: '{}', Teléfono: '{}'", dni, phone);
         
         try {
-            // Consultar API del DNI
-            String apiUrl = "http://167.235.28.114:5000/api/v2/dni/" + dni;
+            // Consultar API del DNI (Factiliza)
+            String apiUrl = "https://api.factiliza.com/pe/v1/dni/info/" + dni;
             log.info("🌐 [DriverConsultaService] Consultando API: {}", apiUrl);
             
             java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                     .uri(java.net.URI.create(apiUrl))
-                    .header("Authorization", "Basic c3lzdGVtM3c6NkVpWmpwaWp4a1hUZUFDbw==")
                     .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NTkiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJjb25zdWx0b3IifQ.NaoAXramusCzks7mRCzWFWcMiBaSA0d8rNBgw-OVeYg")
                     .GET()
                     .build();
             
@@ -116,25 +119,48 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
             log.info("📋 [DriverConsultaService] Respuesta API body: {}", response.body());
             
             if (response.statusCode() == 200) {
-                // Parsear la respuesta JSON manualmente (simple)
+                // Parsear la respuesta JSON con ObjectMapper
                 String responseBody = response.body();
                 
-                String nombres = extraerCampoJson(responseBody, "nombres");
-                String apellidoPaterno = extraerCampoJson(responseBody, "apellido_paterno");
-                String apellidoMaterno = extraerCampoJson(responseBody, "apellido_materno");
-                
-                log.info("👤 [DriverConsultaService] Nombres: '{}'", nombres);
-                log.info("👤 [DriverConsultaService] Apellido Paterno: '{}'", apellidoPaterno);
-                log.info("👤 [DriverConsultaService] Apellido Materno: '{}'", apellidoMaterno);
-                
-                // Combinar para first_name, last_name y full_name
-                String firstName = nombres;
-                String lastName = apellidoPaterno + (apellidoMaterno != null && !apellidoMaterno.isEmpty() ? " " + apellidoMaterno : "");
-                
-                log.info("✅ [DriverConsultaService] Procesado - First: '{}', Last: '{}'", firstName, lastName);
-                
-                // Registrar conductor con los datos obtenidos
-                return registrarNuevoConductor(firstName, lastName, phone);
+                try {
+                    JsonNode rootNode = objectMapper.readTree(responseBody);
+                    
+                    // Verificar si la respuesta es exitosa
+                    boolean success = rootNode.has("success") && rootNode.get("success").asBoolean();
+                    if (!success) {
+                        String message = rootNode.has("message") ? rootNode.get("message").asText() : "Error en la consulta";
+                        log.error("❌ [DriverConsultaService] API retornó success=false: {}", message);
+                        throw new RuntimeException("Error consultando DNI: " + message);
+                    }
+                    
+                    // Extraer datos del objeto "data"
+                    JsonNode dataNode = rootNode.get("data");
+                    if (dataNode == null || dataNode.isNull()) {
+                        log.error("❌ [DriverConsultaService] No se encontró el objeto 'data' en la respuesta");
+                        throw new RuntimeException("No se encontraron datos en la respuesta");
+                    }
+                    
+                    String nombres = dataNode.has("nombres") ? dataNode.get("nombres").asText() : "";
+                    String apellidoPaterno = dataNode.has("apellido_paterno") ? dataNode.get("apellido_paterno").asText() : "";
+                    String apellidoMaterno = dataNode.has("apellido_materno") ? dataNode.get("apellido_materno").asText() : "";
+                    
+                    log.info("👤 [DriverConsultaService] Nombres: '{}'", nombres);
+                    log.info("👤 [DriverConsultaService] Apellido Paterno: '{}'", apellidoPaterno);
+                    log.info("👤 [DriverConsultaService] Apellido Materno: '{}'", apellidoMaterno);
+                    
+                    // Combinar para first_name, last_name y full_name
+                    String firstName = nombres;
+                    String lastName = apellidoPaterno + (apellidoMaterno != null && !apellidoMaterno.isEmpty() ? " " + apellidoMaterno : "");
+                    
+                    log.info("✅ [DriverConsultaService] Procesado - First: '{}', Last: '{}'", firstName, lastName);
+                    
+                    // Registrar conductor con los datos obtenidos
+                    return registrarNuevoConductor(firstName, lastName, phone);
+                    
+                } catch (Exception e) {
+                    log.error("❌ [DriverConsultaService] Error parseando respuesta JSON: {}", e.getMessage());
+                    throw new RuntimeException("Error parseando respuesta DNI: " + e.getMessage());
+                }
                 
             } else {
                 log.error("❌ [DriverConsultaService] Error en API DNI: status {}", response.statusCode());
@@ -149,25 +175,6 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
         }
     }
     
-    private String extraerCampoJson(String json, String campo) {
-        try {
-            String patron = "\"" + campo + "\"\\s*:\\s*\"([^\"]+)\"";
-            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(patron);
-            java.util.regex.Matcher matcher = pattern.matcher(json);
-            
-            if (matcher.find()) {
-                String valor = matcher.group(1);
-                log.debug("🔍 [DriverConsultaService] Extraído {}: '{}'", campo, valor);
-                return valor;
-            } else {
-                log.warn("⚠️ [DriverConsultaService] Campo '{}' no encontrado en JSON", campo);
-                return "";
-            }
-        } catch (Exception e) {
-            log.error("💥 [DriverConsultaService] Error extrayendo campo '{}': {}", campo, e.getMessage());
-            return "";
-        }
-    }
 
 
     @Override
