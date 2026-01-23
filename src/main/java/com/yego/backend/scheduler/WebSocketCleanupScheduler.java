@@ -19,26 +19,36 @@ public class WebSocketCleanupScheduler {
     private final WebSocketSessionService webSocketSessionService;
     
     /**
-     * Limpia conexiones WebSocket inactivas cada 4 horas
-     * Ejecuta: cada 4 horas (14400000 ms)
+     * Limpia conexiones WebSocket inactivas cada 30 minutos
+     * Ejecuta: cada 30 minutos (1800000 ms)
      * Limpia conexiones sin actividad por más de 5 horas
      * 
-     * Nota: Con un timeout de 5 horas, verificar cada 4 horas es suficiente
-     * para mantener el sistema limpio sin sobrecargar.
+     * Nota: Ejecutar cada 30 minutos permite limpiar conexiones colgadas más rápidamente
+     * y evitar que se alcance el límite de 500 conexiones.
      */
-    @Scheduled(fixedRate = 14400000) // 4 horas
+    @Scheduled(fixedRate = 1800000) // 30 minutos
     public void cleanupInactiveWebSocketConnections() {
         try {
             int cleaned = webSocketSessionService.cleanupInactiveSessions();
+            
+            // Log de estadísticas en cada ejecución
+            var stats = webSocketSessionService.getConnectionStats();
+            int total = (Integer) stats.get("total");
+            int inactive = (Integer) stats.get("inactive");
+            int maxConnections = (Integer) stats.get("maxConnections");
             
             if (cleaned > 0) {
                 log.info("🧹 [WebSocketCleanup] Limpiadas {} conexiones inactivas (> 5 horas sin actividad)", cleaned);
             }
             
-            // Log de estadísticas en cada ejecución (cada 4 horas)
-            var stats = webSocketSessionService.getConnectionStats();
-            log.info("📊 [WebSocketCleanup] Estadísticas: Total={}, Activas={}, Inactivas={}, Máximo={}", 
-                stats.get("total"), stats.get("active"), stats.get("inactive"), stats.get("maxConnections"));
+            // Advertencia si estamos cerca del límite
+            if (total >= maxConnections * 0.9) {
+                log.warn("⚠️ [WebSocketCleanup] Cerca del límite: {}/{} conexiones ({} inactivas)", 
+                    total, maxConnections, inactive);
+            } else {
+                log.info("📊 [WebSocketCleanup] Estadísticas: Total={}, Activas={}, Inactivas={}, Máximo={}", 
+                    total, stats.get("active"), inactive, maxConnections);
+            }
         } catch (Exception e) {
             log.error("❌ [WebSocketCleanup] Error limpiando conexiones WebSocket: {}", e.getMessage(), e);
         }

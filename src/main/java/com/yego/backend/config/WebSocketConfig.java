@@ -95,19 +95,25 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         String[] allowedOrigins = ALLOWED_ORIGINS.toArray(new String[0]);
         
-        // En desarrollo: usar SockJS (con fallback a polling)
-        // En producción: usar solo WebSocket nativo (sin polling)
+        // Detectar si es producción
         boolean isProduction = activeProfile != null && (activeProfile.contains("prod") || activeProfile.contains("production"));
         
+        log.info("🔌 [WebSocket] Configurando endpoint /ws - Perfil activo: {} - Producción: {}", activeProfile, isProduction);
+        log.info("🔌 [WebSocket] Orígenes permitidos: {}", String.join(", ", ALLOWED_ORIGINS));
+        
+        // En producción: solo WebSocket nativo (sin SockJS)
+        // En desarrollo: SockJS con fallback a polling
         if (isProduction) {
             // Producción: solo WebSocket nativo (sin SockJS)
             registry.addEndpoint("/ws")
                     .setAllowedOrigins(allowedOrigins);
+            log.info("✅ [WebSocket] Endpoint /ws configurado para PRODUCCIÓN (WebSocket nativo)");
         } else {
             // Desarrollo: SockJS con fallback a polling
             registry.addEndpoint("/ws")
                     .setAllowedOrigins(allowedOrigins)
                     .withSockJS();
+            log.info("✅ [WebSocket] Endpoint /ws configurado para DESARROLLO (SockJS con fallback)");
         }
     }
 }

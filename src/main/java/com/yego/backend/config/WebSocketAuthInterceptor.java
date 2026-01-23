@@ -49,9 +49,9 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         }
         
         StompCommand command = accessor.getCommand();
+        String sessionId = accessor.getSessionId();
         
         // Actualizar última actividad para cualquier comando (excepto CONNECT que ya lo hace)
-        String sessionId = accessor.getSessionId();
         if (sessionId != null && !StompCommand.CONNECT.equals(command)) {
             webSocketSessionService.updateLastActivity(sessionId);
         }

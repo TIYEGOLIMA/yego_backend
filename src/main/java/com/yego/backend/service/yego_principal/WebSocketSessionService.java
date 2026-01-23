@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -18,8 +19,11 @@ public class WebSocketSessionService {
     // Límite máximo de conexiones WebSocket simultáneas
     private static final int MAX_CONNECTIONS = 500;
     
-    // Timeout de inactividad: 5 horas sin actividad = conexión muerta
+    // Timeout de inactividad: 5 horas sin actividad = conexión muerta (limpieza normal)
     private static final int INACTIVITY_TIMEOUT_MINUTES = 300; // 5 horas
+    
+    // Timeout agresivo cuando se alcanza el límite: 30 minutos sin actividad
+    private static final int AGGRESSIVE_CLEANUP_TIMEOUT_MINUTES = 30; // 30 minutos
     
     private final Map<String, List<ModuleResponse>> sessionModules = new ConcurrentHashMap<>();
     private final Map<String, String> sessionUserIds = new ConcurrentHashMap<>();
@@ -31,12 +35,22 @@ public class WebSocketSessionService {
             // Verificar límite de conexiones
             int currentConnections = sessionModules.size();
             if (currentConnections >= MAX_CONNECTIONS) {
-                log.warn("⚠️ [WebSocket] Límite de conexiones alcanzado: {}/{}", currentConnections, MAX_CONNECTIONS);
-                // Limpiar conexiones inactivas antes de rechazar
-                cleanupInactiveSessions();
-                // Si aún está lleno, rechazar nueva conexión
+                log.warn("⚠️ [WebSocket] Límite de conexiones alcanzado: {}/{} - Limpiando conexiones inactivas...", currentConnections, MAX_CONNECTIONS);
+                
+                // Limpieza agresiva: conexiones inactivas por más de 30 minutos + conexiones antiguas
+                int cleaned = cleanupInactiveSessions(AGGRESSIVE_CLEANUP_TIMEOUT_MINUTES);
+                log.info("🧹 [WebSocket] Limpieza agresiva: {} conexiones removidas (> 30 min o sin lastActivity)", cleaned);
+                
+                // Si aún está lleno, intentar limpiar conexiones más recientes (10 minutos)
                 if (sessionModules.size() >= MAX_CONNECTIONS) {
-                    log.error("❌ [WebSocket] Rechazando nueva conexión: límite alcanzado");
+                    log.warn("⚠️ [WebSocket] Aún en límite después de limpieza agresiva, intentando limpieza más agresiva (10 min)...");
+                    int cleaned2 = cleanupInactiveSessions(10); // 10 minutos
+                    log.info("🧹 [WebSocket] Segunda limpieza: {} conexiones removidas (> 10 min)", cleaned2);
+                }
+                
+                // Si aún está lleno después de ambas limpiezas, rechazar nueva conexión
+                if (sessionModules.size() >= MAX_CONNECTIONS) {
+                    log.error("❌ [WebSocket] Rechazando nueva conexión: límite alcanzado después de limpiezas (Total: {})", sessionModules.size());
                     throw new IllegalStateException("Límite de conexiones WebSocket alcanzado");
                 }
             }
@@ -127,10 +141,34 @@ public class WebSocketSessionService {
      * @return Número de sesiones limpiadas
      */
     public int cleanupInactiveSessions() {
-        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(INACTIVITY_TIMEOUT_MINUTES);
+        return cleanupInactiveSessions(INACTIVITY_TIMEOUT_MINUTES);
+    }
+    
+    /**
+     * Limpia sesiones inactivas con timeout personalizado
+     * También limpia conexiones antiguas sin lastActivity registrado
+     * @param timeoutMinutes Timeout en minutos
+     * @return Número de sesiones limpiadas
+     */
+    public int cleanupInactiveSessions(int timeoutMinutes) {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(timeoutMinutes);
         int cleaned = 0;
+        int cleanedOld = 0;
         
-        for (Map.Entry<String, LocalDateTime> entry : sessionLastActivity.entrySet()) {
+        // Primero: limpiar conexiones sin lastActivity (conexiones antiguas)
+        // Crear copia de keys para evitar ConcurrentModificationException
+        Set<String> sessionIdsToCheck = new HashSet<>(sessionModules.keySet());
+        for (String sessionId : sessionIdsToCheck) {
+            if (!sessionLastActivity.containsKey(sessionId)) {
+                removeSession(sessionId);
+                cleanedOld++;
+            }
+        }
+        
+        // Segundo: limpiar conexiones inactivas por más del timeout
+        // Crear copia de entries para evitar ConcurrentModificationException
+        Set<Map.Entry<String, LocalDateTime>> entriesToCheck = new HashSet<>(sessionLastActivity.entrySet());
+        for (Map.Entry<String, LocalDateTime> entry : entriesToCheck) {
             String sessionId = entry.getKey();
             LocalDateTime lastActivity = entry.getValue();
             
@@ -140,11 +178,13 @@ public class WebSocketSessionService {
             }
         }
         
-        if (cleaned > 0) {
-            log.info("🧹 [WebSocket] Limpiadas {} sesiones inactivas (sin actividad > 5 horas) (Total activas: {})", cleaned, sessionModules.size());
+        int totalCleaned = cleaned + cleanedOld;
+        if (totalCleaned > 0) {
+            log.info("🧹 [WebSocket] Limpiadas {} sesiones: {} inactivas (> {} min) + {} antiguas (sin lastActivity) (Total activas: {})", 
+                totalCleaned, cleaned, timeoutMinutes, cleanedOld, sessionModules.size());
         }
         
-        return cleaned;
+        return totalCleaned;
     }
     
     /**
