@@ -165,7 +165,7 @@ public class ModuleServiceImpl implements ModuleService {
     @Override
     @Transactional(readOnly = true)
     public List<ModuleResponse> obtenerModulosPorUsuario(Long userId) {
-        log.info("📋 [ModuleService] Obteniendo módulos permitidos para usuario ID: {}", userId);
+        log.debug("📋 [ModuleService] Obteniendo módulos permitidos para usuario ID: {}", userId);
         
         // Obtener usuario con su rol
         User user = userRepository.findByIdWithRole(userId)
@@ -222,7 +222,7 @@ public class ModuleServiceImpl implements ModuleService {
         
         // Obtener permisos del rol
         String permissionsJson = user.getRole().getPermissions();
-        log.info("📋 [ModuleService] JSON de permisos del rol {} (raw): {}", user.getRole().getName(), permissionsJson);
+        log.debug("📋 [ModuleService] JSON de permisos del rol {} (raw): {}", user.getRole().getName(), permissionsJson);
         
         if (permissionsJson == null || permissionsJson.isEmpty()) {
             log.warn("⚠️ [ModuleService] Rol {} no tiene permisos configurados", user.getRole().getName());
@@ -236,7 +236,7 @@ public class ModuleServiceImpl implements ModuleService {
                     new TypeReference<Map<String, Object>>() {}
             );
             
-            log.info("📋 [ModuleService] Permisos parseados para rol {}: {}", user.getRole().getName(), permissionsMap);
+            log.debug("📋 [ModuleService] Permisos parseados para rol {}: {}", user.getRole().getName(), permissionsMap);
             
             // Si el rol tiene acceso completo a todos los módulos
             // Verificar primero si tiene la clave "all" y qué valor tiene
@@ -244,27 +244,27 @@ public class ModuleServiceImpl implements ModuleService {
             
             if (permissionsMap.containsKey("all")) {
                 Object allPermission = permissionsMap.get("all");
-                log.info("📋 [ModuleService] ¿Contiene 'all'?: TRUE - Valor: {} (tipo: {})", 
+                log.debug("📋 [ModuleService] ¿Contiene 'all'?: TRUE - Valor: {} (tipo: {})", 
                     allPermission, 
                     allPermission != null ? allPermission.getClass().getName() : "null");
                 
                 if (allPermission != null) {
                     if (allPermission instanceof Boolean) {
                         hasAllAccess = (Boolean) allPermission;
-                        log.info("📋 [ModuleService] 'all' es Boolean: {}", hasAllAccess);
+                        log.debug("📋 [ModuleService] 'all' es Boolean: {}", hasAllAccess);
                     } else if (allPermission instanceof String) {
                         String allStr = ((String) allPermission).toLowerCase().trim();
                         hasAllAccess = "true".equals(allStr) || "1".equals(allStr);
-                        log.info("📋 [ModuleService] 'all' es String '{}': {}", allStr, hasAllAccess);
+                        log.debug("📋 [ModuleService] 'all' es String '{}': {}", allStr, hasAllAccess);
                     } else if (allPermission instanceof Number) {
                         hasAllAccess = ((Number) allPermission).intValue() == 1;
-                        log.info("📋 [ModuleService] 'all' es Number {}: {}", allPermission, hasAllAccess);
+                        log.debug("📋 [ModuleService] 'all' es Number {}: {}", allPermission, hasAllAccess);
                     }
                 } else {
                     log.warn("⚠️ [ModuleService] 'all' existe pero es null");
                 }
             } else {
-                log.info("📋 [ModuleService] ¿Contiene 'all'?: FALSE - El rol no tiene permiso 'all'");
+                log.debug("📋 [ModuleService] ¿Contiene 'all'?: FALSE - El rol no tiene permiso 'all'");
             }
             
             if (hasAllAccess) {
@@ -289,7 +289,7 @@ public class ModuleServiceImpl implements ModuleService {
                     .filter(key -> !"all".equalsIgnoreCase(key))
                     .collect(Collectors.toSet());
             
-            log.info("📋 [ModuleService] Permisos del rol {} (excluyendo 'all'): {}", user.getRole().getName(), moduleNamesFromPermissions);
+            log.debug("📋 [ModuleService] Permisos del rol {} (excluyendo 'all'): {}", user.getRole().getName(), moduleNamesFromPermissions);
             
             // Si no hay permisos específicos después de excluir "all", y no tiene acceso completo,
             // significa que el rol no tiene módulos asignados
@@ -300,14 +300,14 @@ public class ModuleServiceImpl implements ModuleService {
             
             // Obtener todos los módulos activos
             List<Module> allActiveModules = moduleRepository.findByActivoTrue();
-            log.info("📋 [ModuleService] Total de módulos activos en BD: {}", allActiveModules.size());
+            log.debug("📋 [ModuleService] Total de módulos activos en BD: {}", allActiveModules.size());
             
             // Crear un mapa de nombres normalizados de permisos para búsqueda rápida
             Set<String> normalizedPermissionKeys = moduleNamesFromPermissions.stream()
                     .map(this::normalizePermissionKey)
                     .collect(Collectors.toSet());
             
-            log.info("📋 [ModuleService] Claves de permisos normalizadas para buscar: {}", normalizedPermissionKeys);
+            log.debug("📋 [ModuleService] Claves de permisos normalizadas para buscar: {}", normalizedPermissionKeys);
             
             // Filtrar módulos que coincidan con los permisos
             // Buscamos coincidencias tanto en el nombre como en la URL del módulo
@@ -342,7 +342,7 @@ public class ModuleServiceImpl implements ModuleService {
                 return obtenerActivos();
             }
             
-            log.info("✅ [ModuleService] Encontrados {} módulos permitidos para usuario {}", allowedModules.size(), userId);
+            log.debug("✅ [ModuleService] Encontrados {} módulos permitidos para usuario {}", allowedModules.size(), userId);
             
             return allowedModules.stream()
                     .map(this::convertirAResponse)

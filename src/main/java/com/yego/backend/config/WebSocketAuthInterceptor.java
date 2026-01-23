@@ -124,7 +124,16 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     // Límite de conexiones alcanzado
                     log.error("❌ [WebSocket] Límite de conexiones alcanzado para usuario {}: {}", userId, e.getMessage());
                     throw new org.springframework.messaging.MessageDeliveryException("Límite de conexiones alcanzado. Intente más tarde.");
+                } catch (RuntimeException e) {
+                    // Usuario no encontrado o inactivo - rechazar conexión
+                    if (e.getMessage() != null && e.getMessage().contains("Usuario no encontrado")) {
+                        log.warn("🚫 [WebSocket] Usuario {} (ID: {}) no encontrado o inactivo. Rechazando conexión.", username, userId);
+                        throw new org.springframework.messaging.MessageDeliveryException("Usuario no encontrado o inactivo. Por favor, inicie sesión nuevamente.");
+                    }
+                    // Otros errores - solo loggear warning pero permitir conexión
+                    log.warn("⚠️ [WebSocket] Error obteniendo módulos del usuario {}: {}", userId, e.getMessage());
                 } catch (Exception e) {
+                    // Otros errores - solo loggear warning pero permitir conexión
                     log.warn("⚠️ [WebSocket] Error obteniendo módulos del usuario {}: {}", userId, e.getMessage());
                 }
             }

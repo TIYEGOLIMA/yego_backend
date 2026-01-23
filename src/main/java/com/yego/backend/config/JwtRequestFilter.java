@@ -20,6 +20,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Filtro para validación de tokens JWT en requests HTTP
@@ -43,15 +45,43 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
                                     FilterChain chain) throws ServletException, IOException {
         
-        final String requestTokenHeader = request.getHeader("Authorization");
-        
         String username = null;
         String jwtToken = null;
         
-        // JWT Token está en la forma "Bearer token". Remover la palabra Bearer y obtener solo el token
-        if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
-            jwtToken = requestTokenHeader.substring(7);
-            log.info("🔑 [JwtRequestFilter] Token JWT recibido para: {}", request.getRequestURI());
+        // CRÍTICO: Para WebSocket nativo, el token puede venir en la URL query parameter
+        // Formato: /ws?token={token}
+        // Esto es necesario porque WebSocket nativo NO permite headers HTTP personalizados durante el handshake
+        if (request.getRequestURI().equals("/ws")) {
+            String queryString = request.getQueryString();
+            if (queryString != null && queryString.contains("token=")) {
+                try {
+                    String[] params = queryString.split("&");
+                    for (String param : params) {
+                        if (param.startsWith("token=")) {
+                            jwtToken = param.substring(6); // "token=" tiene 6 caracteres
+                            // Decodificar URL encoding
+                            jwtToken = URLDecoder.decode(jwtToken, StandardCharsets.UTF_8);
+                            log.info("🔑 [JwtRequestFilter] Token JWT recibido desde URL query parameter para: {}", request.getRequestURI());
+                            break;
+                        }
+                    }
+                } catch (Exception e) {
+                    log.warn("⚠️ [JwtRequestFilter] Error decodificando token de URL: {}", e.getMessage());
+                }
+            }
+        }
+        
+        // Si no se encontró en la URL, intentar leer del header Authorization (para HTTP normal)
+        if (jwtToken == null) {
+            final String requestTokenHeader = request.getHeader("Authorization");
+            if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
+                jwtToken = requestTokenHeader.substring(7);
+                log.info("🔑 [JwtRequestFilter] Token JWT recibido desde header para: {}", request.getRequestURI());
+            }
+        }
+        
+        // Procesar el token si se encontró
+        if (jwtToken != null) {
             try {
                 // Usar API moderna de JWT (consistente con el resto del código)
                 SecretKey key = getSigningKey();
@@ -76,7 +106,16 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 }
             }
         } else {
-            log.warn("⚠️ [JwtRequestFilter] No se recibió token Bearer para: {}", request.getRequestURI());
+            // Solo loggear warning si no es /ws o si es /ws pero tampoco tiene token en URL
+            if (!request.getRequestURI().equals("/ws")) {
+                log.warn("⚠️ [JwtRequestFilter] No se recibió token Bearer para: {}", request.getRequestURI());
+            } else {
+                // Para /ws, verificar si hay token en la URL
+                String queryString = request.getQueryString();
+                if (queryString == null || !queryString.contains("token=")) {
+                    log.warn("⚠️ [JwtRequestFilter] No se recibió token Bearer para: /ws (ni en header ni en URL)");
+                }
+            }
         }
         
         // Una vez que obtenemos el token, validamos
