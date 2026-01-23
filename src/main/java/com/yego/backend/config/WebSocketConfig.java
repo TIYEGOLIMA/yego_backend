@@ -2,10 +2,12 @@ package com.yego.backend.config;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -30,6 +32,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
     private final WebSocketAuthInterceptor webSocketAuthInterceptor;
     
+    @Autowired(required = false)
+    private TaskScheduler taskScheduler;
+    
     @Value("${spring.profiles.active:dev}")
     private String activeProfile;
     
@@ -48,16 +53,22 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void configureMessageBroker(MessageBrokerRegistry config) {
         // Habilitar broker simple para tópicos con heartbeat
         // Heartbeat cada 10 segundos para detectar conexiones muertas
-        config.enableSimpleBroker("/topic", "/queue")
+        var brokerRegistration = config.enableSimpleBroker("/topic", "/queue")
                 .setHeartbeatValue(new long[]{10000, 10000}); // Enviar cada 10s, esperar respuesta cada 10s
+        
+        // Configurar TaskScheduler explícitamente si está disponible
+        if (taskScheduler != null) {
+            brokerRegistration.setTaskScheduler(taskScheduler);
+            log.info("✅ [WebSocket] Broker configurado con heartbeat cada 10 segundos y TaskScheduler");
+        } else {
+            log.warn("⚠️ [WebSocket] TaskScheduler no disponible, heartbeat puede no funcionar correctamente");
+        }
         
         // Prefijo para mensajes destinados a métodos anotados con @MessageMapping
         config.setApplicationDestinationPrefixes("/app");
         
         // Prefijo para mensajes de usuario específico
         config.setUserDestinationPrefix("/user");
-        
-        log.info("✅ [WebSocket] Broker configurado con heartbeat cada 10 segundos");
     }
 
     @Override
