@@ -106,15 +106,18 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 }
             }
         } else {
-            // Solo loggear warning si no es /ws o si es /ws pero tampoco tiene token en URL
-            if (!request.getRequestURI().equals("/ws")) {
-                log.warn("⚠️ [JwtRequestFilter] No se recibió token Bearer para: {}", request.getRequestURI());
-            } else {
-                // Para /ws, verificar si hay token en la URL
+            // Para /ws, BLOQUEAR conexiones sin token (no solo loggear warning)
+            if (request.getRequestURI().equals("/ws")) {
                 String queryString = request.getQueryString();
                 if (queryString == null || !queryString.contains("token=")) {
-                    log.warn("⚠️ [JwtRequestFilter] No se recibió token Bearer para: /ws (ni en header ni en URL)");
+                    log.warn("🚫 [JwtRequestFilter] Conexión WebSocket rechazada: No se recibió token (ni en header ni en URL)");
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.getWriter().write("{\"error\":\"Token de autenticación requerido\"}");
+                    return; // BLOQUEAR la conexión
                 }
+            } else {
+                // Para otras rutas, solo loggear warning
+                log.warn("⚠️ [JwtRequestFilter] No se recibió token Bearer para: {}", request.getRequestURI());
             }
         }
         

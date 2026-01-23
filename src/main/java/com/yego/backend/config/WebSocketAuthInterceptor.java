@@ -75,10 +75,10 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     }
     
     private Message<?> handleConnect(StompHeaderAccessor accessor, Message<?> message) {
-            String authHeader = accessor.getFirstNativeHeader("Authorization");
-            
+        String authHeader = accessor.getFirstNativeHeader("Authorization");
+        
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.warn("⚠️ [WebSocket] Token de autenticación requerido");
+            log.warn("🚫 [WebSocket] Conexión rechazada: Token de autenticación requerido");
             throw new org.springframework.messaging.MessageDeliveryException("Token de autenticación requerido");
         }
         
@@ -109,10 +109,12 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                         SecurityContextHolder.getContext().setAuthentication(authentication);
                         accessor.setUser(authentication);
                         
-            // Guardar módulos del usuario en la sesión
+            // CRÍTICO: Verificar que el usuario existe ANTES de autenticar
+            // Esto previene conexiones con tokens válidos pero de usuarios eliminados
             Long userIdLong = userIdInt != null ? userIdInt : (userId != null && userId.matches("\\d+") ? Long.parseLong(userId) : null);
             if (userIdLong != null) {
                 try {
+                    // Intentar obtener módulos - si el usuario no existe, esto lanzará RuntimeException
                     List<ModuleResponse> userModules = moduleService.obtenerModulosPorUsuario(userIdLong);
                     String sessionId = accessor.getSessionId();
                     if (sessionId != null) {
@@ -125,9 +127,11 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     log.error("❌ [WebSocket] Límite de conexiones alcanzado para usuario {}: {}", userId, e.getMessage());
                     throw new org.springframework.messaging.MessageDeliveryException("Límite de conexiones alcanzado. Intente más tarde.");
                 } catch (RuntimeException e) {
-                    // Usuario no encontrado o inactivo - rechazar conexión
+                    // Usuario no encontrado o inactivo - RECHAZAR conexión INMEDIATAMENTE
                     if (e.getMessage() != null && e.getMessage().contains("Usuario no encontrado")) {
-                        log.warn("🚫 [WebSocket] Usuario {} (ID: {}) no encontrado o inactivo. Rechazando conexión.", username, userId);
+                        log.error("🚫 [WebSocket] CONEXIÓN BLOQUEADA: Usuario {} (ID: {}) no existe en la BD. Token válido pero usuario eliminado. Rechazando conexión.", username, userId);
+                        // Limpiar autenticación que ya se estableció
+                        SecurityContextHolder.clearContext();
                         throw new org.springframework.messaging.MessageDeliveryException("Usuario no encontrado o inactivo. Por favor, inicie sesión nuevamente.");
                     }
                     // Otros errores - solo loggear warning pero permitir conexión
