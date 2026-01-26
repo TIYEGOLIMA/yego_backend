@@ -381,21 +381,18 @@ public class TicketServiceImpl implements TicketService {
     }
     
     private String generarNumeroTicket(Long optionId) {
-        // Obtener el ID del módulo desde la opción
+        // Verificar que la opción existe
         Option option = optionRepository.findById(optionId)
                 .orElseThrow(() -> new IllegalArgumentException("Opción no encontrada"));
         
-        Long moduleId = option.getModuleId();
-        if (moduleId == null) {
-            throw new IllegalArgumentException("La opción debe tener un módulo asignado");
-        }
-        
+        // Usar el optionId directamente para generar el número de ticket
+        // Ya no hay restricción por módulo, todas las opciones son válidas
         String ticketNumber;
         int intentos = 0;
         
         do {
-            // Obtener el siguiente número consecutivo para este módulo (máximo 9)
-            long consecutivo = (ticketRepository.countByModuleId(moduleId) % 9) + 1;
+            // Obtener el siguiente número consecutivo (máximo 9)
+            long consecutivo = (ticketRepository.count() % 9) + 1;
             
             // Obtener la hora actual (hora, minutos, segundos) - Zona horaria de Perú
             LocalDateTime now = LocalDateTime.now(ZoneId.of("America/Lima"));
@@ -403,8 +400,10 @@ public class TicketServiceImpl implements TicketService {
             int minutos = now.getMinute();
             int segundos = now.getSecond();
             
-            // Formato: M + módulo(1 dígito) + consecutivo(1 dígito) + hora(2 dígitos) + minutos(2 dígitos) + segundos(2 dígitos)
-            ticketNumber = String.format("M%d%d%02d%02d%02d", moduleId, consecutivo, hora, minutos, segundos);
+            // Formato: M + optionId(1-2 dígitos) + consecutivo(1 dígito) + hora(2 dígitos) + minutos(2 dígitos) + segundos(2 dígitos)
+            // Usar solo el último dígito del optionId para mantener formato similar
+            long optionIdDigit = optionId % 10;
+            ticketNumber = String.format("M%d%d%02d%02d%02d", optionIdDigit, consecutivo, hora, minutos, segundos);
             
             intentos++;
             
@@ -412,13 +411,13 @@ public class TicketServiceImpl implements TicketService {
             if (intentos > 50) {
                 // Fallback: usar timestamp en lugar de aleatorios
                 long timestamp = System.currentTimeMillis() % 1000;
-                ticketNumber = String.format("M%d%d%03d", moduleId, consecutivo, timestamp);
+                ticketNumber = String.format("M%d%d%03d", optionIdDigit, consecutivo, timestamp);
                 break;
             }
             
         } while (ticketRepository.existsByTicketNumber(ticketNumber));
         
-        log.info("Número de ticket generado: {} para módulo {} (intentos: {})", ticketNumber, moduleId, intentos);
+        log.info("Número de ticket generado: {} para opción {} (intentos: {})", ticketNumber, optionId, intentos);
         return ticketNumber;
     }
     

@@ -75,8 +75,8 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     }
     
     private Message<?> handleConnect(StompHeaderAccessor accessor, Message<?> message) {
-        String authHeader = accessor.getFirstNativeHeader("Authorization");
-        
+            String authHeader = accessor.getFirstNativeHeader("Authorization");
+            
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             log.warn("🚫 [WebSocket] Conexión rechazada: Token de autenticación requerido");
             throw new org.springframework.messaging.MessageDeliveryException("Token de autenticación requerido");

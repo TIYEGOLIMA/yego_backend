@@ -17,11 +17,4 @@ public interface OptionRepository extends JpaRepository<Option, Long> {
     List<Option> findByParentIdIsNullAndActiveTrueOrderByPriorityAsc();
     
     List<Option> findByParentIdAndActiveTrueOrderByPriorityAsc(Long parentId);
-    
-    // Métodos para buscar por módulo de atención
-    List<Option> findByModuleIdAndActiveTrueOrderByPriorityAsc(Long moduleId);
-    
-    List<Option> findByModuleIdAndParentIdIsNullAndActiveTrueOrderByPriorityAsc(Long moduleId);
-    
-    List<Option> findByModuleIdAndParentIdAndActiveTrueOrderByPriorityAsc(Long moduleId, Long parentId);
 }

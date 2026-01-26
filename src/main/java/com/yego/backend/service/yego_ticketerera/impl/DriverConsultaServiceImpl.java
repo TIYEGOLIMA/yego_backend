@@ -143,19 +143,19 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
                     String nombres = dataNode.has("nombres") ? dataNode.get("nombres").asText() : "";
                     String apellidoPaterno = dataNode.has("apellido_paterno") ? dataNode.get("apellido_paterno").asText() : "";
                     String apellidoMaterno = dataNode.has("apellido_materno") ? dataNode.get("apellido_materno").asText() : "";
-                    
-                    log.info("👤 [DriverConsultaService] Nombres: '{}'", nombres);
-                    log.info("👤 [DriverConsultaService] Apellido Paterno: '{}'", apellidoPaterno);
-                    log.info("👤 [DriverConsultaService] Apellido Materno: '{}'", apellidoMaterno);
-                    
-                    // Combinar para first_name, last_name y full_name
-                    String firstName = nombres;
-                    String lastName = apellidoPaterno + (apellidoMaterno != null && !apellidoMaterno.isEmpty() ? " " + apellidoMaterno : "");
-                    
-                    log.info("✅ [DriverConsultaService] Procesado - First: '{}', Last: '{}'", firstName, lastName);
-                    
-                    // Registrar conductor con los datos obtenidos
-                    return registrarNuevoConductor(firstName, lastName, phone);
+                
+                log.info("👤 [DriverConsultaService] Nombres: '{}'", nombres);
+                log.info("👤 [DriverConsultaService] Apellido Paterno: '{}'", apellidoPaterno);
+                log.info("👤 [DriverConsultaService] Apellido Materno: '{}'", apellidoMaterno);
+                
+                // Combinar para first_name, last_name y full_name
+                String firstName = nombres;
+                String lastName = apellidoPaterno + (apellidoMaterno != null && !apellidoMaterno.isEmpty() ? " " + apellidoMaterno : "");
+                
+                log.info("✅ [DriverConsultaService] Procesado - First: '{}', Last: '{}'", firstName, lastName);
+                
+                // Registrar conductor con los datos obtenidos
+                return registrarNuevoConductor(firstName, lastName, phone);
                     
                 } catch (Exception e) {
                     log.error("❌ [DriverConsultaService] Error parseando respuesta JSON: {}", e.getMessage());

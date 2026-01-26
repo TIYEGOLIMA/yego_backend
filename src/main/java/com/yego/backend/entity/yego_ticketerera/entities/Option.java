@@ -34,9 +34,6 @@ public class Option {
     @Column(name = "parent_id")
     private Long parentId; // Para opciones anidadas
     
-    @Column(name = "module_id")
-    private Long moduleId; // Relación con módulos de atención
-    
     @Column(nullable = false)
     @Builder.Default
     private Integer priority = 1;

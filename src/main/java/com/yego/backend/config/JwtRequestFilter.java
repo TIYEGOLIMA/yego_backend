@@ -110,7 +110,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             if (request.getRequestURI().equals("/ws")) {
                 String queryString = request.getQueryString();
                 if (queryString == null || !queryString.contains("token=")) {
-                    log.warn("🚫 [JwtRequestFilter] Conexión WebSocket rechazada: No se recibió token (ni en header ni en URL)");
+                    // Usar DEBUG en lugar de WARN para evitar spam en logs durante reconexiones
+                    // El frontend debe manejar esto correctamente, no es un error del servidor
+                    log.debug("🚫 [JwtRequestFilter] Conexión WebSocket rechazada: No se recibió token (ni en header ni en URL)");
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     response.getWriter().write("{\"error\":\"Token de autenticación requerido\"}");
                     return; // BLOQUEAR la conexión

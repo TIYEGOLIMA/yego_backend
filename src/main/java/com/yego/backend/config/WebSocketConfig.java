@@ -3,7 +3,6 @@ package com.yego.backend.config;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
@@ -17,12 +16,12 @@ import java.util.List;
 
 /**
  * Configuración de WebSocket
- * - Desarrollo: SockJS con fallback a polling
- * - Producción: Solo WebSocket nativo
+ * Usa WebSocket nativo siempre (sin SockJS)
+ * - Desarrollo: ws:// (sin SSL)
+ * - Producción: wss:// (con SSL)
  * 
  * Hub de comunicación en tiempo real para todos los microfrontends:
  * - /topic/ticketera/* - Eventos del microfrontend Ticketera
- * - /topic/okr/*       - Eventos del microfrontend OKR  
  * - /topic/marketing/* - Eventos del microfrontend Marketingamar
  * - /topic/system/*    - Eventos globales del sistema
  */
@@ -36,9 +35,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
     @Autowired(required = false)
     private TaskScheduler taskScheduler;
-    
-    @Value("${spring.profiles.active:dev}")
-    private String activeProfile;
     
     // Orígenes permitidos para WebSocket (debe coincidir con SecurityConfig)
     private static final List<String> ALLOWED_ORIGINS = Arrays.asList(
@@ -96,23 +92,14 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         String[] allowedOrigins = ALLOWED_ORIGINS.toArray(new String[0]);
         
-        // Detectar si es producción
-        boolean isProduction = activeProfile != null && (activeProfile.contains("prod") || activeProfile.contains("production"));
+        // Siempre usar WebSocket nativo (sin SockJS)
+        // La diferencia entre desarrollo y producción es solo el protocolo:
+        // - Desarrollo: ws://localhost:3030/ws
+        // - Producción: wss://api-int.yego.pro/ws
+        registry.addEndpoint("/ws")
+                .setAllowedOrigins(allowedOrigins);
         
-        log.info("🔌 [WebSocket] Configurando endpoint /ws - Perfil: {} - Producción: {}", activeProfile, isProduction);
-        
-        if (isProduction) {
-            // Producción: Solo WebSocket nativo (sin SockJS)
-            registry.addEndpoint("/ws")
-                    .setAllowedOrigins(allowedOrigins);
-            log.info("✅ [WebSocket] Endpoint /ws configurado para PRODUCCIÓN (WebSocket nativo)");
-        } else {
-            // Desarrollo: SockJS con fallback a polling
-            registry.addEndpoint("/ws")
-                    .setAllowedOrigins(allowedOrigins)
-                    .withSockJS();
-            log.info("✅ [WebSocket] Endpoint /ws configurado para DESARROLLO (SockJS con fallback)");
-        }
+        log.info("✅ [WebSocket] Endpoint /ws configurado (WebSocket nativo) - Orígenes permitidos: {}", String.join(", ", ALLOWED_ORIGINS));
     }
 }
 
