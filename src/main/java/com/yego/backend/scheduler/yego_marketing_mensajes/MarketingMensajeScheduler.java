@@ -90,11 +90,11 @@ public class MarketingMensajeScheduler {
     @Scheduled(fixedDelay = 300000, initialDelay = 60000) // 5 minutos = 300000 ms, inicia después de 1 minuto
     public void verificarYEnviarMensajesProgramados() {
         // Verificar si hay usuarios con acceso al módulo marketing antes de ejecutar
-        Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("marketing");
+        /*Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("marketing");
         if (sessionsWithAccess.isEmpty()) {
             log.debug("⏭️ [MarketingMensajeScheduler] No hay usuarios con acceso a marketing - omitiendo verificación de mensajes programados");
             return;
-        }
+        }*/
         
         log.info("⏰ [MarketingMensajeScheduler] Scheduler ejecutándose - Verificando mensajes programados");
         try {

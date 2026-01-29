@@ -99,10 +99,18 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 request.setAttribute("jwtClaims", claims);
                 
             } catch (Exception e) {
-                log.warn("❌ [JwtRequestFilter] Error procesando JWT para {}: {}", request.getRequestURI(), e.getMessage());
-                // Si el token está expirado, no continuar con la autenticación
+                // Si el token está expirado, responder con 401 y mensaje claro para el frontend
                 if (e.getMessage() != null && (e.getMessage().contains("expired") || e.getMessage().contains("expiration"))) {
-                    log.info("🕐 [JwtRequestFilter] Token expirado para: {}", request.getRequestURI());
+                    log.debug("🕐 [JwtRequestFilter] Token expirado para: {} - El frontend debe renovar el token", request.getRequestURI());
+                    
+                    // Responder con 401 y mensaje claro para que el frontend detecte y renueve el token
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"error\":\"TOKEN_EXPIRED\",\"message\":\"El token ha expirado. Por favor, renueve su sesión.\"}");
+                    return; // Detener el procesamiento - el frontend debe manejar esto
+                } else {
+                    // Para otros errores, loggear en WARN
+                    log.warn("❌ [JwtRequestFilter] Error procesando JWT para {}: {}", request.getRequestURI(), e.getMessage());
                 }
             }
         } else {
