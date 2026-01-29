@@ -43,9 +43,8 @@ public class MarketingMensajeScheduler {
     // URL de la API de Yango
     private static final String YANGO_API_URL = "https://fleet.yango.com/api/fleet/communications/v2/mailings";
     
-    // Cookie base para la API de Yango (sin park_id, se reemplazará dinámicamente)
-    private static final String YANGO_COOKIE_BASE = "yandexuid=533847621761862983; yashr=8325443501761862983; yuidss=533847621761862983; receive-cookie-deprecation=1; gdpr=0; _ym_uid=1761862985776199037; _ym_d=1761862986; Session_id=3:1761863223.5.0.1761863223226:WbD9Jg:3d19.1.2:1|2221285626.0.2.0:3.3:1761863223|60:11339409.699332.GdXGpOBYpOnnZcYTZ7dcYF-82pA; sessar=1.1299404.CiC3-HIzjzrcG0mhrvBjFmS33BCYabv5Nxui2dHYBU7ACQ.IR31RZJy3UUfKy1r5-ke81MLxtC8XVUVjUGTsuOP9RE; sessionid2=3:1761863223.5.0.1761863223226:WbD9Jg:3d19.1.2:1|2221285626.0.2.0:3.3:1761863223|60:11339409.699332.fakesign0000000000000000000; L=aixqAFRza0t6X09UWwNYAEMDA3QLTQVxRFwzLQscVE0yLR8=.1761863223.1331947.373947.46780fe995d4ce4eb344e22909c5d32d; yandex_login=soporteyego; i=vv+8+MYJX99e3QjmOg6Pvlvw8JNxG0UcQXVy13YN66ChWMH34BZxMkPe+yvqzF8TGJkMuEjZpA2PkzWPTWHvBL5Ak/s=; park_id=";
-    private static final String YANGO_COOKIE_SUFFIX = "; _ym_isad=1; yp=2077223223.udn.cDpzb3BvcnRleWVnbw%3D%3D#1764711209.yu.533847621761862983; ymex=1767216809.oyu.533847621761862983#2077222984.yrts.1761862984; _ym_visorc=b; _yasc=CI0Ek99bdmeM57j1Ik1W3v2gFQGQ2ZjhycRn//t+kM/Tyk3T8N6SWMPGUayxI7ZaJh7o; bh=Ej8iQ2hyb21pdW0iO3Y9IjE0MiIsIkdvb2dsZSBDaHJvbWUiO3Y9IjE0MiIsIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiIOMTQyLjAuNzQ0NC4xNzYqAj8wOgVtYWNPU0IGMTUuNy4ySgI2NFJbIkNocm9taXVtIjt2PSIxNDIuMC43NDQ0LjE3NiIsIkdvb2dsZSBDaHJvbWUiO3Y9IjE0Mi4wLjc0NDQuMTc2IiwiTm90X0EgQnJhbmQiO3Y9Ijk5LjAuMC4wImCy27jJBmog3MrRtgG78Z+rBPrWhswI0tHt6wP8ua//B9/943PzgQI=";
+    // Cookie para la API de Yango (mismo pool que BaseYangoApiService). Se reemplaza park_id por el de cada flota.
+    private static final String YANGO_COOKIE_TEMPLATE = "yandexuid=6009311931761677705; yashr=4567181961761677705; yuidss=6009311931761677705; receive-cookie-deprecation=1; gdpr=0; _ym_uid=1761677706290870939; _ym_d=1761677707; i=WPv45DbbiaiQTfOesurzPwPDcYTOSOoBsoiMqnCbM8UNdwnBPqcEVeWPbr+/nREEJsBHtNGb/FFdfO9HLKe33wC900U=; Session_id=3:1767916938.5.0.1761677775316:WbD9Jg:71df.1.2:1|1782860170.0.2.0:3.3:1761677775|2220343194.-1.0.0:3.2:2426755.3:1764104530|60:11590429.497800.3oxV2BfdArdTZgb0iJuNpsl7pTQ; sessar=1.1504434.CiBoQiEtUqB8Clq12Z20uRTAKOBx8rNaYp3ayAviftuOlQ.HmHoWlhWBAmESc7SsPOk0_fwoYScX1OCMb7N5WOch3w; sessionid2=3:1767916938.5.0.1761677775316:WbD9Jg:71df.1.2:1|1782860170.0.2.0:3.3:1761677775|2220343194.-1.0.0:3.2:2426755.3:1764104530|60:11590429.497800.fakesign0000000000000000000; L=cwNkZHx2bUdLfgZ1eX1WBUJKR0J7dVdUATclGQI2VgomGwMkLic=.1767916938.1586619.346423.d1431f8e0fe9a8126fdb675787bc79fb; yandex_login=gonzalofajardo; park_id=08e20910d81d42658d4334d3f6d10ac0; _ym_isad=2; yp=2079464530.multib.1#2083276938.udn.cDpHb256YWxvIEZhamFyZG8%3D#1768500383.yu.6009311931761677705; ymex=1771005983.oyu.6009311931761677705#2077037707.yrts.1761677707; _ym_visorc=w; _yasc=2mKcY8GygbjykCQel1V9urGg+aqTEZmAqVNXKfK1JjKMIohuQ3hRqw7ff6w9h+pemrcG; bh=EkEiR29vZ2xlIENocm9taWUiO3Y9IjE0MyIsICJDaHJvbWl1bSI7dj0iMTQzIiwgIk5vdCBBKEJyYW5kKTt2PSIyNCIaA3g4NiIOMTQzLjAuNzQ5OS4xOTMqAj8wOgkiV2luZG93cyBCMTkuMC4wSgI2NFJbIkdvb2dsZSBDaHJvbWUiO3Y9IjE0My4wLjc0OTkuMTkzIiwiQ2hyb21pdW0iO3Y9IjE0My4wLjc0OTkuMTkzIiwiTm90IEEoQnJhbmQiO3Y9IjI0LjAuMC4wImCjtp/LBmoe3Mrh/wiS2KGxA5/P4eoD+/rw5w3r//32D/vMzYcI";
     
     // Mapa para evitar envíos duplicados en el mismo minuto
     private final Map<Long, String> ultimosEnvios = new HashMap<>();
@@ -322,7 +321,8 @@ public class MarketingMensajeScheduler {
             for (int i = 0; i < parkIds.size(); i++) {
                 String parkId = parkIds.get(i);
                 try {
-                    String cookieDinamica = YANGO_COOKIE_BASE + parkId + YANGO_COOKIE_SUFFIX;
+                    // Reemplazar park_id en la cookie plantilla por el de la flota actual
+                    String cookieDinamica = YANGO_COOKIE_TEMPLATE.replaceFirst("park_id=[a-f0-9]+", "park_id=" + parkId);
                     String idempotencyToken = UUID.randomUUID().toString();
                     
                     HttpHeaders headers = new HttpHeaders();
