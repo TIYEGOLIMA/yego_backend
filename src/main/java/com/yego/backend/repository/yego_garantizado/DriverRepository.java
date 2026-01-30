@@ -43,27 +43,27 @@ public interface DriverRepository extends JpaRepository<Driver, String> {
     
     
     /**
-     * Busca un conductor por teléfono
-     * Retorna solo los campos necesarios para PPendientesResponse
-     * Prioriza los registros con park_id no nulo, ordenando por park_id para consistencia
+     * Busca un conductor por teléfono.
+     * Solo retorna conductores con work_status = 'working'.
+     * Retorna los campos necesarios para PPendientesResponse, priorizando park_id no nulo.
      * @param phone número de teléfono a buscar
-     * @return Lista de arrays de objetos con los campos necesarios, ordenados por park_id no nulo primero, luego por park_id y driver_id
+     * @return Lista de arrays con los campos necesarios, ordenados por park_id no nulo primero, luego park_id y driver_id
      */
     @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number " +
-                   "FROM drivers WHERE phone = :phone " +
+                   "FROM drivers WHERE phone = :phone AND work_status = 'working' " +
                    "ORDER BY CASE WHEN park_id IS NOT NULL THEN 0 ELSE 1 END, park_id, driver_id " +
                    "LIMIT 10", nativeQuery = true)
     List<Object[]> findAllByPhoneAsDriverApiNative(@Param("phone") String phone);
     
     /**
-     * Busca un conductor por licencia
-     * Retorna solo los campos necesarios para PPendientesResponse
-     * Prioriza los registros con park_id no nulo, ordenando por park_id para consistencia
+     * Busca un conductor por licencia.
+     * Solo retorna conductores con work_status = 'working'.
+     * Retorna los campos necesarios para PPendientesResponse, priorizando park_id no nulo.
      * @param licenseNumber número de licencia a buscar
-     * @return Lista de arrays de objetos con los campos necesarios, ordenados por park_id no nulo primero, luego por park_id y driver_id
+     * @return Lista de arrays con los campos necesarios, ordenados por park_id no nulo primero, luego park_id y driver_id
      */
     @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number " +
-                   "FROM drivers WHERE license_number = :licenseNumber " +
+                   "FROM drivers WHERE license_number = :licenseNumber AND work_status = 'working' " +
                    "ORDER BY CASE WHEN park_id IS NOT NULL THEN 0 ELSE 1 END, park_id, driver_id " +
                    "LIMIT 10", nativeQuery = true)
     List<Object[]> findAllByLicenseAsDriverApiNative(@Param("licenseNumber") String licenseNumber);
