@@ -91,6 +91,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh").permitAll()
+                .requestMatchers("/api/users/listado").permitAll() // Listado usuarios sin token
                 .requestMatchers("/api/ticketera/auth/refresh").permitAll() // Alias ticketera auth
                 .requestMatchers("/api/recaudo/**").permitAll() // Recaudo endpoints
                 .requestMatchers("/api/garantizado/**").permitAll() // Garantizado endpoints
