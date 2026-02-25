@@ -25,5 +25,9 @@ public class UserResponseCompleteDto {
     private String dni;
     private LocalDateTime createdAt;
     private LocalDateTime lastLogin;
+    private Long areaId;
+    private String areaNombre;
+    /** true si el usuario es responsable (jefe) de ese área */
+    private Boolean areaEsResponsable;
 }
 

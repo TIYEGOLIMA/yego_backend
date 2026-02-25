@@ -4,8 +4,10 @@ import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.entity.yego_principal.entities.Role;
+import com.yego.backend.entity.yego_principal.entities.Area;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.repository.yego_principal.RoleRepository;
+import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.service.yego_principal.AuthService;
 import com.yego.backend.service.yego_principal.AuditService;
 import com.yego.backend.service.yego_principal.SessionService;
@@ -47,6 +49,7 @@ public class AuthServiceImpl implements AuthService {
     
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final AreaRepository areaRepository;
     private final SessionService sessionService;
     private final AuditService auditService;
     private final QueueAgentService queueAgentService;
@@ -91,6 +94,23 @@ public class AuthServiceImpl implements AuthService {
                     auditService.logFailedLogin(username, clientIp, userAgent);
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
                         "Tu rol '" + user.getRole().getName() + "' ha sido desactivado temporalmente. No tienes acceso al sistema en este momento. Contacte al administrador.");
+                }
+                
+                // Verificar si el usuario pertenece a un área y esa área está activa
+                if (user.getAreaId() != null) {
+                    Optional<Area> areaOpt = areaRepository.findById(user.getAreaId());
+                    if (areaOpt.isPresent()) {
+                        Area area = areaOpt.get();
+                        if (area.getActivo() != null && !area.getActivo()) {
+                            log.warn("Usuario de área inactiva intentó iniciar sesión: {} (Área: {})", 
+                                user.getUsername(), area.getName());
+                            String clientIp = getClientIpAddress(request);
+                            String userAgent = request.getHeader("User-Agent");
+                            auditService.logFailedLogin(username, clientIp, userAgent);
+                            throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                                "Tu área '" + area.getName() + "' ha sido desactivada. No tienes acceso al sistema. Contacte al administrador.");
+                        }
+                    }
                 }
                 
                 return mapToUserResponseDto(user);
@@ -140,6 +160,16 @@ public class AuthServiceImpl implements AuthService {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
                     "Tu rol '" + user.getRole().getName() + "' ha sido desactivado temporalmente. No tienes acceso al sistema en este momento.");
             }
+            // Verificar si el área del usuario está activa
+            if (user.getAreaId() != null) {
+                Optional<Area> areaOpt = areaRepository.findById(user.getAreaId());
+                if (areaOpt.isPresent() && areaOpt.get().getActivo() != null && !areaOpt.get().getActivo()) {
+                    log.warn("Usuario de área inactiva intentó refrescar token: {} (Área id: {})", 
+                        user.getUsername(), user.getAreaId());
+                    throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
+                        "Tu área ha sido desactivada. No tienes acceso al sistema. Contacte al administrador.");
+                }
+            }
             UserResponseDto userDto = mapToUserResponseDto(user);
             
             // Generar nuevo JWT token
@@ -155,6 +185,10 @@ public class AuthServiceImpl implements AuthService {
             
             sessionService.create(sessionDto, userId, request);
             
+            List<Area> areasComoJefe = areaRepository.findByManagerId(userId);
+            boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
+            String nombreArea = esJefe ? areasComoJefe.get(0).getName() : null;
+
             // Construir respuesta
             LoginResponseDto.LoginUserDto loginUser = LoginResponseDto.LoginUserDto.builder()
                     .id(userDto.getId())
@@ -165,6 +199,8 @@ public class AuthServiceImpl implements AuthService {
                     .moduleId(userDto.getModuleId() != null ? userDto.getModuleId().toString() : null)
                     .active(userDto.getActive())
                     .lastLogin(LocalDateTime.now())
+                    .esJefe(esJefe)
+                    .nombreArea(nombreArea)
                     .build();
             
             return LoginResponseDto.builder()
@@ -207,6 +243,11 @@ public class AuthServiceImpl implements AuthService {
         String userAgent = request.getHeader("User-Agent");
         auditService.logLogin(user.getId(), user.getUsername(), clientIp, userAgent);
         
+        // Si es jefe de un área (manager_id), incluir para localStorage y cuenta
+        List<Area> areasComoJefe = areaRepository.findByManagerId(user.getId());
+        boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
+        String nombreArea = esJefe ? areasComoJefe.get(0).getName() : null;
+
         // Construir respuesta
         LoginResponseDto.LoginUserDto loginUser = LoginResponseDto.LoginUserDto.builder()
                 .id(user.getId())
@@ -217,6 +258,8 @@ public class AuthServiceImpl implements AuthService {
                 .moduleId(user.getModuleId() != null ? user.getModuleId().toString() : null)
                 .active(user.getActive())
                 .lastLogin(LocalDateTime.now())
+                .esJefe(esJefe)
+                .nombreArea(nombreArea)
                 .build();
         
         return LoginResponseDto.builder()
@@ -324,6 +367,10 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
         
+        List<Area> areasComoJefe = areaRepository.findByManagerId(userId);
+        boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
+        String nombreArea = esJefe ? areasComoJefe.get(0).getName() : null;
+
         return UserProfileDto.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -333,6 +380,8 @@ public class AuthServiceImpl implements AuthService {
                 .moduleId(user.getModuleId() != null ? user.getModuleId().toString() : null)
                 .active(user.getActive())
                 .lastLogin(user.getLastLogin())
+                .esJefe(esJefe)
+                .nombreArea(nombreArea)
                 .build();
     }
     

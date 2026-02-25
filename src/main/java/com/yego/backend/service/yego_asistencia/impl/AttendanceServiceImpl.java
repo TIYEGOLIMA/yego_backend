@@ -2,20 +2,22 @@ package com.yego.backend.service.yego_asistencia.impl;
 
 import com.yego.backend.entity.yego_asistencia.entities.AttendanceRecord;
 import com.yego.backend.entity.yego_asistencia.entities.AttendanceType;
+import com.yego.backend.entity.yego_principal.entities.Area;
 import com.yego.backend.repository.yego_asistencia.AttendanceRepository;
+import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.service.yego_asistencia.AttendanceService;
 import com.yego.backend.service.yego_asistencia.MessageService;
+import com.yego.backend.service.yego_asistencia.dto.ExportResult;
 import com.yego.backend.handler.yego_asistencia.AttendanceNotificationHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.*;
@@ -32,6 +34,7 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 public class AttendanceServiceImpl implements AttendanceService {
 
     private final AttendanceRepository attendanceRepository;
+    private final AreaRepository areaRepository;
     private final MessageService messageService;
     private final AttendanceNotificationHandler attendanceNotificationHandler;
 
@@ -42,11 +45,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("🎯 [AttendanceService] Procesando marcación con validación de IP para usuario: {}", userId);
         
         // Validar IP autorizada
-        if (clientIp == null) {
+        if (clientIp == null || "unknown".equalsIgnoreCase(clientIp)) {
             log.warn("⚠️ [AttendanceService] No se pudo determinar la IP del cliente");
             return Map.of(
                 "success", false,
-                "message", "No se pudo determinar la IP del cliente"
+                "message", "No se pudo determinar la IP del cliente",
+                "errorCode", "IP_UNKNOWN"
             );
         }
         
@@ -56,7 +60,8 @@ public class AttendanceServiceImpl implements AttendanceService {
             return Map.of(
                 "success", false,
                 "message", "Acceso denegado: IP no autorizada para marcación de asistencia",
-                "ip", clientIp
+                "ip", clientIp,
+                "errorCode", "IP_UNAUTHORIZED"
             );
         }
         
@@ -347,26 +352,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         return estadisticas;
     }
 
-    @Override
-    public Optional<AttendanceRecord> getLastAttendanceRecord(Long userId) {
-        log.info("🔍 [AttendanceService] Obteniendo última marcación del usuario: {}", userId);
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Lima"));
-        List<AttendanceRecord> records = attendanceRepository.findByUserIdAndRecordedDateOrderByRecordedAtDesc(userId, today);
-        return records.isEmpty() ? Optional.empty() : Optional.of(records.get(0));
-    }
-
-    @Override
-    public List<AttendanceRecord> getAttendanceRecordsByUserAndDate(Long userId, LocalDate date) {
-        log.info("📅 [AttendanceService] Obteniendo registros de usuario {} para fecha: {}", userId, date);
-        return attendanceRepository.findByUserIdAndRecordedDateOrderByRecordedAtAsc(userId, date);
-    }
-
-    @Override
-    public List<AttendanceRecord> getAttendanceRecordsByUserAndDateRange(Long userId, LocalDate startDate, LocalDate endDate) {
-        log.info("📅 [AttendanceService] Obteniendo registros de usuario {} entre {} y {}", userId, startDate, endDate);
-        return attendanceRepository.findByUserIdAndDateRange(userId, startDate, endDate);
-    }
-
     // ===== MÉTODOS DE VALIDACIÓN =====
 
     @Override
@@ -506,115 +491,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         return marcaciones;
     }
 
-    @Override
-    public Map<String, Object> getWorkedTimeToday(Long userId) {
-        log.info("⏰ [AttendanceService] Calculando tiempo trabajado del día para usuario: {}", userId);
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Lima"));
-        List<AttendanceRecord> records = attendanceRepository.findByUserIdAndRecordedDateOrderByRecordedAtAsc(userId, today);
-        
-        double tiempoTrabajado = 0.0;
-        if (records.size() >= 2) {
-            Optional<AttendanceRecord> entrada = records.stream()
-                .filter(r -> r.getAttendanceType() == AttendanceType.ENTRY)
-                .findFirst();
-            Optional<AttendanceRecord> salida = records.stream()
-                .filter(r -> r.getAttendanceType() == AttendanceType.EXIT)
-                .findFirst();
-
-            if (entrada.isPresent() && salida.isPresent()) {
-                long minutes = ChronoUnit.MINUTES.between(entrada.get().getRecordedAt(), salida.get().getRecordedAt());
-                tiempoTrabajado = minutes / 60.0;
-            }
-        }
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("tiempoTrabajado", Math.round(tiempoTrabajado * 10.0) / 10.0);
-        result.put("totalMarcaciones", records.size());
-        result.put("fecha", today.toString());
-        
-        log.info("✅ [AttendanceService] Tiempo trabajado calculado: {} horas", tiempoTrabajado);
-        return result;
-    }
-
-    @Override
-    public Map<String, Object> getWorkedTimeInRange(Long userId, LocalDate startDate, LocalDate endDate) {
-        log.info("⏰ [AttendanceService] Calculando tiempo trabajado en rango {} - {} para usuario: {}", startDate, endDate, userId);
-        List<AttendanceRecord> records = attendanceRepository.findByUserIdAndDateRange(userId, startDate, endDate);
-        
-        double tiempoTotal = 0.0;
-        int diasTrabajados = 0;
-        
-        // Agrupar por fecha y calcular tiempo por día
-        Map<LocalDate, List<AttendanceRecord>> recordsByDate = records.stream()
-            .collect(Collectors.groupingBy(AttendanceRecord::getRecordedDate));
-        
-        for (Map.Entry<LocalDate, List<AttendanceRecord>> entry : recordsByDate.entrySet()) {
-            List<AttendanceRecord> dayRecords = entry.getValue();
-            if (dayRecords.size() >= 2) {
-                Optional<AttendanceRecord> entrada = dayRecords.stream()
-                    .filter(r -> r.getAttendanceType() == AttendanceType.ENTRY)
-                    .findFirst();
-                Optional<AttendanceRecord> salida = dayRecords.stream()
-                    .filter(r -> r.getAttendanceType() == AttendanceType.EXIT)
-                    .findFirst();
-
-                if (entrada.isPresent() && salida.isPresent()) {
-                    long minutes = ChronoUnit.MINUTES.between(entrada.get().getRecordedAt(), salida.get().getRecordedAt());
-                    tiempoTotal += minutes / 60.0;
-                    diasTrabajados++;
-                }
-            }
-        }
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("tiempoTotal", Math.round(tiempoTotal * 10.0) / 10.0);
-        result.put("diasTrabajados", diasTrabajados);
-        result.put("promedioDiario", diasTrabajados > 0 ? Math.round((tiempoTotal / diasTrabajados) * 10.0) / 10.0 : 0.0);
-        result.put("fechaInicio", startDate.toString());
-        result.put("fechaFin", endDate.toString());
-        
-        log.info("✅ [AttendanceService] Tiempo total calculado: {} horas en {} días", tiempoTotal, diasTrabajados);
-        return result;
-    }
-
-    // ===== MÉTODOS DE ADMINISTRACIÓN =====
-
-    @Override
-    public Page<AttendanceRecord> getAllAttendanceRecords(Pageable pageable) {
-        log.info("📄 [AttendanceService] Obteniendo todos los registros de asistencia paginados");
-        return attendanceRepository.findAll(pageable);
-    }
-
-    @Override
-    public Optional<AttendanceRecord> getAttendanceRecordById(Long id) {
-        log.info("🔍 [AttendanceService] Obteniendo registro de asistencia con ID: {}", id);
-        return attendanceRepository.findById(id);
-    }
-
-    @Override
-    public AttendanceRecord updateAttendanceRecord(Long id, AttendanceRecord attendanceRecord) {
-        log.info("✏️ [AttendanceService] Actualizando registro de asistencia con ID: {}", id);
-        if (attendanceRepository.existsById(id)) {
-            attendanceRecord.setId(id);
-            return attendanceRepository.save(attendanceRecord);
-        }
-        return null;
-    }
-
-    @Override
-    public void deleteAttendanceRecord(Long id) {
-        log.info("🗑️ [AttendanceService] Eliminando registro de asistencia con ID: {}", id);
-        attendanceRepository.deleteById(id);
-        log.info("✅ [AttendanceService] Registro eliminado exitosamente");
-    }
-
-    @Override
-    public byte[] exportAttendanceRecords(LocalDate startDate, LocalDate endDate, String format) {
-        log.info("📊 [AttendanceService] Exportando registros entre {} y {} en formato {}", startDate, endDate, format);
-        // Implementar lógica de exportación
-        return "Exportación completada".getBytes();
-    }
-
     // ===== MÉTODOS AUXILIARES =====
 
     private String getClientIp() {
@@ -735,42 +611,44 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("✅ [AttendanceService] Encontradas {} marcaciones por rol", marcaciones.size());
         return marcaciones;
     }
-    
+
+    @Override
+    public List<Map<String, Object>> getAttendanceRecordsByRole(Long userId, String userRole, String fechaParam) {
+        LocalDate fecha = (fechaParam != null && !fechaParam.isBlank())
+            ? LocalDate.parse(fechaParam)
+            : LocalDate.now(ZoneId.of("America/Lima"));
+        return getAttendanceRecordsByRole(userId, userRole, fecha);
+    }
+
     /**
-     * Obtener usuarios por rol
+     * Obtener usuarios para lista de asistencias:
+     * - SUPERADMIN y ADMIN: ven todos los usuarios.
+     * - Si es jefe de un área: solo sus colaboradores de esa área.
+     * - Resto: lista vacía.
      */
     @Override
-    public List<Map<String, Object>> getUsersByRole(String userRole) {
-        log.info("👥 [AttendanceService] Obteniendo usuarios por rol: {}", userRole);
-        
-        List<Object[]> usersData;
-        
-        // Filtrar según el rol del usuario
+    public List<Map<String, Object>> getUsersByRole(Long userId, String userRole) {
+        log.info("👥 [AttendanceService] Obteniendo usuarios para lista - userId: {}, rol: {}", userId, userRole);
+
         if ("ADMIN".equalsIgnoreCase(userRole) || "SUPERADMIN".equalsIgnoreCase(userRole)) {
-            // Admin y SuperAdmin ven todos los usuarios
             log.info("🔓 [AttendanceService] Usuario {} - obteniendo todos los usuarios", userRole);
-            usersData = attendanceRepository.findAllUsers();
-        } else if ("SUPERVISOR".equalsIgnoreCase(userRole)) {
-            // SUPERVISOR solo puede ver SAC, SUPERVISOR y OPERADOR
-            log.info("👁️ [AttendanceService] Usuario SUPERVISOR - obteniendo solo SAC, SUPERVISOR y OPERADOR");
-            List<Object[]> allUsers = attendanceRepository.findAllUsers();
-            usersData = allUsers.stream()
-                    .filter(userData -> {
-                        String role = (String) userData[3]; // El rol está en la posición 3
-                        return "SAC".equalsIgnoreCase(role) || 
-                               "SUPERVISOR".equalsIgnoreCase(role) || 
-                               "OPERADOR".equalsIgnoreCase(role);
-                    })
-                    .collect(Collectors.toList());
-        } else {
-            // Otros roles no pueden ver usuarios
-            log.info("👤 [AttendanceService] Usuario {} - sin permisos para ver usuarios", userRole);
+            List<Object[]> usersData = attendanceRepository.findAllUsers();
+            return mapearUsuariosParaLista(usersData);
+        }
+
+        List<Area> areasComoJefe = areaRepository.findByManagerId(userId);
+        if (areasComoJefe == null || areasComoJefe.isEmpty()) {
+            log.info("👤 [AttendanceService] Usuario no es jefe de ningún área - lista vacía");
             return new ArrayList<>();
         }
-        
-        log.info("📊 [AttendanceService] Usuarios encontrados: {}", usersData.size());
-        
-        // Mapear a formato de respuesta
+
+        Area area = areasComoJefe.get(0);
+        log.info("👔 [AttendanceService] Usuario es jefe del área: {} - listando solo colaboradores", area.getName());
+        List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
+        return mapearUsuariosParaLista(usersData);
+    }
+
+    private List<Map<String, Object>> mapearUsuariosParaLista(List<Object[]> usersData) {
         List<Map<String, Object>> usuarios = new ArrayList<>();
         for (Object[] userData : usersData) {
             Long id = ((Number) userData[0]).longValue();
@@ -778,23 +656,64 @@ public class AttendanceServiceImpl implements AttendanceService {
             String lastName = (String) userData[2];
             String role = (String) userData[3];
             String email = (String) userData[4];
-            
+            String areaNombre = userData.length > 5 ? (String) userData[5] : null;
             String fullName = (name != null && lastName != null) ? name + " " + lastName : "Usuario " + id;
-            
             Map<String, Object> usuario = new HashMap<>();
             usuario.put("id", id);
             usuario.put("nombreCompleto", fullName);
             usuario.put("rol", role);
             usuario.put("email", email != null ? email : "");
+            usuario.put("areaNombre", areaNombre != null ? areaNombre : "");
             usuarios.add(usuario);
         }
-        
-        log.info("✅ [AttendanceService] Encontrados {} usuarios por rol", usuarios.size());
+        log.info("✅ [AttendanceService] Encontrados {} usuarios para lista", usuarios.size());
         return usuarios;
     }
-    
+
     @Override
-    public byte[] exportarMarcacionesPorRangoDeFechasYRol(String fechaInicio, String fechaFin, String rol, String rolUsuarioGenerador) {
+    public Map<String, Object> getAttendanceRecordsByDateRangeValidated(Long userId, String fechaInicio, String fechaFin) {
+        try {
+            LocalDate startDate = LocalDate.parse(fechaInicio);
+            LocalDate endDate = LocalDate.parse(fechaFin);
+            if (startDate.isAfter(endDate)) {
+                return Map.of(
+                    "success", false,
+                    "message", "La fecha de inicio no puede ser posterior a la fecha de fin",
+                    "marcaciones", List.<Map<String, Object>>of()
+                );
+            }
+            List<Map<String, Object>> marcaciones = getAttendanceRecordsByDateRange(userId, startDate, endDate);
+            return Map.of(
+                "success", true,
+                "marcaciones", marcaciones,
+                "fechaInicio", fechaInicio,
+                "fechaFin", fechaFin
+            );
+        } catch (java.time.format.DateTimeParseException e) {
+            return Map.of(
+                "success", false,
+                "message", "Formato de fecha inválido. Use YYYY-MM-DD",
+                "marcaciones", List.<Map<String, Object>>of()
+            );
+        }
+    }
+
+    @Override
+    public Map<String, Object> verifyIpResponse(String ip) {
+        if (ip == null || ip.isBlank()) {
+            ip = "unknown";
+        }
+        boolean ipValida = isAuthorizedIp(ip);
+        return Map.of(
+            "success", true,
+            "ipValida", ipValida,
+            "ip", ip,
+            "mensaje", ipValida ? "IP autorizada" : "IP no autorizada"
+        );
+    }
+
+    @Override
+    public ExportResult exportarMarcacionesPorRangoDeFechasYRol(String fechaInicio, String fechaFin, String rol, String rolUsuarioGenerador) {
         log.info("📊 [AttendanceService] Exportando marcaciones para rango de fechas: {} - {} y rol: {} - Generado por: {}", 
             fechaInicio, fechaFin, rol, rolUsuarioGenerador);
         
@@ -814,6 +733,9 @@ public class AttendanceServiceImpl implements AttendanceService {
             }
             
             log.info("📊 [AttendanceService] Marcaciones encontradas: {}", recordsWithNames.size());
+            if (recordsWithNames.isEmpty()) {
+                return new ExportResult(null, null);
+            }
             
             // Crear libro Excel
             Workbook workbook = new XSSFWorkbook();
@@ -986,8 +908,10 @@ public class AttendanceServiceImpl implements AttendanceService {
             workbook.write(outputStream);
             workbook.close();
             
+            byte[] bytes = outputStream.toByteArray();
+            String fileName = "marcaciones_" + fechaInicio + "_" + fechaFin + "_" + rol + ".xlsx";
             log.info("✅ [AttendanceService] Excel generado exitosamente con {} registros", recordsWithNames.size());
-            return outputStream.toByteArray();
+            return new ExportResult(bytes, fileName);
             
         } catch (Exception e) {
             log.error("❌ [AttendanceService] Error generando Excel: {}", e.getMessage(), e);

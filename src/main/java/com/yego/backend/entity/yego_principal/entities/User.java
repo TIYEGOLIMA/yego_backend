@@ -60,7 +60,10 @@ public class User {
 
     @Column(name = "dni", length = 8, nullable = false, unique = true)
     private String dni;
-    
+
+    @Column(name = "area_id")
+    private Long areaId;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

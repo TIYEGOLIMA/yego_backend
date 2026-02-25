@@ -1,13 +1,11 @@
 package com.yego.backend.service.yego_asistencia;
 
 import com.yego.backend.entity.yego_asistencia.entities.AttendanceRecord;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import com.yego.backend.service.yego_asistencia.dto.ExportResult;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * Interfaz del servicio de asistencia del sistema YEGO Asistencia
@@ -44,21 +42,6 @@ public interface AttendanceService {
      */
     Map<String, Object> getEmployeeStatistics(Long userId);
     
-    /**
-     * Obtener última marcación del usuario
-     */
-    Optional<AttendanceRecord> getLastAttendanceRecord(Long userId);
-    
-    /**
-     * Obtener registros de asistencia por usuario y fecha
-     */
-    List<AttendanceRecord> getAttendanceRecordsByUserAndDate(Long userId, LocalDate date);
-    
-    /**
-     * Obtener registros de asistencia por usuario y rango de fechas
-     */
-    List<AttendanceRecord> getAttendanceRecordsByUserAndDateRange(Long userId, LocalDate startDate, LocalDate endDate);
-    
     // ===== MÉTODOS DE VALIDACIÓN =====
     
     /**
@@ -86,45 +69,6 @@ public interface AttendanceService {
      */
     boolean isUserOnBreak(Long userId);
     
-    // ===== MÉTODOS DE ESTADÍSTICAS =====
-    
-    /**
-     * Obtener tiempo trabajado del día
-     */
-    Map<String, Object> getWorkedTimeToday(Long userId);
-    
-    /**
-     * Obtener tiempo trabajado en rango de fechas
-     */
-    Map<String, Object> getWorkedTimeInRange(Long userId, LocalDate startDate, LocalDate endDate);
-    
-    // ===== MÉTODOS DE ADMINISTRACIÓN =====
-    
-    /**
-     * Obtener todos los registros de asistencia con paginación
-     */
-    Page<AttendanceRecord> getAllAttendanceRecords(Pageable pageable);
-    
-    /**
-     * Obtener registro de asistencia por ID
-     */
-    Optional<AttendanceRecord> getAttendanceRecordById(Long id);
-    
-    /**
-     * Actualizar registro de asistencia
-     */
-    AttendanceRecord updateAttendanceRecord(Long id, AttendanceRecord attendanceRecord);
-    
-    /**
-     * Eliminar registro de asistencia
-     */
-    void deleteAttendanceRecord(Long id);
-    
-    /**
-     * Exportar registros de asistencia
-     */
-    byte[] exportAttendanceRecords(LocalDate startDate, LocalDate endDate, String format);
-    
     /**
      * Obtener marcaciones por rango de fechas
      */
@@ -139,22 +83,33 @@ public interface AttendanceService {
      * Obtener marcaciones por rol
      */
     List<Map<String, Object>> getAttendanceRecordsByRole(Long userId, String userRole, LocalDate fecha);
-    
+
     /**
-     * Obtener usuarios por rol
+     * Obtener marcaciones por rol; si fechaParam es null o vacío usa la fecha actual (Perú).
      */
-    List<Map<String, Object>> getUsersByRole(String userRole);
-    
-    
+    List<Map<String, Object>> getAttendanceRecordsByRole(Long userId, String userRole, String fechaParam);
+
     /**
-     * Exportar marcaciones a Excel por rango de fechas y rol
-     * @param fechaInicio Fecha de inicio en formato YYYY-MM-DD
-     * @param fechaFin Fecha de fin en formato YYYY-MM-DD
-     * @param rol Nombre del rol
-     * @param rolUsuarioGenerador Rol del usuario que genera el reporte
-     * @return Byte array del archivo Excel
-     * @throws IllegalArgumentException si las fechas son inválidas
+     * Obtener usuarios para lista de asistencias: ADMIN/SUPERADMIN ven todos;
+     * si userId es manager_id de un área, solo colaboradores de esa área; resto lista vacía.
      */
-    byte[] exportarMarcacionesPorRangoDeFechasYRol(String fechaInicio, String fechaFin, String rol, String rolUsuarioGenerador);
+    List<Map<String, Object>> getUsersByRole(Long userId, String userRole);
+
+    /**
+     * Obtener marcaciones por rango de fechas (validación de fechas en servicio).
+     * @return Map con success, marcaciones, message (si error), fechaInicio, fechaFin
+     */
+    Map<String, Object> getAttendanceRecordsByDateRangeValidated(Long userId, String fechaInicio, String fechaFin);
+
+    /**
+     * Respuesta para verificación de IP (ipValida, ip, mensaje).
+     */
+    Map<String, Object> verifyIpResponse(String ip);
+
+    /**
+     * Exportar marcaciones a Excel por rango de fechas y rol.
+     * @return ExportResult con content y fileName; hasContent() false si no hay datos
+     */
+    ExportResult exportarMarcacionesPorRangoDeFechasYRol(String fechaInicio, String fechaFin, String rol, String rolUsuarioGenerador);
 }
 

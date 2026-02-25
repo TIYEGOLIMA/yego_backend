@@ -11,6 +11,8 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 
+import java.util.List;
+
 /**
  * Controlador REST para usuarios del sistema YEGO Principal
  * Equivalente a UsersController de NestJS
@@ -33,6 +35,9 @@ public class UserController {
         return ResponseEntity.ok(user);
     }
     
+    /**
+     * Obtener todos los usuarios con paginación
+     */
     @GetMapping
     public ResponseEntity<?> findAll(@RequestParam(required = false) Integer page,
                                      @RequestParam(required = false) Integer limit,
@@ -41,6 +46,19 @@ public class UserController {
         Object result = userService.findAll(page, limit, search, active);
         return ResponseEntity.ok(result);
     }
+
+    /**
+     * Listado de usuarios: usuario, rol, esJefe, area, nombre, apellido, email. Sin paginación.
+     * Debe estar antes de /{id} para que "listado" no se interprete como id.
+     */
+    @GetMapping("/listado")
+    public ResponseEntity<List<UsuarioResumenDto>> findAllResumen() {
+        return ResponseEntity.ok(userService.findAllResumen());
+    }
+
+    /**
+     * Obtener usuario por ID (solo numérico, para no capturar rutas como /listado).
+     */
     
     @GetMapping("/{id}")
     public ResponseEntity<?> findOne(@PathVariable Long id) {
@@ -75,17 +93,27 @@ public class UserController {
         return ResponseEntity.ok().build();
     }
     
-
     /**
      * Cambiar estado de usuario
      */
     @PatchMapping("/{id}/estado")
-    public ResponseEntity<?> cambiarEstado(@PathVariable Long id, 
+    public ResponseEntity<?> cambiarEstado(@PathVariable Long id,
                                            @Valid @RequestBody CambiarEstadoDto cambiarEstadoDto) {
         UserResponseDto user = userService.cambiarEstado(id, cambiarEstadoDto.getActivo());
         return ResponseEntity.ok(user);
     }
-    
+
+    /**
+     * Actualizar solo el área del usuario (asignar o quitar de un área).
+     * Body: { "areaId": <id del área> } o { "areaId": null } / { "areaId": 0 } para quitar.
+     */
+    @PatchMapping("/{id}/area")
+    public ResponseEntity<?> updateArea(@PathVariable Long id, @RequestBody UpdateUserAreaDto dto) {
+        Long areaId = dto != null ? dto.getAreaId() : null;
+        UserResponseDto user = userService.updateArea(id, areaId);
+        return ResponseEntity.ok(user);
+    }
+
     /**
      * Consultar DNI
      */

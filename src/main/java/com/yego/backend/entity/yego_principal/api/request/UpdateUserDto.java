@@ -33,5 +33,7 @@ public class UpdateUserDto {
     private String dni;
 
     private Boolean active;
+
+    private Long areaId;
 }
 

@@ -32,4 +32,7 @@ public class UserResponseDto {
     // Información del rol
     private Long role;        // ID del rol
     private String roleName;  // Nombre del rol para mostrar
+
+    private Long areaId;
+    private String areaNombre;
 }

@@ -4,6 +4,8 @@ import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
 import org.springframework.http.ResponseEntity;
 
+import java.util.List;
+
 /**
  * Interfaz del servicio de usuarios del sistema YEGO Principal
  * Equivalente a UsersService de NestJS
@@ -20,6 +22,11 @@ public interface UserService {
      * Obtener todos los usuarios con paginación
      */
     Object findAll(Integer page, Integer limit, String search, Boolean active);
+
+    /**
+     * Listado de usuarios: usuario, rol, esJefe, area, nombre, apellido, email. Sin paginación.
+     */
+    List<UsuarioResumenDto> findAllResumen();
     
     /**
      * Obtener usuario por ID
@@ -35,7 +42,13 @@ public interface UserService {
      * Actualizar usuario
      */
     ResponseEntity<?> update(Long id, UpdateUserDto updateUserDto);
-    
+
+    /**
+     * Actualizar solo el área del usuario (asignar o quitar de un área).
+     * areaId = null o 0 para quitar del área.
+     */
+    UserResponseDto updateArea(Long id, Long areaId);
+
     /**
      * Eliminar usuario (soft delete)
      */

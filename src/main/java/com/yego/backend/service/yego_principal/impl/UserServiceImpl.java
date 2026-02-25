@@ -4,8 +4,10 @@ import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.entity.yego_principal.entities.Role;
+import com.yego.backend.entity.yego_principal.entities.Area;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.repository.yego_principal.RoleRepository;
+import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.service.yego_principal.UserService;
 import com.yego.backend.handler.yego_principal.UserNotificationHandler;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,7 @@ import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,6 +38,7 @@ public class UserServiceImpl implements UserService {
     
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final AreaRepository areaRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final UserNotificationHandler userNotificationHandler;
     private final ObjectMapper objectMapper;
@@ -90,6 +94,43 @@ public class UserServiceImpl implements UserService {
             return findAllSinPaginacion(active);
         }
     }
+
+    @Override
+    public List<UsuarioResumenDto> findAllResumen() {
+        List<User> users = userRepository.findAllWithRole();
+        List<Area> allAreas = areaRepository.findAll();
+        Map<Long, Area> areaById = allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a));
+        Map<Long, Area> areaByManagerId = allAreas.stream()
+                .filter(a -> a.getManagerId() != null)
+                .collect(Collectors.toMap(Area::getManagerId, a -> a, (a1, a2) -> a1));
+        return users.stream()
+                .map(u -> toUsuarioResumenDto(u, areaById, areaByManagerId))
+                .collect(Collectors.toList());
+    }
+
+    private UsuarioResumenDto toUsuarioResumenDto(User u, Map<Long, Area> areaById, Map<Long, Area> areaByManagerId) {
+        String areaNombre = null;
+        if (u.getAreaId() != null) {
+            Area a = areaById.get(u.getAreaId());
+            if (a != null) areaNombre = a.getName();
+        }
+        if (areaNombre == null) {
+            Area a = areaByManagerId.get(u.getId());
+            if (a != null) areaNombre = a.getName();
+        }
+        boolean esJefe = areaByManagerId.containsKey(u.getId());
+        return UsuarioResumenDto.builder()
+                .id(u.getId())
+                .username(u.getUsername())
+                .rol(u.getRoleName() != null ? u.getRoleName() : "")
+                .esJefe(esJefe)
+                .area(areaNombre != null ? areaNombre : "")
+                .nombre(u.getName() != null ? u.getName() : "")
+                .apellido(u.getLastName() != null ? u.getLastName() : "")
+                .email(u.getEmail() != null ? u.getEmail() : "")
+                .dni(u.getDni() != null ? u.getDni() : "")
+                .build();
+    }
     
     private UserPageDto findAllConPaginacion(Integer page, Integer limit, String search, Boolean active) {
         log.info("Filtrando usuarios - page: {}, limit: {}, search: {}, active: {}", page, limit, search, active);
@@ -107,34 +148,40 @@ public class UserServiceImpl implements UserService {
         
         log.info("👤 Usuario autenticado con rol extraído: {}", userRole);
         
-        // Primero obtener TODOS los usuarios sin paginación
+        // Una sola query de áreas (evita N+1)
+        List<Area> allAreas = areaRepository.findAll();
+        Map<Long, Area> areaById = allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a));
+        Map<Long, Area> areaByManagerId = allAreas.stream()
+                .filter(a -> a.getManagerId() != null)
+                .collect(Collectors.toMap(Area::getManagerId, a -> a, (a1, a2) -> a1));
+
+        // Usuarios con rol en una sola query (JOIN FETCH evita N+1)
         List<User> allUsers;
-        
-        if (search != null && !search.trim().isEmpty()) {
+        String searchTrim = search != null ? search.trim() : "";
+        if (!searchTrim.isEmpty()) {
+            String searchPattern = "%" + searchTrim + "%";
             if (active != null) {
-                allUsers = userRepository.findBySearchAndActive(search, active);
+                allUsers = userRepository.findBySearchAndActiveWithRole(searchPattern, active);
             } else {
-                allUsers = userRepository.findBySearch(search);
+                allUsers = userRepository.findBySearchWithRole(searchPattern);
             }
         } else {
             if (active != null) {
-                allUsers = userRepository.findByActive(active);
+                allUsers = userRepository.findByActiveWithRole(active);
             } else {
-                allUsers = userRepository.findAll();
+                allUsers = userRepository.findAllWithRole();
             }
         }
-        
+
         // Calcular paginación manual
         int totalElements = allUsers.size();
         int totalPages = (int) Math.ceil((double) totalElements / limit);
         int startIndex = (page - 1) * limit;
         int endIndex = Math.min(startIndex + limit, totalElements);
-        
-        // Obtener solo los usuarios de la página actual
         List<User> pagedUsers = allUsers.subList(startIndex, endIndex);
-        
+
         List<UserResponseCompleteDto> users = pagedUsers.stream()
-                .map(this::mapToUserResponseCompleteDto)
+                .map(u -> mapToUserResponseCompleteDto(u, areaById, areaByManagerId))
                 .collect(Collectors.toList());
         
         log.info("Usuarios YEGO Principal obtenidos: {} de {} total", users.size(), totalElements);
@@ -199,31 +246,54 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public ResponseEntity<?> update(Long id, UpdateUserDto updateUserDto) {
         try {
-            // Validar campos obligatorios y formato
+            // Actualización parcial: solo areaId, active y/o password (sin enviar username, email, name, etc.)
+            boolean isPartialUpdate = updateUserDto.getUsername() == null
+                    && updateUserDto.getEmail() == null
+                    && updateUserDto.getName() == null
+                    && updateUserDto.getLastName() == null
+                    && updateUserDto.getDni() == null
+                    && updateUserDto.getRoleId() == null;
+
+            if (isPartialUpdate) {
+                User user = userRepository.findById(id).orElse(null);
+                if (user == null) {
+                    return badRequest("Usuario no encontrado");
+                }
+                User updatedUser = updateEntityFromDto(user, updateUserDto);
+                User savedUser = userRepository.save(updatedUser);
+                if (Boolean.FALSE.equals(updateUserDto.getActive())) {
+                    verificarYEnviarLogoutForzado(savedUser);
+                }
+                userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
+                log.info("✅ Usuario actualizado (parcial): {} - areaId={}", savedUser.getUsername(), savedUser.getAreaId());
+                return ResponseEntity.ok(mapToResponseDto(savedUser));
+            }
+
+            // Validar campos obligatorios y formato para actualización completa
             ResponseEntity<?> validationError = validateUpdateUserDto(updateUserDto);
             if (validationError != null) {
                 return validationError;
             }
-            
+
             User user = userRepository.findById(id)
                     .orElse(null);
-            
+
             if (user == null) {
                 return badRequest("Usuario no encontrado");
             }
-            
+
             // Verificar conflictos de username
-            if (!updateUserDto.getUsername().equals(user.getUsername()) 
+            if (!updateUserDto.getUsername().equals(user.getUsername())
                     && userRepository.findByUsername(updateUserDto.getUsername()).isPresent()) {
                 return badRequest("El nombre de usuario ya existe");
             }
-            
+
             // Verificar conflictos de email
-            if (!updateUserDto.getEmail().equals(user.getEmail()) 
+            if (!updateUserDto.getEmail().equals(user.getEmail())
                     && userRepository.findByEmail(updateUserDto.getEmail()).isPresent()) {
                 return badRequest("El email ya existe");
             }
-            
+
             // Verificar que el rol existe y tiene nombre válido
             Role role = roleRepository.findById(updateUserDto.getRoleId())
                     .orElse(null);
@@ -233,18 +303,18 @@ public class UserServiceImpl implements UserService {
             if (isNullOrEmpty(role.getName())) {
                 return badRequest("El rol no tiene un nombre válido");
             }
-            
+
             // Actualizar entidad desde DTO
             User updatedUser = updateEntityFromDto(user, updateUserDto);
-            
+
             User savedUser = userRepository.save(updatedUser);
-            
+
             // Verificar si el usuario actualizado está logueado y enviar notificación
             verificarYEnviarLogoutForzado(savedUser);
-            
+
             // Enviar notificación WebSocket para refrescar tabla
             userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
-            
+
             log.info("✅ Usuario YEGO Principal actualizado: {}", savedUser.getUsername());
             
             return ResponseEntity.ok(mapToResponseDto(savedUser));
@@ -257,7 +327,19 @@ public class UserServiceImpl implements UserService {
             return ResponseEntity.badRequest().body(error);
         }
     }
-    
+
+    @Override
+    @Transactional
+    public UserResponseDto updateArea(Long id, Long areaId) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
+        user.setAreaId(areaId == null || areaId == 0 ? null : areaId);
+        User savedUser = userRepository.save(user);
+        userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
+        log.info("✅ Área del usuario actualizada: {} -> areaId={}", savedUser.getUsername(), savedUser.getAreaId());
+        return mapToResponseDto(savedUser);
+    }
+
     @Override
     @Transactional
     public void remove(Long id) {
@@ -430,13 +512,18 @@ public class UserServiceImpl implements UserService {
         if (updateUserDto.getActive() != null) {
             user.setActive(updateUserDto.getActive());
         }
+        if (updateUserDto.getAreaId() != null) {
+            user.setAreaId(updateUserDto.getAreaId().longValue() == 0 ? null : updateUserDto.getAreaId());
+        }
         return user;
     }
-    
+
     /**
      * Convierte la entidad User a UserResponseDto
      */
     private UserResponseDto mapToResponseDto(User user) {
+        Long areaId = user.getAreaId();
+        String areaNombre = areaId != null ? areaRepository.findById(areaId).map(Area::getName).orElse(null) : null;
         return UserResponseDto.builder()
                 .id(user.getId())
                 .username(user.getUsername() != null ? user.getUsername() : "")
@@ -450,10 +537,30 @@ public class UserServiceImpl implements UserService {
                 .active(user.getActive() != null ? user.getActive() : false)
                 .lastLogin(user.getLastLogin())
                 .createdAt(user.getCreatedAt())
+                .areaId(areaId)
+                .areaNombre(areaNombre)
                 .build();
     }
     
-    private UserResponseCompleteDto mapToUserResponseCompleteDto(User user) {
+    /** Usa mapas pre-cargados para evitar N+1 (una sola query de áreas para toda la lista). */
+    private UserResponseCompleteDto mapToUserResponseCompleteDto(User user, Map<Long, Area> areaById, Map<Long, Area> areaByManagerId) {
+        Long areaId = user.getAreaId();
+        String areaNombre = null;
+        Boolean areaEsResponsable = false;
+        if (areaId != null) {
+            Area area = areaById.get(areaId);
+            if (area != null) {
+                areaNombre = area.getName();
+                areaEsResponsable = area.getManagerId() != null && area.getManagerId().equals(user.getId());
+            }
+        } else {
+            Area area = areaByManagerId.get(user.getId());
+            if (area != null) {
+                areaId = area.getId();
+                areaNombre = area.getName();
+                areaEsResponsable = true;
+            }
+        }
         return UserResponseCompleteDto.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -465,7 +572,19 @@ public class UserServiceImpl implements UserService {
                 .active(user.getActive())
                 .createdAt(user.getCreatedAt())
                 .lastLogin(user.getLastLogin())
+                .areaId(areaId)
+                .areaNombre(areaNombre)
+                .areaEsResponsable(areaEsResponsable)
                 .build();
+    }
+
+    private UserResponseCompleteDto mapToUserResponseCompleteDto(User user) {
+        List<Area> allAreas = areaRepository.findAll();
+        Map<Long, Area> areaById = allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a));
+        Map<Long, Area> areaByManagerId = allAreas.stream()
+                .filter(a -> a.getManagerId() != null)
+                .collect(Collectors.toMap(Area::getManagerId, a -> a, (a1, a2) -> a1));
+        return mapToUserResponseCompleteDto(user, areaById, areaByManagerId);
     }
     
     /**

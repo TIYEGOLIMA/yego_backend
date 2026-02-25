@@ -1,7 +1,6 @@
 package com.yego.backend.repository.yego_asistencia;
 
 import com.yego.backend.entity.yego_asistencia.entities.AttendanceRecord;
-import com.yego.backend.entity.yego_asistencia.entities.AttendanceType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,12 +25,7 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, Lo
     List<AttendanceRecord> findByUserIdAndRecordedDateOrderByRecordedAtDesc(@Param("userId") Long userId, @Param("date") LocalDate date);
     
     /**
-     * Obtener marcaciones por tipo y usuario
-     */
-    List<AttendanceRecord> findByUserIdAndAttendanceType(Long userId, AttendanceType attendanceType);
-    
-    /**
-     * Obtener marcaciones por rango de fechas
+     * Obtener marcaciones por rango de fechas (usuario)
      */
     @Query("SELECT ar FROM AttendanceRecord ar WHERE ar.userId = :userId AND ar.recordedDate BETWEEN :startDate AND :endDate ORDER BY ar.recordedAt ASC")
     List<AttendanceRecord> findByUserIdAndDateRange(@Param("userId") Long userId, 
@@ -39,49 +33,26 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, Lo
                                                    @Param("endDate") LocalDate endDate);
     
     /**
-     * Contar marcaciones de un usuario en un día específico
+     * Obtener todos los usuarios con el nombre del rol y del área (si existe tabla areas)
      */
-    @Query("SELECT COUNT(ar) FROM AttendanceRecord ar WHERE ar.userId = :userId AND ar.recordedDate = :date")
-    Long countByUserIdAndRecordedDate(@Param("userId") Long userId, @Param("date") LocalDate date);
-    
-    /**
-     * Verificar si existe una marcación de entrada para el día
-     */
-    @Query("SELECT COUNT(ar) > 0 FROM AttendanceRecord ar WHERE ar.userId = :userId AND ar.recordedDate = :date AND ar.attendanceType = 'ENTRY'")
-    boolean existsEntryForUserAndDate(@Param("userId") Long userId, @Param("date") LocalDate date);
-    
-    /**
-     * Verificar si existe una marcación de salida para el día
-     */
-    @Query("SELECT COUNT(ar) > 0 FROM AttendanceRecord ar WHERE ar.userId = :userId AND ar.recordedDate = :date AND ar.attendanceType = 'EXIT'")
-    boolean existsExitForUserAndDate(@Param("userId") Long userId, @Param("date") LocalDate date);
-    
-    /**
-     * Obtener registros por rango de fechas
-     */
-    @Query("SELECT ar FROM AttendanceRecord ar WHERE ar.recordedDate BETWEEN :startDate AND :endDate ORDER BY ar.recordedAt ASC")
-    List<AttendanceRecord> findByDateRange(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
-    
-        /**
-         * Obtener registros por fecha específica
-         */
-        @Query("SELECT ar FROM AttendanceRecord ar WHERE ar.recordedDate = :date ORDER BY ar.recordedAt ASC")
-        List<AttendanceRecord> findByRecordedDateOrderByRecordedAtAsc(@Param("date") LocalDate date);
-        
-    /**
-     * Obtener registros por tipo de asistencia
-     */
-    List<AttendanceRecord> findByAttendanceType(AttendanceType attendanceType);
-    
-    /**
-     * Obtener todos los usuarios con el nombre del rol desde la tabla roles
-     */
-    @Query(value = "SELECT u.id, u.name, u.last_name, r.name as role, u.email " +
+    @Query(value = "SELECT u.id, u.name, u.last_name, r.name as role, u.email, a.name as area_name " +
                    "FROM users u " +
                    "LEFT JOIN roles r ON u.role = r.id " +
+                   "LEFT JOIN areas a ON u.area_id = a.id " +
                    "ORDER BY u.name ASC", nativeQuery = true)
     List<Object[]> findAllUsers();
-    
+
+    /**
+     * Usuarios de un área (colaboradores) para lista de asistencias cuando el jefe es manager de esa área.
+     */
+    @Query(value = "SELECT u.id, u.name, u.last_name, r.name as role, u.email, a.name as area_name " +
+                   "FROM users u " +
+                   "LEFT JOIN roles r ON u.role = r.id " +
+                   "LEFT JOIN areas a ON u.area_id = a.id " +
+                   "WHERE u.area_id = :areaId AND u.active = true " +
+                   "ORDER BY u.name ASC", nativeQuery = true)
+    List<Object[]> findUsersByAreaId(@Param("areaId") Long areaId);
+
     /**
      * Obtener marcaciones por usuario y fecha específica con nombres
      */

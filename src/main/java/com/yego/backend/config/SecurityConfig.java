@@ -103,11 +103,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/modules/**").permitAll() // Módulos endpoints
                 .requestMatchers("/api/grupos/**").permitAll() // Grupos endpoints
                 .requestMatchers("/api/system/**").permitAll() // Sistema endpoints
-                .requestMatchers("/api/marcacion/**").permitAll() // Asistencia endpoints
+                .requestMatchers("/api/asistencia/**").permitAll() // Asistencia (marcación, historial, exportar, etc.)
                 .requestMatchers("/api/ticketera/**").permitAll() // Ticketera endpoints
-                .requestMatchers("/api/empleado/**").permitAll() // Asistencia empleado endpoints
-                .requestMatchers("/api/mensaje/**").permitAll() // Asistencia mensaje endpoints
-                .requestMatchers("/api/verificar-ip").permitAll() // Asistencia IP verification
                 .requestMatchers("/api/health").permitAll() // Health check
                 .requestMatchers("/api/yego-premiun/**").permitAll() // Driver active stats endpoints
                 .requestMatchers("/api/marketing-mensajes/**").permitAll() // Marketing mensajes endpoints
