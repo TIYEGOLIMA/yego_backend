@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 public class SessionResponseDto {
     private Long id;
     private Long userId;
+    private SessionUserDto user;
     private String tokenHash;
     private String ipAddress;
     private String userAgent;

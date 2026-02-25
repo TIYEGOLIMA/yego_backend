@@ -1,6 +1,7 @@
 package com.yego.backend.service.yego_principal.impl;
 
 import com.yego.backend.entity.yego_principal.api.request.*;
+import com.yego.backend.entity.yego_principal.api.response.SessionUserDto;
 import com.yego.backend.entity.yego_principal.api.response.*;
 import com.yego.backend.entity.yego_principal.entities.Session;
 import com.yego.backend.entity.yego_principal.entities.ConnectionLog;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -31,7 +33,12 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class SessionServiceImpl implements SessionService {
-    
+
+    private static final String ACTION_FORCED_LOGOUT = "forced_logout";
+    private static final String LEGACY_ACTION_FORCED_LOGOUT = "FORCED_LOGOUT";
+    private static final int MAX_PAGE_SIZE = 100;
+    private static final int DEFAULT_ADMIN_LIMIT = 500;
+
     private final SessionRepository sessionRepository;
     private final ConnectionLogRepository connectionLogRepository;
     private final UserRepository userRepository;
@@ -82,49 +89,51 @@ public class SessionServiceImpl implements SessionService {
     @Override
     public List<SessionResponseDto> findAll(Long userId) {
         List<Session> sessions;
-        
         if (userId != null) {
             sessions = sessionRepository.findActiveSessionsByUserId(userId);
         } else {
-            // Obtener todas las sesiones activas
-            Pageable pageable = PageRequest.of(0, 100); // Limitar a 100 por rendimiento
-            Page<Session> sessionPage = sessionRepository.findAll(pageable);
-            sessions = sessionPage.getContent().stream()
-                    .filter(Session::getActive)
-                    .collect(Collectors.toList());
+            SessionPageDto page = findActiveSessionsPage(0, DEFAULT_ADMIN_LIMIT, null);
+            return page.getContent();
         }
-        
         return sessions.stream()
                 .map(this::mapToResponseDto)
                 .collect(Collectors.toList());
     }
-    
+
     @Override
-    public SessionResponseDto findOne(Long id) {
-        Session session = sessionRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Sesión no encontrada"));
-        
-        return mapToResponseDto(session);
+    public SessionPageDto findActiveSessionsPage(int page, int size, String search) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.min(Math.max(1, size), MAX_PAGE_SIZE);
+        Pageable pageable = PageRequest.of(safePage, safeSize);
+        Page<Session> pageResult;
+        if (search != null && !search.trim().isEmpty()) {
+            String term = search.trim();
+            List<Long> userIds = userRepository.findUserIdsBySearch(term);
+            if (userIds.isEmpty()) userIds = Collections.singletonList(-1L);
+            pageResult = sessionRepository.findByActiveTrueAndSearch(userIds, term, pageable);
+        } else {
+            pageResult = sessionRepository.findByActiveTrueOrderByCreatedAtDesc(pageable);
+        }
+        List<SessionResponseDto> content = pageResult.getContent().stream()
+                .map(this::mapToResponseDto)
+                .collect(Collectors.toList());
+        return SessionPageDto.builder()
+                .content(content)
+                .total(pageResult.getTotalElements())
+                .page(pageResult.getNumber())
+                .size(pageResult.getSize())
+                .totalPages(pageResult.getTotalPages())
+                .build();
     }
-    
-    @Override
-    public Session findByTokenHash(String tokenHash) {
-        return sessionRepository.findByTokenHash(tokenHash)
-                .orElse(null);
-    }
-    
+
     @Override
     @Transactional
-    public void deactivate(Long id) {
-        Session session = sessionRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Sesión no encontrada"));
-        
-        session.setActive(false);
-        sessionRepository.save(session);
-        
-        log.info("🚪 Sesión YEGO Principal {} desactivada", id);
+    public void deactivateByIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return;
+        int updated = sessionRepository.deactivateByIdIn(ids);
+        log.info("🚪 {} sesiones YEGO Principal desactivadas (bulk)", updated);
     }
-    
+
     @Override
     @Transactional
     public void deactivateByUserId(Long userId, String reason) {
@@ -139,46 +148,7 @@ public class SessionServiceImpl implements SessionService {
         log.info("🚪 {} sesiones YEGO Principal desactivadas para usuario {}: {}", 
                 sessions.size(), userId, reason);
     }
-    
-    @Override
-    @Transactional
-    public void deactivateByTokenHash(String tokenHash) {
-        Session session = sessionRepository.findByTokenHash(tokenHash).orElse(null);
-        
-        if (session != null) {
-            session.setActive(false);
-            // No hay campo endedAt en la entidad Session
-            sessionRepository.save(session);
-            
-            log.info("🚪 Sesión YEGO Principal con token {} desactivada", tokenHash);
-        }
-    }
-    
-    @Override
-    @Transactional
-    public Integer cleanupExpiredSessions() {
-        LocalDateTime now = LocalDateTime.now();
-        List<Session> expiredSessions = sessionRepository.findInactiveSessionsForCleanup(now);
-        
-        for (Session session : expiredSessions) {
-            session.setActive(false);
-            // No hay campo endedAt en la entidad Session
-            sessionRepository.save(session);
-        }
-        
-        log.info("🧹 {} sesiones expiradas YEGO Principal limpiadas", expiredSessions.size());
-        return expiredSessions.size();
-    }
-    
-    @Override
-    public Long getActiveSessionsCount(Long userId) {
-        if (userId != null) {
-            return (long) sessionRepository.findActiveSessionsByUserId(userId).size();
-        } else {
-            return sessionRepository.countActiveSessions();
-        }
-    }
-    
+
     @Override
     public SessionStatsDto getSessionStats() {
         Long totalActive = sessionRepository.countActiveSessions();
@@ -189,24 +159,7 @@ public class SessionServiceImpl implements SessionService {
                 .totalCreatedToday(totalCreatedToday)
                 .build();
     }
-    
-    @Override
-    public ConnectionStatsDto getWebSocketStats() {
-        // Simulación de estadísticas WebSocket
-        // En una implementación real, esto vendría del WebSocketGateway
-        return ConnectionStatsDto.builder()
-                .totalConnections(0L)
-                .activeConnections(0L)
-                .build();
-    }
-    
-    @Override
-    public List<SessionDataDto> getWebSocketSessions() {
-        // Simulación de sesiones WebSocket activas
-        // En una implementación real, esto vendría del WebSocketGateway
-        return List.of();
-    }
-    
+
     @Override
     public List<ConnectionLogResponseDto> getConnectionLogs(Integer days, Integer limit, Long userId, String roleName) {
         try {
@@ -243,7 +196,7 @@ public class SessionServiceImpl implements SessionService {
         ConnectionLog connectionLog = ConnectionLog.builder()
                 .userId(session.getUserId())
                 .sessionId(sessionId)
-                .action("FORCED_LOGOUT")
+                .action(ACTION_FORCED_LOGOUT)
                 .ipAddress(session.getIpAddress())
                 .userAgent(session.getUserAgent())
                 .device(session.getDevice())
@@ -266,10 +219,24 @@ public class SessionServiceImpl implements SessionService {
         log.info("🚪 Sesión YEGO Principal {} forzada a cerrar por admin {}", sessionId, adminUserId);
     }
     
+    private SessionUserDto buildSessionUserDto(User user) {
+        if (user == null) return null;
+        String nombre = ((user.getName() != null ? user.getName() : "") + " " + (user.getLastName() != null ? user.getLastName() : "")).trim();
+        if (nombre.isBlank()) nombre = user.getUsername();
+        return SessionUserDto.builder()
+                .username(user.getUsername())
+                .nombre(nombre)
+                .email(user.getEmail())
+                .build();
+    }
+
     private SessionResponseDto mapToResponseDto(Session session) {
+        User user = userRepository.findById(session.getUserId()).orElse(null);
+        SessionUserDto userDto = buildSessionUserDto(user);
         return SessionResponseDto.builder()
                 .id(session.getId())
                 .userId(session.getUserId())
+                .user(userDto)
                 .tokenHash(session.getTokenHash())
                 .ipAddress(session.getIpAddress())
                 .userAgent(session.getUserAgent())
@@ -293,11 +260,15 @@ public class SessionServiceImpl implements SessionService {
     }
     
     private ConnectionLogResponseDto mapToConnectionLogResponseDto(ConnectionLog log) {
+        User user = log.getUserId() != null ? userRepository.findById(log.getUserId()).orElse(null) : null;
+        SessionUserDto userDto = buildSessionUserDto(user);
+        String action = LEGACY_ACTION_FORCED_LOGOUT.equals(log.getAction()) ? ACTION_FORCED_LOGOUT : log.getAction();
         return ConnectionLogResponseDto.builder()
                 .id(log.getId())
                 .userId(log.getUserId())
                 .sessionId(log.getSessionId())
-                .action(log.getAction())
+                .action(action)
+                .user(userDto)
                 .ipAddress(log.getIpAddress())
                 .userAgent(log.getUserAgent())
                 .device(log.getDevice())

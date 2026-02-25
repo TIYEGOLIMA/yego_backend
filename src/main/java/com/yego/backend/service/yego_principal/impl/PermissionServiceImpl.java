@@ -7,6 +7,7 @@ import com.yego.backend.repository.yego_principal.PermissionRepository;
 import com.yego.backend.service.yego_principal.PermissionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,9 +50,11 @@ public class PermissionServiceImpl implements PermissionService {
     }
     
     @Override
+    @Transactional(readOnly = true)
     public List<PermissionResponseDto> findAll() {
-        List<Permission> permissions = permissionRepository.findByActiveOrderByModuleAscActionAsc(true);
-        
+        // Todos los permisos (activos e inactivos) para la pantalla de gestión con filtro por estado
+        Sort sort = Sort.by("module").ascending().and(Sort.by("action").ascending());
+        List<Permission> permissions = permissionRepository.findAll(sort);
         return permissions.stream()
                 .map(this::mapToResponseDto)
                 .collect(Collectors.toList());
@@ -62,35 +65,11 @@ public class PermissionServiceImpl implements PermissionService {
     public List<PermissionResponseDto> findAllActive() {
         log.info("📋 [PermissionService] Obteniendo permisos activos ordenados por módulo y acción");
         List<Permission> activePermissions = permissionRepository.findByActiveTrueOrderByModuleAscActionAsc();
-        
         return activePermissions.stream()
                 .map(this::mapToResponseDto)
                 .collect(Collectors.toList());
     }
-    
-    @Override
-    public List<PermissionResponseDto> findByModule(String module) {
-        List<Permission> permissions = permissionRepository.findByModuleAndActiveOrderByActionAsc(module, true);
-        
-        return permissions.stream()
-                .map(this::mapToResponseDto)
-                .collect(Collectors.toList());
-    }
-    
-    @Override
-    public PermissionResponseDto findOne(Long id) {
-        Permission permission = permissionRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Permiso con ID " + id + " no encontrado"));
-        
-        return mapToResponseDto(permission);
-    }
-    
-    @Override
-    public Permission findByName(String name) {
-        return permissionRepository.findByName(name)
-                .orElseThrow(() -> new EntityNotFoundException("Permiso '" + name + "' no encontrado"));
-    }
-    
+
     @Override
     @Transactional
     public PermissionResponseDto update(Long id, UpdatePermissionDto updatePermissionDto) {
@@ -140,19 +119,7 @@ public class PermissionServiceImpl implements PermissionService {
         
         log.info("✅ Permiso YEGO Principal desactivado: {}", permission.getName());
     }
-    
-    @Override
-    public boolean checkPermission(Long userId, String permissionName) {
-        // Implementación básica - en una implementación completa se verificaría
-        // contra los roles del usuario y sus permisos asociados
-        try {
-            Permission permission = findByName(permissionName);
-            return permission.getActive();
-        } catch (EntityNotFoundException e) {
-            return false;
-        }
-    }
-    
+
     private PermissionResponseDto mapToResponseDto(Permission permission) {
         return PermissionResponseDto.builder()
                 .id(permission.getId())

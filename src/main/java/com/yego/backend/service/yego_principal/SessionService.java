@@ -2,7 +2,6 @@ package com.yego.backend.service.yego_principal;
 
 import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
-import com.yego.backend.entity.yego_principal.entities.Session;
 
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -18,60 +17,30 @@ public interface SessionService {
     SessionResponseDto create(CreateSessionDto createSessionDto, Long userId, HttpServletRequest request);
     
     /**
-     * Obtener sesiones por usuario
+     * Obtener sesiones por usuario (userId null = todas las activas para admin)
      */
     List<SessionResponseDto> findAll(Long userId);
-    
+
     /**
-     * Obtener sesión por ID
+     * Sesiones activas paginadas (para admin). search opcional: usuario, email, IP, dispositivo, ciudad, país
      */
-    SessionResponseDto findOne(Long id);
-    
+    SessionPageDto findActiveSessionsPage(int page, int size, String search);
+
     /**
-     * Buscar sesión por token hash
+     * Desactivar varias sesiones por IDs
      */
-    Session findByTokenHash(String tokenHash);
-    
-    /**
-     * Desactivar sesión
-     */
-    void deactivate(Long id);
-    
+    void deactivateByIds(List<Long> ids);
+
     /**
      * Desactivar sesiones por usuario
      */
     void deactivateByUserId(Long userId, String reason);
-    
-    /**
-     * Desactivar sesión por token hash
-     */
-    void deactivateByTokenHash(String tokenHash);
-    
-    /**
-     * Limpiar sesiones expiradas
-     */
-    Integer cleanupExpiredSessions();
-    
-    /**
-     * Obtener cantidad de sesiones activas por usuario
-     */
-    Long getActiveSessionsCount(Long userId);
-    
+
     /**
      * Obtener estadísticas de sesiones
      */
     SessionStatsDto getSessionStats();
-    
-    /**
-     * Obtener estadísticas de WebSocket
-     */
-    ConnectionStatsDto getWebSocketStats();
-    
-    /**
-     * Obtener sesiones WebSocket
-     */
-    List<SessionDataDto> getWebSocketSessions();
-    
+
     /**
      * Obtener logs de conexión
      */

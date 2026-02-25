@@ -2,7 +2,6 @@ package com.yego.backend.service.yego_principal;
 
 import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
-import com.yego.backend.entity.yego_principal.entities.Permission;
 
 import java.util.List;
 
@@ -23,37 +22,17 @@ public interface PermissionService {
     List<PermissionResponseDto> findAll();
     
     /**
-     * Obtener todos los permisos activos
+     * Obtener todos los permisos activos (usado por RoleServiceImpl para módulos con acciones)
      */
     List<PermissionResponseDto> findAllActive();
-    
-    /**
-     * Obtener permisos por módulo
-     */
-    List<PermissionResponseDto> findByModule(String module);
-    
-    /**
-     * Obtener permiso por ID
-     */
-    PermissionResponseDto findOne(Long id);
-    
-    /**
-     * Buscar permiso por nombre
-     */
-    Permission findByName(String name);
-    
+
     /**
      * Actualizar permiso
      */
     PermissionResponseDto update(Long id, UpdatePermissionDto updatePermissionDto);
     
     /**
-     * Eliminar permiso
+     * Eliminar permiso (soft delete)
      */
     void remove(Long id);
-    
-    /**
-     * Verificar si un usuario tiene un permiso específico
-     */
-    boolean checkPermission(Long userId, String permissionName);
 }

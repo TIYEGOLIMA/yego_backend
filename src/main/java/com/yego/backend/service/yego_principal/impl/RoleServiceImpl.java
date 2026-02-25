@@ -14,6 +14,9 @@ import com.yego.backend.handler.yego_principal.UserNotificationHandler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +32,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class RoleServiceImpl implements RoleService {
-    
+
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
@@ -37,6 +40,32 @@ public class RoleServiceImpl implements RoleService {
     private final PermissionService permissionService;
     private final SessionService sessionService;
     private final UserNotificationHandler userNotificationHandler;
+    @Autowired
+    @Lazy
+    private RoleServiceImpl self;
+
+    /** Cierra sesiones y notifica a usuarios con el rol (ejecuta en segundo plano para no bloquear toggle-status). */
+    @Async
+    public void closeSessionsAndNotifyUsersWithRoleAsync(Long roleId, String roleName) {
+        try {
+            List<User> usersWithRole = userRepository.findByRoleId(roleId);
+            log.info("🚨 [Async] Cerrando sesiones de {} usuarios con rol: {}", usersWithRole.size(), roleName);
+            String reason = "Rol '" + roleName + "' desactivado por administrador";
+            for (User user : usersWithRole) {
+                try {
+                    sessionService.deactivateByUserId(user.getId(), reason);
+                    userNotificationHandler.enviarDesactivacionRol(user.getId(), user.getUsername(), roleName);
+                } catch (Exception e) {
+                    log.error("❌ [Async] Error al cerrar sesiones de usuario {} (ID: {}): {}",
+                            user.getUsername(), user.getId(), e.getMessage());
+                }
+            }
+            log.info("✅ [Async] Proceso completado: {} usuarios afectados por desactivación de rol '{}'",
+                    usersWithRole.size(), roleName);
+        } catch (Exception e) {
+            log.error("❌ [Async] Error en cierre de sesiones por desactivación de rol {}: {}", roleName, e.getMessage());
+        }
+    }
     
     @Override
     @Transactional
@@ -75,9 +104,10 @@ public class RoleServiceImpl implements RoleService {
     @Transactional(readOnly = true)
     public List<RoleResponseDto> findAll() {
         List<Role> roles = roleRepository.findAllOrderByNameAsc();
-        
+        Map<String, Long> userCountByRoleName = userRepository.countUsersGroupByRoleName().stream()
+                .collect(Collectors.toMap(row -> (String) row[0], row -> ((Number) row[1]).longValue(), (a, b) -> a));
         return roles.stream()
-                .map(this::mapToResponseDto)
+                .map(role -> mapToResponseDto(role, userCountByRoleName.getOrDefault(role.getName(), 0L)))
                 .collect(Collectors.toList());
     }
     
@@ -174,48 +204,22 @@ public class RoleServiceImpl implements RoleService {
     public RoleResponseDto toggleStatus(Long id) {
         Role role = roleRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + id + " no encontrado"));
-        
-        // Cambiar el estado activo - manejar null como false
+
         Boolean currentStatus = role.getActivo();
         boolean newStatus = currentStatus != null ? !currentStatus : true;
         role.setActivo(newStatus);
-        
         Role savedRole = roleRepository.save(role);
-        
+
         String status = newStatus ? "activado" : "desactivado";
         log.info("🔄 Rol YEGO Principal {}: {}", status, savedRole.getName());
-        
-        // Si se desactivó el rol, cerrar sesiones de todos los usuarios con ese rol
+
+        // Si se desactivó el rol, cerrar sesiones y notificar en segundo plano (el endpoint responde rápido)
         if (!newStatus) {
-            log.info("🚨 Rol desactivado - Cerrando sesiones de usuarios con rol: {}", savedRole.getName());
-            List<User> usersWithRole = userRepository.findByRoleId(id);
-            
-            for (User user : usersWithRole) {
-                try {
-                    // Cerrar todas las sesiones del usuario
-                    sessionService.deactivateByUserId(user.getId(), 
-                        "Rol '" + savedRole.getName() + "' desactivado por administrador");
-                    
-                    // Enviar notificación por WebSocket
-                    userNotificationHandler.enviarDesactivacionRol(
-                        user.getId(), 
-                        user.getUsername(), 
-                        savedRole.getName()
-                    );
-                    
-                    log.info("✅ Sesiones cerradas y notificación enviada para usuario: {} (ID: {})", 
-                        user.getUsername(), user.getId());
-                } catch (Exception e) {
-                    log.error("❌ Error al cerrar sesiones de usuario {} (ID: {}): {}", 
-                        user.getUsername(), user.getId(), e.getMessage());
-                }
-            }
-            
-            log.info("✅ Proceso completado: {} usuarios afectados por desactivación de rol '{}'", 
-                usersWithRole.size(), savedRole.getName());
+            self.closeSessionsAndNotifyUsersWithRoleAsync(id, savedRole.getName());
         }
-        
-        return mapToResponseDto(savedRole);
+
+        // Respuesta sin COUNT para que el PUT sea rápido; el front puede refrescar la lista si necesita userCount
+        return mapToResponseDto(savedRole, 0L);
     }
     
     @Override
@@ -226,8 +230,10 @@ public class RoleServiceImpl implements RoleService {
     }
     
     private RoleResponseDto mapToResponseDto(Role role) {
-        Long userCount = userRepository.countByRoleName(role.getName());
-        
+        return mapToResponseDto(role, userRepository.countByRoleName(role.getName()));
+    }
+
+    private RoleResponseDto mapToResponseDto(Role role, Long userCount) {
         return RoleResponseDto.builder()
                 .id(role.getId())
                 .name(role.getName())
@@ -236,7 +242,7 @@ public class RoleServiceImpl implements RoleService {
                 .active(role.getActivo())
                 .createdAt(role.getCreatedAt())
                 .updatedAt(role.getUpdatedAt())
-                .userCount(userCount)
+                .userCount(userCount != null ? userCount : 0L)
                 .build();
     }
     

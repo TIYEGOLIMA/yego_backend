@@ -33,5 +33,7 @@ public class ConnectionLogResponseDto {
     private Integer sessionDuration;
     private String roleName;
     private LocalDateTime createdAt;
+    /** Usuario (nombre, username) para mostrar en la vista */
+    private SessionUserDto user;
 }
 

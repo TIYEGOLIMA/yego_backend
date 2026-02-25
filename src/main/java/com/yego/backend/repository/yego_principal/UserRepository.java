@@ -58,6 +58,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT COUNT(u) FROM User u WHERE u.role.name = :roleName")
     Long countByRoleName(@Param("roleName") String roleName);
 
+    /** Conteo de usuarios por nombre de rol en una sola consulta (evita N+1 en listado de roles). */
+    @Query("SELECT u.role.name, COUNT(u) FROM User u GROUP BY u.role.name")
+    List<Object[]> countUsersGroupByRoleName();
+
     // --- Áreas ---
 
     @Query("SELECT u FROM User u JOIN FETCH u.role WHERE u.areaId = :areaId ORDER BY u.name ASC")
@@ -94,4 +98,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Modifying
     @Query("UPDATE User u SET u.password = :password WHERE u.id = :userId")
     void updatePassword(@Param("userId") Long userId, @Param("password") String password);
+
+    /** IDs de usuarios que coinciden con búsqueda (username, email, nombre completo). */
+    @Query("SELECT u.id FROM User u WHERE LOWER(u.username) LIKE LOWER(CONCAT('%',:q,'%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%',:q,'%')) OR LOWER(CONCAT(COALESCE(u.name,''), ' ', COALESCE(u.lastName,''))) LIKE LOWER(CONCAT('%',:q,'%'))")
+    List<Long> findUserIdsBySearch(@Param("q") String q);
 }
