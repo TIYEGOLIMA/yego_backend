@@ -12,6 +12,7 @@ import com.yego.backend.repository.yego_principal.GrupoRepository;
 import com.yego.backend.repository.yego_principal.ModuleRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_principal.ModuleService;
+import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -36,7 +37,7 @@ public class ModuleServiceImpl implements ModuleService {
     @Transactional(readOnly = true)
     public List<ModuleResponse> obtenerTodos() {
         log.info("📋 [ModuleService] Obteniendo todos los módulos");
-        List<Module> modulos = moduleRepository.findAll();
+        List<Module> modulos = moduleRepository.findAllByOrderByNombreAsc();
         log.info("✅ [ModuleService] Encontrados {} módulos", modulos.size());
         return modulos.stream()
                 .map(this::convertirAResponse)
@@ -47,7 +48,7 @@ public class ModuleServiceImpl implements ModuleService {
     @Transactional(readOnly = true)
     public List<ModuleResponse> obtenerActivos() {
         log.info("📋 [ModuleService] Obteniendo TODOS los módulos activos de la base de datos");
-        List<Module> modulos = moduleRepository.findByActivoTrue();
+        List<Module> modulos = moduleRepository.findByActivoTrueOrderByNombreAsc();
         log.info("✅ [ModuleService] Total de módulos activos encontrados en BD: {}", modulos.size());
         
         if (modulos.isEmpty()) {
@@ -68,7 +69,7 @@ public class ModuleServiceImpl implements ModuleService {
     public ModuleResponse obtenerPorId(Long id) {
         log.info("📋 [ModuleService] Obteniendo módulo por ID: {}", id);
         Module modulo = moduleRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Módulo no encontrado con ID: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Módulo no encontrado con ID: " + id));
         log.info("✅ [ModuleService] Módulo encontrado: {}", modulo.getNombre());
         return convertirAResponse(modulo);
     }
@@ -82,10 +83,10 @@ public class ModuleServiceImpl implements ModuleService {
         Grupo grupo = null;
         if (request.getGrupoId() != null) {
             grupo = grupoRepository.findById(request.getGrupoId())
-                    .orElseThrow(() -> new RuntimeException("Grupo no encontrado con ID: " + request.getGrupoId()));
+                    .orElseThrow(() -> new EntityNotFoundException("Grupo no encontrado con ID: " + request.getGrupoId()));
             log.info("📋 [ModuleService] Grupo encontrado: {}", grupo.getNombre());
         }
-        
+
         Module modulo = Module.builder()
                 .nombre(request.getNombre())
                 .descripcion(request.getDescripcion())
@@ -108,23 +109,23 @@ public class ModuleServiceImpl implements ModuleService {
     public ModuleResponse actualizar(Long id, ModuleRequest request) {
         log.info("📋 [ModuleService] Actualizando módulo con ID: {}", id);
         Module modulo = moduleRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Módulo no encontrado con ID: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Módulo no encontrado con ID: " + id));
 
         // Buscar grupo si se proporciona grupoId
         Grupo grupo = null;
         if (request.getGrupoId() != null) {
             grupo = grupoRepository.findById(request.getGrupoId())
-                    .orElseThrow(() -> new RuntimeException("Grupo no encontrado con ID: " + request.getGrupoId()));
+                    .orElseThrow(() -> new EntityNotFoundException("Grupo no encontrado con ID: " + request.getGrupoId()));
             log.info("📋 [ModuleService] Grupo encontrado: {}", grupo.getNombre());
         }
 
         modulo.setNombre(request.getNombre());
         modulo.setDescripcion(request.getDescripcion());
         modulo.setUrl(request.getUrl());
-        modulo.setEstado(request.getEstado() != null ? request.getEstado() : "inactivo");
-        modulo.setIcono(request.getIcono());
+        modulo.setEstado(request.getEstado() != null ? request.getEstado() : modulo.getEstado());
+        modulo.setIcono(request.getIcono() != null ? request.getIcono() : modulo.getIcono());
         modulo.setGrupo(grupo);
-        modulo.setActivo(request.getActivo());
+        modulo.setActivo(request.getActivo() != null ? request.getActivo() : modulo.getActivo());
         modulo.setFechaActualizacion(LocalDateTime.now());
         modulo.setUltimoCheck(LocalDateTime.now()); // Actualizar ultimoCheck al actualizar
 
@@ -138,7 +139,7 @@ public class ModuleServiceImpl implements ModuleService {
     public void eliminar(Long id) {
         log.info("📋 [ModuleService] Eliminando módulo con ID: {}", id);
         Module modulo = moduleRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Módulo no encontrado con ID: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Módulo no encontrado con ID: " + id));
         moduleRepository.delete(modulo);
         log.info("✅ [ModuleService] Módulo eliminado con ID: {}", id);
     }
@@ -148,7 +149,7 @@ public class ModuleServiceImpl implements ModuleService {
     public void toggleActive(Long id) {
         log.info("📋 [ModuleService] Toggle activo/inactivo módulo con ID: {}", id);
         Module modulo = moduleRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Módulo no encontrado con ID: " + id));
+                .orElseThrow(() -> new EntityNotFoundException("Módulo no encontrado con ID: " + id));
         
         // Cambiar el estado: si está activo lo desactiva, si está inactivo lo activa
         boolean nuevoEstado = !modulo.getActivo();
@@ -298,8 +299,8 @@ public class ModuleServiceImpl implements ModuleService {
                 return Collections.emptyList();
             }
             
-            // Obtener todos los módulos activos
-            List<Module> allActiveModules = moduleRepository.findByActivoTrue();
+            // Obtener todos los módulos activos (ordenados por nombre)
+            List<Module> allActiveModules = moduleRepository.findByActivoTrueOrderByNombreAsc();
             log.debug("📋 [ModuleService] Total de módulos activos en BD: {}", allActiveModules.size());
             
             // Crear un mapa de nombres normalizados de permisos para búsqueda rápida

@@ -101,8 +101,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/roles/**").permitAll() // Roles endpoints
                 .requestMatchers("/api/permissions/**").permitAll() // Permisos endpoints
                 .requestMatchers("/api/registros/**").permitAll() // Registros endpoints
-                .requestMatchers("/api/modules/**").permitAll() // Módulos endpoints
-                .requestMatchers("/api/grupos/**").permitAll() // Grupos endpoints
+                .requestMatchers("/api/modules/**").permitAll() // Módulos y grupos (grupos bajo /api/modules/grupos)
                 .requestMatchers("/api/system/**").permitAll() // Sistema endpoints
                 .requestMatchers("/api/asistencia/**").permitAll() // Asistencia (marcación, historial, exportar, etc.)
                 .requestMatchers("/api/ticketera/**").permitAll() // Ticketera endpoints
