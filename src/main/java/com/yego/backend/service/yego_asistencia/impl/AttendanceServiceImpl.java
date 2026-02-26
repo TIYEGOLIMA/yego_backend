@@ -34,6 +34,9 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 @RequiredArgsConstructor
 public class AttendanceServiceImpl implements AttendanceService {
 
+    /** IDs de usuarios que no deben aparecer en la lista de asistencia (principal, prueba, tablet, etc.). */
+    private static final Set<Long> USER_IDS_EXCLUIDOS_LISTA_ASISTENCIA = Set.of(1L, 4L, 5L, 6L, 21L, 7L);
+
     private final AttendanceRepository attendanceRepository;
     private final AreaRepository areaRepository;
     private final MessageService messageService;
@@ -644,6 +647,16 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         Area area = areasComoJefe.get(0);
+        // Caso especial: jefe del área "Administración" Y rol "Administración" → ve todos los usuarios en la lista de asistencia
+        boolean areaEsAdministracion = area.getName() != null
+                && ("Administración".equalsIgnoreCase(area.getName().trim()) || "Administracion".equalsIgnoreCase(area.getName().trim()));
+        boolean rolEsAdministracion = userRole != null
+                && ("Administración".equalsIgnoreCase(userRole.trim()) || "Administracion".equalsIgnoreCase(userRole.trim()));
+        if (areaEsAdministracion && rolEsAdministracion) {
+            log.info("🔓 [AttendanceService] Jefe del área Administración con rol Administración - listando todos los usuarios");
+            List<Object[]> usersData = attendanceRepository.findAllUsers();
+            return mapearUsuariosParaLista(usersData);
+        }
         log.info("👔 [AttendanceService] Usuario es jefe del área: {} - listando solo colaboradores", area.getName());
         List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
         return mapearUsuariosParaLista(usersData);
@@ -653,6 +666,9 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<Map<String, Object>> usuarios = new ArrayList<>();
         for (Object[] userData : usersData) {
             Long id = ((Number) userData[0]).longValue();
+            if (USER_IDS_EXCLUIDOS_LISTA_ASISTENCIA.contains(id)) {
+                continue;
+            }
             String name = (String) userData[1];
             String lastName = (String) userData[2];
             String role = (String) userData[3];
@@ -729,15 +745,24 @@ public class AttendanceServiceImpl implements AttendanceService {
                 List<Area> areasComoJefe = areaRepository.findByManagerId(userIdGenerador);
                 if (areasComoJefe != null && !areasComoJefe.isEmpty()) {
                     Area area = areasComoJefe.get(0);
-                    List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
-                    userIdsPermitidos = new java.util.ArrayList<>();
-                    for (Object[] row : usersData) {
-                        userIdsPermitidos.add(((Number) row[0]).longValue());
+                    boolean areaEsAdministracionExport = area.getName() != null
+                            && ("Administración".equalsIgnoreCase(area.getName().trim()) || "Administracion".equalsIgnoreCase(area.getName().trim()));
+                    boolean rolEsAdministracionExport = rolUsuarioGenerador != null
+                            && ("Administración".equalsIgnoreCase(rolUsuarioGenerador.trim()) || "Administracion".equalsIgnoreCase(rolUsuarioGenerador.trim()));
+                    if (areaEsAdministracionExport && rolEsAdministracionExport) {
+                        userIdsPermitidos = null;
+                        log.info("🔓 [AttendanceService] Jefe del área Administración con rol Administración - exportando todas las marcaciones");
+                    } else {
+                        List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
+                        userIdsPermitidos = new java.util.ArrayList<>();
+                        for (Object[] row : usersData) {
+                            userIdsPermitidos.add(((Number) row[0]).longValue());
+                        }
+                        if (!userIdsPermitidos.contains(userIdGenerador)) {
+                            userIdsPermitidos.add(userIdGenerador);
+                        }
+                        log.info("👔 [AttendanceService] Exportación filtrada por área: {} - {} colaboradores + jefe (incluido)", area.getName(), userIdsPermitidos.size());
                     }
-                    if (!userIdsPermitidos.contains(userIdGenerador)) {
-                        userIdsPermitidos.add(userIdGenerador);
-                    }
-                    log.info("👔 [AttendanceService] Exportación filtrada por área: {} - {} colaboradores + jefe (incluido)", area.getName(), userIdsPermitidos.size());
                 } else {
                     // No es jefe: no puede exportar
                     log.info("👤 [AttendanceService] Usuario no es jefe de área - sin permiso para exportar");

@@ -35,7 +35,7 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, Lo
     /**
      * Obtener todos los usuarios con el nombre del rol y del área (si existe tabla areas)
      */
-    @Query(value = "SELECT u.id, u.name, u.last_name, r.name as role, u.email, a.name as area_name " +
+    @Query(value = "SELECT u.id, u.name, u.last_name, r.name as role, u.email, a.name as area_name, u.username " +
                    "FROM users u " +
                    "LEFT JOIN roles r ON u.role = r.id " +
                    "LEFT JOIN areas a ON u.area_id = a.id " +
@@ -45,7 +45,7 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, Lo
     /**
      * Usuarios de un área (colaboradores) para lista de asistencias cuando el jefe es manager de esa área.
      */
-    @Query(value = "SELECT u.id, u.name, u.last_name, r.name as role, u.email, a.name as area_name " +
+    @Query(value = "SELECT u.id, u.name, u.last_name, r.name as role, u.email, a.name as area_name, u.username " +
                    "FROM users u " +
                    "LEFT JOIN roles r ON u.role = r.id " +
                    "LEFT JOIN areas a ON u.area_id = a.id " +
