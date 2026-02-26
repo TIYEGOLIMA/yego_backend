@@ -1,9 +1,10 @@
 package com.yego.backend.controller.yego_asistencia;
 
-import com.yego.backend.util.HttpRequestUtils;
+import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.exception.ExportacionNoPermitidaException;
 import com.yego.backend.service.yego_asistencia.AttendanceService;
 import com.yego.backend.service.yego_asistencia.TokenValidationService;
-import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.util.HttpRequestUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -188,12 +189,15 @@ public class AttendanceController {
             if (user == null) {
                 return ResponseEntity.status(401).body(Map.of("message", "Token de acceso requerido"));
             }
+            String nombreCompleto = (user.getName() != null ? user.getName() : "") + (user.getLastName() != null ? " " + user.getLastName() : "");
+            if (nombreCompleto.isBlank()) nombreCompleto = user.getUsername();
             var result = attendanceService.exportarMarcacionesPorRangoDeFechasYRol(
-                fechaInicio, fechaFin, rol, user.getRoleName());
+                fechaInicio, fechaFin, rol, user.getRoleName(), user.getId(), nombreCompleto.trim());
             if (!result.hasContent()) {
+                String message = result.getMessage() != null ? result.getMessage() : "No se encontraron marcaciones para los parámetros especificados";
                 return ResponseEntity.status(404).body(Map.of(
                     "success", false,
-                    "message", "No se encontraron marcaciones para los parámetros especificados"
+                    "message", message
                 ));
             }
             HttpHeaders headers = new HttpHeaders();
@@ -201,6 +205,12 @@ public class AttendanceController {
             headers.setContentDispositionFormData("attachment", result.getFileName());
             headers.setContentLength(result.getContent().length);
             return ResponseEntity.ok().headers(headers).body(result.getContent());
+        } catch (ExportacionNoPermitidaException e) {
+            log.warn("⚠️ [AttendanceController] Exportación no permitida: {}", e.getMessage());
+            return ResponseEntity.status(403).body(Map.of(
+                "success", false,
+                "message", e.getMessage()
+            ));
         } catch (Exception e) {
             log.error("❌ [AttendanceController] Error exportando marcaciones: {}", e.getMessage(), e);
             return ResponseEntity.status(500).body(Map.of(

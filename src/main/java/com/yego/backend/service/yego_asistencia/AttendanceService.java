@@ -108,8 +108,11 @@ public interface AttendanceService {
 
     /**
      * Exportar marcaciones a Excel por rango de fechas y rol.
+     * Si el usuario es jefe de un área, solo se exportan marcaciones de sus colaboradores de esa área y las suyas propias.
+     * @param userIdGenerador ID del usuario que solicita la exportación (para filtrar por área si es jefe)
+     * @param nombreUsuarioGenerador Nombre completo de quien solicita (se muestra en el Excel en "Generado por")
      * @return ExportResult con content y fileName; hasContent() false si no hay datos
      */
-    ExportResult exportarMarcacionesPorRangoDeFechasYRol(String fechaInicio, String fechaFin, String rol, String rolUsuarioGenerador);
+    ExportResult exportarMarcacionesPorRangoDeFechasYRol(String fechaInicio, String fechaFin, String rol, String rolUsuarioGenerador, Long userIdGenerador, String nombreUsuarioGenerador);
 }
 

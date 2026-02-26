@@ -7,6 +7,7 @@ import com.yego.backend.repository.yego_asistencia.AttendanceRepository;
 import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.service.yego_asistencia.AttendanceService;
 import com.yego.backend.service.yego_asistencia.MessageService;
+import com.yego.backend.exception.ExportacionNoPermitidaException;
 import com.yego.backend.service.yego_asistencia.dto.ExportResult;
 import com.yego.backend.handler.yego_asistencia.AttendanceNotificationHandler;
 import lombok.RequiredArgsConstructor;
@@ -713,28 +714,61 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     @Override
-    public ExportResult exportarMarcacionesPorRangoDeFechasYRol(String fechaInicio, String fechaFin, String rol, String rolUsuarioGenerador) {
-        log.info("📊 [AttendanceService] Exportando marcaciones para rango de fechas: {} - {} y rol: {} - Generado por: {}", 
-            fechaInicio, fechaFin, rol, rolUsuarioGenerador);
-        
+    public ExportResult exportarMarcacionesPorRangoDeFechasYRol(String fechaInicio, String fechaFin, String rol, String rolUsuarioGenerador, Long userIdGenerador, String nombreUsuarioGenerador) {
+        log.info("📊 [AttendanceService] Exportando marcaciones para rango de fechas: {} - {} y rol: {} - Generado por: {} (userId: {})",
+            fechaInicio, fechaFin, rol, nombreUsuarioGenerador != null ? nombreUsuarioGenerador : rolUsuarioGenerador, userIdGenerador);
+
         // Parsear fechas (las validaciones ya se hicieron en el controller)
         LocalDate fechaConsultaInicio = LocalDate.parse(fechaInicio);
         LocalDate fechaConsultaFin = LocalDate.parse(fechaFin);
-        
+
         try {
-            // Obtener marcaciones por rango de fechas y rol
-            // Si el rol es "TODOS", obtener todas las marcaciones sin filtrar por rol
-            List<Object[]> recordsWithNames;
-            if (rol != null && rol.equalsIgnoreCase("TODOS")) {
-                log.info("📊 [AttendanceService] Rol es TODOS - Obteniendo marcaciones de todos los roles");
-                recordsWithNames = attendanceRepository.findByDateRangeAllRoles(fechaConsultaInicio, fechaConsultaFin);
-            } else {
-                recordsWithNames = attendanceRepository.findByDateRangeAndRole(fechaConsultaInicio, fechaConsultaFin, rol);
+            // Determinar si filtrar por área (solo colaboradores del área + el jefe que exporta)
+            List<Long> userIdsPermitidos = null;
+            if (userIdGenerador != null && !"ADMIN".equalsIgnoreCase(rolUsuarioGenerador) && !"SUPERADMIN".equalsIgnoreCase(rolUsuarioGenerador)) {
+                List<Area> areasComoJefe = areaRepository.findByManagerId(userIdGenerador);
+                if (areasComoJefe != null && !areasComoJefe.isEmpty()) {
+                    Area area = areasComoJefe.get(0);
+                    List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
+                    userIdsPermitidos = new java.util.ArrayList<>();
+                    for (Object[] row : usersData) {
+                        userIdsPermitidos.add(((Number) row[0]).longValue());
+                    }
+                    if (!userIdsPermitidos.contains(userIdGenerador)) {
+                        userIdsPermitidos.add(userIdGenerador);
+                    }
+                    log.info("👔 [AttendanceService] Exportación filtrada por área: {} - {} colaboradores + jefe (incluido)", area.getName(), userIdsPermitidos.size());
+                } else {
+                    // No es jefe: no puede exportar
+                    log.info("👤 [AttendanceService] Usuario no es jefe de área - sin permiso para exportar");
+                    throw new ExportacionNoPermitidaException();
+                }
             }
-            
+
+            List<Object[]> recordsWithNames;
+            if (userIdsPermitidos != null && !userIdsPermitidos.isEmpty()) {
+                if (rol != null && rol.equalsIgnoreCase("TODOS")) {
+                    recordsWithNames = attendanceRepository.findByDateRangeAllRolesAndUserIdIn(fechaConsultaInicio, fechaConsultaFin, userIdsPermitidos);
+                } else {
+                    recordsWithNames = attendanceRepository.findByDateRangeAndRoleAndUserIdIn(fechaConsultaInicio, fechaConsultaFin, rol, userIdsPermitidos);
+                }
+            } else {
+                // ADMIN/SUPERADMIN: sin filtro por área
+                if (rol != null && rol.equalsIgnoreCase("TODOS")) {
+                    log.info("📊 [AttendanceService] Rol es TODOS - Obteniendo marcaciones de todos los roles");
+                    recordsWithNames = attendanceRepository.findByDateRangeAllRoles(fechaConsultaInicio, fechaConsultaFin);
+                } else {
+                    recordsWithNames = attendanceRepository.findByDateRangeAndRole(fechaConsultaInicio, fechaConsultaFin, rol);
+                }
+            }
+
             log.info("📊 [AttendanceService] Marcaciones encontradas: {}", recordsWithNames.size());
             if (recordsWithNames.isEmpty()) {
-                return new ExportResult(null, null);
+                String mensajeSinDatos = (userIdsPermitidos != null)
+                    ? "No hay nada que exportar: no existen datos de marcación para su área en el rango de fechas seleccionado."
+                    : "No se encontraron marcaciones para los parámetros especificados.";
+                log.info("📋 [AttendanceService] Sin datos para exportar: {}", mensajeSinDatos);
+                return new ExportResult(null, null, mensajeSinDatos);
             }
             
             // Crear libro Excel
@@ -827,7 +861,10 @@ public class AttendanceServiceImpl implements AttendanceService {
             infoRow3.getCell(1).setCellStyle(infoValueStyle);
             infoRow3.createCell(2).setCellValue("Generado por:");
             infoRow3.getCell(2).setCellStyle(infoStyle);
-            infoRow3.createCell(3).setCellValue(rolUsuarioGenerador != null ? rolUsuarioGenerador.toUpperCase() : "N/A");
+            String generadoPor = (nombreUsuarioGenerador != null && !nombreUsuarioGenerador.isBlank())
+                ? nombreUsuarioGenerador.trim()
+                : (rolUsuarioGenerador != null ? rolUsuarioGenerador.toUpperCase() : "N/A");
+            infoRow3.createCell(3).setCellValue(generadoPor);
             infoRow3.getCell(3).setCellStyle(infoValueStyle);
             
             rowNum++; // Un solo espacio antes de los encabezados
