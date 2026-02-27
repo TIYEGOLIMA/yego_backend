@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -117,20 +118,29 @@ public class AreaServiceImpl implements AreaService {
 
     @Override
     @Transactional
-    public AreaResponseDto toggleStatus(Long id) {
-        Area area = areaRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Área con ID " + id + " no encontrada"));
-        area.setActivo(!Boolean.TRUE.equals(area.getActivo()));
-        areaRepository.save(area);
-        return findOne(id);
+    public void toggleStatus(Long id) {
+        int updated = areaRepository.toggleActivoById(id);
+        if (updated == 0) {
+            throw new EntityNotFoundException("Área con ID " + id + " no encontrada");
+        }
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<UserSimpleDto> findUsersForResponsable() {
+    public List<UserSimpleDto> findUsersForResponsable(Long areaIdEnEdicion) {
+        Set<Long> managerIdsToExclude = areaRepository.findDistinctManagerIds().stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (areaIdEnEdicion != null) {
+            areaRepository.findById(areaIdEnEdicion).ifPresent(area -> {
+                if (area.getManagerId() != null) managerIdsToExclude.remove(area.getManagerId());
+            });
+        }
+        final Set<Long> exclude = managerIdsToExclude;
         return userRepository.findActiveUsersWithoutAreaForDropdown().stream()
+                .filter(row -> !exclude.contains(((Number) row[0]).longValue()))
                 .map(row -> {
-                    Long id = (Long) row[0];
+                    Long id = ((Number) row[0]).longValue();
                     String name = row[1] != null ? (String) row[1] : "";
                     String lastName = row[2] != null ? (String) row[2] : "";
                     String nombreCompleto = (name + " " + (lastName != null ? lastName : "").trim()).trim();

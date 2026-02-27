@@ -57,13 +57,15 @@ public class AreaController {
     }
 
     @PutMapping("/toggle-status/{id}")
-    public ResponseEntity<AreaResponseDto> toggleStatus(@PathVariable Long id) {
-        return ResponseEntity.ok(areaService.toggleStatus(id));
+    public ResponseEntity<Void> toggleStatus(@PathVariable Long id) {
+        areaService.toggleStatus(id);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/usuarios-para-responsable")
-    public ResponseEntity<List<UserSimpleDto>> getUsuariosParaResponsable() {
-        return ResponseEntity.ok(areaService.findUsersForResponsable());
+    public ResponseEntity<List<UserSimpleDto>> getUsuariosParaResponsable(
+            @RequestParam(required = false) Long areaId) {
+        return ResponseEntity.ok(areaService.findUsersForResponsable(areaId));
     }
 
     @GetMapping("/{id}/colaboradores")

@@ -23,9 +23,14 @@ public interface AreaService {
 
     void remove(Long id);
 
-    AreaResponseDto toggleStatus(Long id);
+    void toggleStatus(Long id);
 
-    List<UserSimpleDto> findUsersForResponsable();
+    /**
+     * Usuarios que pueden elegirse como responsable de un área.
+     * Excluye a quienes ya son responsables de otra área.
+     * @param areaIdEnEdicion si no es null, el responsable actual de esa área se incluye (para poder dejarlo igual).
+     */
+    List<UserSimpleDto> findUsersForResponsable(Long areaIdEnEdicion);
 
     List<ColaboradorDto> getColaboradoresByAreaId(Long areaId);
 }
