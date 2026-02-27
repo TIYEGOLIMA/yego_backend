@@ -34,8 +34,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 @RequiredArgsConstructor
 public class AttendanceServiceImpl implements AttendanceService {
 
-    /** IDs de usuarios que no deben aparecer en la lista de asistencia (principal, prueba, tablet, etc.). */
-    private static final Set<Long> USER_IDS_EXCLUIDOS_LISTA_ASISTENCIA = Set.of(1L, 4L, 5L, 6L, 21L, 7L);
+    /** IDs de usuarios que no deben aparecer en la lista de asistencia ni en el Excel de exportación (principal, prueba, tablet, etc.). */
+    private static final Set<Long> USER_IDS_EXCLUIDOS_LISTA_ASISTENCIA = Set.of(1L, 4L, 5L, 6L, 21L, 7L, 27L, 37L);
 
     private final AttendanceRepository attendanceRepository;
     private final AreaRepository areaRepository;
@@ -913,11 +913,14 @@ public class AttendanceServiceImpl implements AttendanceService {
             // El query devuelve: id, user_id, attendance_type, recorded_date, recorded_time, recorded_at, full_name, email, role_name
             for (Object[] recordData : recordsWithNames) {
                 try {
+                    Long empleadoId = ((Number) recordData[1]).longValue();
+                    if (USER_IDS_EXCLUIDOS_LISTA_ASISTENCIA.contains(empleadoId)) {
+                        continue;
+                    }
                     Row row = sheet.createRow(rowNum++);
                     
                     // Extraer datos del array según el orden del query
                     Long id = ((Number) recordData[0]).longValue();
-                    Long empleadoId = ((Number) recordData[1]).longValue();
                     String attendanceType = (String) recordData[2];
                     LocalDate recordedDate = ((java.sql.Date) recordData[3]).toLocalDate();
                     LocalTime recordedTime = ((java.sql.Time) recordData[4]).toLocalTime();

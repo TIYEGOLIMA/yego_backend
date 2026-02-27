@@ -317,6 +317,7 @@ public class MarketingMensajeScheduler {
             // Enviar un mensaje por cada park_id
             int exitosos = 0;
             int fallidos = 0;
+            int omitidosPorLimite = 0;
             
             for (int i = 0; i < parkIds.size(); i++) {
                 String parkId = parkIds.get(i);
@@ -361,13 +362,18 @@ public class MarketingMensajeScheduler {
                     log.error("❌ [MarketingMensajeScheduler] Interrupción durante el delay: {}", e.getMessage());
                     fallidos++;
                 } catch (HttpClientErrorException e) {
-                    fallidos++;
                     int statusCodeValue = e.getStatusCode().value();
-                    if (statusCodeValue == 403) {
+                    String responseBody = e.getResponseBodyAsString();
+                    if (statusCodeValue == 400 && responseBody != null && responseBody.contains("limit_time")) {
+                        omitidosPorLimite++;
+                        log.warn("⚠️ [MarketingMensajeScheduler] Restricción de tiempo Fleet - Park ID: {} | La API no permite enviar otro mensaje hasta la fecha indicada (limit_time)", parkId);
+                    } else if (statusCodeValue == 403) {
+                        fallidos++;
                         log.warn("⚠️ [MarketingMensajeScheduler] Acceso denegado a flota - Park ID: {} | La cookie no tiene permisos para esta flota", parkId);
                     } else {
+                        fallidos++;
                         log.error("❌ [MarketingMensajeScheduler] Error HTTP al enviar a Fleet - Park ID: {} | Status: {} | Error: {}", 
-                                parkId, statusCodeValue, e.getResponseBodyAsString());
+                                parkId, statusCodeValue, responseBody);
                     }
                 } catch (HttpServerErrorException e) {
                     fallidos++;
@@ -389,9 +395,9 @@ public class MarketingMensajeScheduler {
                 }
             }
             
-            if (fallidos > 0 || exitosos > 0) {
-                log.info("📊 [MarketingMensajeScheduler] Resumen Fleet - Mensaje ID: {} | ✅ Exitosos: {} | ❌ Fallidos: {} | Total: {}", 
-                        mensaje.getId(), exitosos, fallidos, parkIds.size());
+            if (fallidos > 0 || exitosos > 0 || omitidosPorLimite > 0) {
+                log.info("📊 [MarketingMensajeScheduler] Resumen Fleet - Mensaje ID: {} | ✅ Exitosos: {} | ❌ Fallidos: {} | ⏳ Omitidos (restricción tiempo): {} | Total: {}", 
+                        mensaje.getId(), exitosos, fallidos, omitidosPorLimite, parkIds.size());
             }
             
         } catch (Exception e) {
