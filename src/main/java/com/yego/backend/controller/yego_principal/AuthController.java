@@ -92,12 +92,13 @@ public class AuthController {
     }
     
     /**
-     * Cambiar contraseña inicial
+     * Cambiar contraseña inicial (p. ej. desde modal de cambio obligatorio)
      */
     @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@Valid @RequestBody ChangePasswordDto changePasswordDto) {
+    public ResponseEntity<?> resetPassword(@Valid @RequestBody ChangePasswordDto changePasswordDto,
+                                            HttpServletRequest request) {
         try {
-            authService.resetPassword(changePasswordDto);
+            authService.resetPassword(changePasswordDto, request);
             return ResponseEntity.ok().body("Contraseña cambiada exitosamente");
         } catch (Exception e) {
             log.error("Error al cambiar contraseña inicial: {}", e.getMessage());

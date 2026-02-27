@@ -389,6 +389,7 @@ public class UserServiceImpl implements UserService {
         }
         
         user.setPassword(passwordEncoder.encode(newPassword));
+        user.setPasswordChangedAt(java.time.LocalDateTime.now());
         userRepository.save(user);
         
         // Enviar notificación WebSocket para refrescar tabla

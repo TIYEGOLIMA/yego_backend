@@ -36,8 +36,9 @@ public class SecurityConfig {
     private final JwtRequestFilter jwtRequestFilter;
     
     @Bean
+    /** Cost 10: equilibrio seguridad/velocidad; verificaciones y cambios de contraseña más rápidos. */
     public BCryptPasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(12);
+        return new BCryptPasswordEncoder(10);
     }
     
     @Bean(name = "defaultRestTemplate")

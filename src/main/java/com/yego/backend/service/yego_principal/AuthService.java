@@ -39,9 +39,9 @@ public interface AuthService extends UserDetailsService {
     void changePassword(Long userId, String currentPassword, String newPassword);
     
     /**
-     * Reset de contraseña inicial
+     * Reset de contraseña inicial (request permite registrar IP real en auditoría)
      */
-    void resetPassword(ChangePasswordDto changePasswordDto);
+    void resetPassword(ChangePasswordDto changePasswordDto, jakarta.servlet.http.HttpServletRequest request);
     
     /**
      * Validar fortaleza de contraseña
@@ -67,5 +67,10 @@ public interface AuthService extends UserDetailsService {
      * Cargar usuario por username para Spring Security
      */
     UserDetails loadUserByUsername(String username);
+
+    /**
+     * Indica si el usuario debe cambiar la contraseña (política semanal: más de 7 días desde el último cambio).
+     */
+    boolean isPasswordExpired(Long userId);
 }
 

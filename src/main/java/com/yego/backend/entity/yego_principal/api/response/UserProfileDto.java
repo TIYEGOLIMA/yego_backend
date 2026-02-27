@@ -28,5 +28,7 @@ public class UserProfileDto {
     private Boolean esJefe;
     /** Nombre del área que gestiona (solo si esJefe). */
     private String nombreArea;
+    /** true si la contraseña tiene más de una semana y debe cambiarse para seguir usando Integral. */
+    private Boolean requirePasswordChange;
 }
 

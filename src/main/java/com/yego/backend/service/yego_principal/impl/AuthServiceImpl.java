@@ -33,6 +33,7 @@ import org.springframework.web.server.ResponseStatusException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
@@ -53,7 +54,8 @@ public class AuthServiceImpl implements AuthService {
     private final SessionService sessionService;
     private final AuditService auditService;
     private final QueueAgentService queueAgentService;
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(12);
+    /** Cost 10: buen equilibrio seguridad/velocidad; 12 era muy lento en cambio de contraseña. */
+    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
     
     @Value("${jwt.secret}")
     private String jwtSecret;
@@ -79,9 +81,7 @@ public class AuthServiceImpl implements AuthService {
             if (passwordEncoder.matches(password, user.getPassword())) {
                 if (!user.getActive()) {
                     log.warn("Usuario inactivo intentó iniciar sesión: {}", user.getUsername());
-                    String clientIp = getClientIpAddress(request);
-                    String userAgent = request.getHeader("User-Agent");
-                    auditService.logFailedLogin(username, clientIp, userAgent);
+                    auditService.logFailedLogin(username, getClientIpAddress(request), getUserAgent(request));
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Usuario inactivo. Contacte al administrador del sistema");
                 }
                 
@@ -89,9 +89,7 @@ public class AuthServiceImpl implements AuthService {
                 if (user.getRole() != null && user.getRole().getActivo() != null && !user.getRole().getActivo()) {
                     log.warn("Usuario con rol inactivo intentó iniciar sesión: {} (Rol: {})", 
                         user.getUsername(), user.getRole().getName());
-                    String clientIp = getClientIpAddress(request);
-                    String userAgent = request.getHeader("User-Agent");
-                    auditService.logFailedLogin(username, clientIp, userAgent);
+                    auditService.logFailedLogin(username, getClientIpAddress(request), getUserAgent(request));
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
                         "Tu rol '" + user.getRole().getName() + "' ha sido desactivado temporalmente. No tienes acceso al sistema en este momento. Contacte al administrador.");
                 }
@@ -104,9 +102,7 @@ public class AuthServiceImpl implements AuthService {
                         if (area.getActivo() != null && !area.getActivo()) {
                             log.warn("Usuario de área inactiva intentó iniciar sesión: {} (Área: {})", 
                                 user.getUsername(), area.getName());
-                            String clientIp = getClientIpAddress(request);
-                            String userAgent = request.getHeader("User-Agent");
-                            auditService.logFailedLogin(username, clientIp, userAgent);
+                            auditService.logFailedLogin(username, getClientIpAddress(request), getUserAgent(request));
                             throw new ResponseStatusException(HttpStatus.FORBIDDEN, 
                                 "Tu área '" + area.getName() + "' ha sido desactivada. No tienes acceso al sistema. Contacte al administrador.");
                         }
@@ -116,15 +112,11 @@ public class AuthServiceImpl implements AuthService {
                 return mapToUserResponseDto(user);
             } else {
                 log.info("Contraseña incorrecta para usuario: {}", username);
-                String clientIp = getClientIpAddress(request);
-                String userAgent = request.getHeader("User-Agent");
-                auditService.logFailedLogin(username, clientIp, userAgent);
+                auditService.logFailedLogin(username, getClientIpAddress(request), getUserAgent(request));
             }
         } else {
             log.info("Usuario no encontrado: {}", username);
-            String clientIp = getClientIpAddress(request);
-            String userAgent = request.getHeader("User-Agent");
-            auditService.logFailedLogin(username, clientIp, userAgent);
+            auditService.logFailedLogin(username, getClientIpAddress(request), getUserAgent(request));
         }
         
         return null;
@@ -248,7 +240,8 @@ public class AuthServiceImpl implements AuthService {
         boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
         String nombreArea = esJefe ? areasComoJefe.get(0).getName() : null;
 
-        // Construir respuesta
+        // Construir respuesta (incluir si debe cambiar contraseña por política semanal)
+        boolean requirePasswordChange = isPasswordExpiredInternal(user.getPasswordChangedAt());
         LoginResponseDto.LoginUserDto loginUser = LoginResponseDto.LoginUserDto.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -260,6 +253,7 @@ public class AuthServiceImpl implements AuthService {
                 .lastLogin(LocalDateTime.now())
                 .esJefe(esJefe)
                 .nombreArea(nombreArea)
+                .requirePasswordChange(requirePasswordChange)
                 .build();
         
         return LoginResponseDto.builder()
@@ -293,6 +287,7 @@ public class AuthServiceImpl implements AuthService {
                 .password(passwordHash)
                 .role(defaultRole)
                 .active(true)
+                .passwordChangedAt(LocalDateTime.now())
                 .build();
         
         User savedUser = userRepository.save(user);
@@ -318,29 +313,29 @@ public class AuthServiceImpl implements AuthService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La nueva contraseña no cumple con los requisitos de seguridad");
         }
         
-        // Verificar que la nueva contraseña no sea igual a la actual
-        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+        // Verificar que la nueva no sea igual a la actual (comparación en claro, evita otra ronda BCrypt)
+        if (currentPassword.equals(newPassword)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La nueva contraseña no puede ser igual a la actual");
         }
-        
-        // Hash nueva contraseña y actualizar
+
+        // Hash nueva contraseña y actualizar (y fecha de cambio para política semanal)
         String newPasswordHash = passwordEncoder.encode(newPassword);
-        userRepository.updatePassword(userId, newPasswordHash);
+        userRepository.updatePassword(userId, newPasswordHash, LocalDateTime.now());
         
         log.info("✅ Contraseña cambiada para usuario: {}", user.getUsername());
     }
     
     @Override
     @Transactional
-    public void resetPassword(ChangePasswordDto changePasswordDto) {
-        UserResponseDto user = validateUser(changePasswordDto.getUsername(), 
-                changePasswordDto.getCurrentPassword(), null);
-        
+    public void resetPassword(ChangePasswordDto changePasswordDto, HttpServletRequest request) {
+        UserResponseDto user = validateUser(changePasswordDto.getUsername(),
+                changePasswordDto.getCurrentPassword(), request);
+
         if (user == null) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Credenciales inválidas");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña actual es incorrecta");
         }
-    
-        changePassword(user.getId(), changePasswordDto.getCurrentPassword(), 
+
+        changePassword(user.getId(), changePasswordDto.getCurrentPassword(),
                 changePasswordDto.getNewPassword());
     }
     
@@ -382,6 +377,7 @@ public class AuthServiceImpl implements AuthService {
                 .lastLogin(user.getLastLogin())
                 .esJefe(esJefe)
                 .nombreArea(nombreArea)
+                .requirePasswordChange(isPasswordExpiredInternal(user.getPasswordChangedAt()))
                 .build();
     }
     
@@ -463,21 +459,45 @@ public class AuthServiceImpl implements AuthService {
                 .active(user.getActive())
                 .lastLogin(user.getLastLogin())
                 .createdAt(user.getCreatedAt())
+                .passwordChangedAt(user.getPasswordChangedAt())
                 .build();
     }
+
+    /**
+     * true si la contraseña debe renovarse: han pasado 7 o más días desde el ÚLTIMO CAMBIO de contraseña.
+     * Si el usuario cambia la contraseña en el transcurso de la semana (p. ej. desde el menú), se actualiza
+     * password_changed_at y los 7 días vuelven a contar desde ese momento. No es "cada semana en día fijo".
+     */
+    private boolean isPasswordExpiredInternal(java.time.LocalDateTime passwordChangedAt) {
+        if (passwordChangedAt == null) return true;
+        return ChronoUnit.DAYS.between(passwordChangedAt, LocalDateTime.now()) >= 7;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isPasswordExpired(Long userId) {
+        if (userId == null) return false;
+        return userRepository.findById(userId)
+                .map(u -> isPasswordExpiredInternal(u.getPasswordChangedAt()))
+                .orElse(false);
+    }
     
+    /** Cuando request es null (p. ej. reset-password) devolvemos IP válida para INET en audit_logs; "unknown" no es válido para INET. */
     private String getClientIpAddress(HttpServletRequest request) {
+        if (request == null) return "127.0.0.1";
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
             return xForwardedFor.split(",")[0].trim();
         }
-        
         String xRealIp = request.getHeader("X-Real-IP");
         if (xRealIp != null && !xRealIp.isEmpty()) {
             return xRealIp;
         }
-        
         return request.getRemoteAddr();
+    }
+
+    private String getUserAgent(HttpServletRequest request) {
+        return (request != null && request.getHeader("User-Agent") != null) ? request.getHeader("User-Agent") : null;
     }
     
     @Override

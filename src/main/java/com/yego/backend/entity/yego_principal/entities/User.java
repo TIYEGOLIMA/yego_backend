@@ -64,6 +64,9 @@ public class User {
     @Column(name = "area_id")
     private Long areaId;
 
+    @Column(name = "password_changed_at")
+    private LocalDateTime passwordChangedAt;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();

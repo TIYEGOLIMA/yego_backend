@@ -35,4 +35,5 @@ public class UserResponseDto {
 
     private Long areaId;
     private String areaNombre;
+    private java.time.LocalDateTime passwordChangedAt;
 }

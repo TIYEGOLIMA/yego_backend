@@ -96,8 +96,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     void updateLastLogin(@Param("userId") Long userId, @Param("lastLogin") LocalDateTime lastLogin);
 
     @Modifying
-    @Query("UPDATE User u SET u.password = :password WHERE u.id = :userId")
-    void updatePassword(@Param("userId") Long userId, @Param("password") String password);
+    @Query("UPDATE User u SET u.password = :password, u.passwordChangedAt = :passwordChangedAt WHERE u.id = :userId")
+    void updatePassword(@Param("userId") Long userId, @Param("password") String password, @Param("passwordChangedAt") LocalDateTime passwordChangedAt);
 
     /** IDs de usuarios que coinciden con búsqueda (username, email, nombre completo). */
     @Query("SELECT u.id FROM User u WHERE LOWER(u.username) LIKE LOWER(CONCAT('%',:q,'%')) OR LOWER(u.email) LIKE LOWER(CONCAT('%',:q,'%')) OR LOWER(CONCAT(COALESCE(u.name,''), ' ', COALESCE(u.lastName,''))) LIKE LOWER(CONCAT('%',:q,'%'))")

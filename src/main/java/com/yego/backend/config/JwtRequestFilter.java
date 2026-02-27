@@ -168,6 +168,17 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 // Después de establecer la autenticación en el contexto, especificamos
                 // que el usuario actual está autenticado. Así pasa los filtros de Spring Security.
                 SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
+                
+                // Política semanal: si la contraseña está vencida, solo permitir cambio de contraseña, reset o logout
+                String path = request.getRequestURI();
+                boolean pathAllowed = path.contains("/change-password") || path.contains("/reset-password") || path.contains("/logout");
+                if (!pathAllowed && authService.isPasswordExpired(Long.parseLong(userId))) {
+                    log.info("🔒 [JwtRequestFilter] Acceso bloqueado: contraseña vencida (política semanal) para usuario {}", userId);
+                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"error\":\"PASSWORD_EXPIRED\",\"message\":\"Debes cambiar tu contraseña para continuar usando Integral.\"}");
+                    return;
+                }
             }
         }
         chain.doFilter(request, response);
