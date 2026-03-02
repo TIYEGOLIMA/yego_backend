@@ -96,8 +96,8 @@ public class UserServiceImpl implements UserService {
         }
     }
 
-    /** Usernames que no deben aparecer en el listado público /api/users/listado (tv, principal, tablet1, tablet2). */
-    private static final Set<String> USERNAMES_EXCLUIDOS_LISTADO = Set.of("tv", "principal", "tablet1", "tablet2");
+    /** IDs de usuarios que no deben aparecer en el listado público /api/users/listado (tv, principal, tablet1, tablet2, etc.). */
+    private static final Set<Long> USER_IDS_EXCLUIDOS_LISTADO = Set.of(1L, 4L, 6L);
 
     @Override
     public List<UsuarioResumenDto> findAllResumen() {
@@ -109,7 +109,7 @@ public class UserServiceImpl implements UserService {
                 .filter(a -> a.getManagerId() != null)
                 .collect(Collectors.toMap(Area::getManagerId, a -> a, (a1, a2) -> a1));
         return users.stream()
-                .filter(u -> u.getUsername() != null && !USERNAMES_EXCLUIDOS_LISTADO.contains(u.getUsername().toLowerCase()))
+                .filter(u -> !USER_IDS_EXCLUIDOS_LISTADO.contains(u.getId()))
                 .map(u -> toUsuarioResumenDto(u, areaById, areaByManagerId))
                 .collect(Collectors.toList());
     }
