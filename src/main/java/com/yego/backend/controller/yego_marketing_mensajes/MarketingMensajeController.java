@@ -229,16 +229,18 @@ public class MarketingMensajeController {
     }
 
     /**
-     * Exporta mensajes a Excel. Acepta los mismos filtros que la lista (searchTerm, modo, tipo, canales).
+     * Exporta mensajes a Excel. Acepta los mismos filtros que la lista (searchTerm, modo, tipo, canales, fechaDesde, fechaHasta).
      */
     @GetMapping("/export/excel")
     public ResponseEntity<byte[]> exportarExcel(
             @RequestParam(required = false) String searchTerm,
             @RequestParam(required = false) String modo,
             @RequestParam(required = false) String tipo,
-            @RequestParam(required = false) String canales) {
+            @RequestParam(required = false) String canales,
+            @RequestParam(required = false) String fechaDesde,
+            @RequestParam(required = false) String fechaHasta) {
         try {
-            byte[] excel = marketingMensajeService.exportarTodosMensajesExcel(searchTerm, modo, tipo, canales);
+            byte[] excel = marketingMensajeService.exportarTodosMensajesExcel(searchTerm, modo, tipo, canales, fechaDesde, fechaHasta);
             HttpHeaders headers = new HttpHeaders();
             headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"mensajes_marketing.xlsx\"");
             return ResponseEntity.ok().headers(headers).body(excel);
@@ -255,9 +257,11 @@ public class MarketingMensajeController {
             @RequestParam(required = false) String searchTerm,
             @RequestParam(required = false) String modo,
             @RequestParam(required = false) String tipo,
-            @RequestParam(required = false) String canales) {
+            @RequestParam(required = false) String canales,
+            @RequestParam(required = false) String fechaDesde,
+            @RequestParam(required = false) String fechaHasta) {
         try {
-            byte[] pdf = marketingMensajeService.exportarTodosMensajesPdf(searchTerm, modo, tipo, canales);
+            byte[] pdf = marketingMensajeService.exportarTodosMensajesPdf(searchTerm, modo, tipo, canales, fechaDesde, fechaHasta);
             HttpHeaders headers = new HttpHeaders();
             headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"mensajes_marketing.pdf\"");
             return ResponseEntity.ok().headers(headers).body(pdf);

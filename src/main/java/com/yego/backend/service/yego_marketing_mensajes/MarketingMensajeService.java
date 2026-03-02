@@ -101,16 +101,18 @@ public interface MarketingMensajeService {
 
     /**
      * Exporta mensajes a Excel, opcionalmente filtrados (orden: más recientes primero).
-     * @param searchTerm filtro de búsqueda (título, mensaje, modo, tipo)
+     * @param searchTerm filtro de búsqueda
      * @param modo filtrar por modo (null = todos)
      * @param tipo filtrar por tipo (null = todos)
      * @param canales "whatsapp", "yandex", "ambos" o null = todos
+     * @param fechaDesde fecha inicio (YYYY-MM-DD) o null
+     * @param fechaHasta fecha fin (YYYY-MM-DD) o null
      */
-    byte[] exportarTodosMensajesExcel(String searchTerm, String modo, String tipo, String canales);
+    byte[] exportarTodosMensajesExcel(String searchTerm, String modo, String tipo, String canales, String fechaDesde, String fechaHasta);
 
     /**
      * Exporta mensajes a PDF, opcionalmente filtrados (orden: más recientes primero).
      */
-    byte[] exportarTodosMensajesPdf(String searchTerm, String modo, String tipo, String canales);
+    byte[] exportarTodosMensajesPdf(String searchTerm, String modo, String tipo, String canales, String fechaDesde, String fechaHasta);
 }
 

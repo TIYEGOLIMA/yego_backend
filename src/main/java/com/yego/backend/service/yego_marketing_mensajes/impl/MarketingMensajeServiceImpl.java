@@ -709,7 +709,7 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
 
     /** Aplica filtros y orden por fecha (más recientes primero) para exportación. */
     private List<MarketingMensajeResponse> filtrarYOrdenarParaExport(
-            String searchTerm, String modo, String tipo, String canales) {
+            String searchTerm, String modo, String tipo, String canales, String fechaDesde, String fechaHasta) {
         List<MarketingMensajeResponse> list = obtenerTodosLosMensajes();
         if (searchTerm != null && !searchTerm.trim().isEmpty()) {
             String q = searchTerm.trim().toLowerCase();
@@ -735,6 +735,26 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
                 list = list.stream().filter(m -> Boolean.TRUE.equals(m.getWhatsapp()) && Boolean.TRUE.equals(m.getYandex())).collect(Collectors.toList());
             }
         }
+        if (fechaDesde != null && !fechaDesde.trim().isEmpty()) {
+            try {
+                java.time.LocalDate desde = java.time.LocalDate.parse(fechaDesde.trim());
+                list = list.stream().filter(m -> {
+                    if (m.getCreatedAt() == null) return false;
+                    java.time.LocalDate created = m.getCreatedAt().toLocalDate();
+                    return !created.isBefore(desde);
+                }).collect(Collectors.toList());
+            } catch (Exception ignored) { }
+        }
+        if (fechaHasta != null && !fechaHasta.trim().isEmpty()) {
+            try {
+                java.time.LocalDate hasta = java.time.LocalDate.parse(fechaHasta.trim());
+                list = list.stream().filter(m -> {
+                    if (m.getCreatedAt() == null) return false;
+                    java.time.LocalDate created = m.getCreatedAt().toLocalDate();
+                    return !created.isAfter(hasta);
+                }).collect(Collectors.toList());
+            } catch (Exception ignored) { }
+        }
         // Orden: más recientes primero
         list = list.stream().sorted((a, b) -> {
             long ta = a.getCreatedAt() != null ? a.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() : 0L;
@@ -745,8 +765,8 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
     }
 
     @Override
-    public byte[] exportarTodosMensajesExcel(String searchTerm, String modo, String tipo, String canales) {
-        List<MarketingMensajeResponse> mensajes = filtrarYOrdenarParaExport(searchTerm, modo, tipo, canales);
+    public byte[] exportarTodosMensajesExcel(String searchTerm, String modo, String tipo, String canales, String fechaDesde, String fechaHasta) {
+        List<MarketingMensajeResponse> mensajes = filtrarYOrdenarParaExport(searchTerm, modo, tipo, canales, fechaDesde, fechaHasta);
         log.info("📊 [MarketingMensajeService] Exportando {} mensajes a Excel (filtros aplicados)", mensajes.size());
         Map<String, String> grupoIdToName = obtenerGrupos().stream()
                 .collect(Collectors.toMap(GrupoWhatsAppResponse::getId, g -> g.getSubject() != null ? g.getSubject() : g.getId(), (a, b) -> a));
@@ -812,8 +832,8 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
     }
 
     @Override
-    public byte[] exportarTodosMensajesPdf(String searchTerm, String modo, String tipo, String canales) {
-        List<MarketingMensajeResponse> mensajes = filtrarYOrdenarParaExport(searchTerm, modo, tipo, canales);
+    public byte[] exportarTodosMensajesPdf(String searchTerm, String modo, String tipo, String canales, String fechaDesde, String fechaHasta) {
+        List<MarketingMensajeResponse> mensajes = filtrarYOrdenarParaExport(searchTerm, modo, tipo, canales, fechaDesde, fechaHasta);
         log.info("📄 [MarketingMensajeService] Exportando {} mensajes a PDF (filtros aplicados)", mensajes.size());
         try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Document document = new Document(PageSize.A4.rotate());
