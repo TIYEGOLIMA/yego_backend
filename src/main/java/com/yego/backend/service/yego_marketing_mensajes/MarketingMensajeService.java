@@ -98,5 +98,19 @@ public interface MarketingMensajeService {
      * @return lista de mensajes para el calendario
      */
     List<MarketingMensajeCalendarioResponse> obtenerMensajesParaCalendario();
+
+    /**
+     * Exporta mensajes a Excel, opcionalmente filtrados (orden: más recientes primero).
+     * @param searchTerm filtro de búsqueda (título, mensaje, modo, tipo)
+     * @param modo filtrar por modo (null = todos)
+     * @param tipo filtrar por tipo (null = todos)
+     * @param canales "whatsapp", "yandex", "ambos" o null = todos
+     */
+    byte[] exportarTodosMensajesExcel(String searchTerm, String modo, String tipo, String canales);
+
+    /**
+     * Exporta mensajes a PDF, opcionalmente filtrados (orden: más recientes primero).
+     */
+    byte[] exportarTodosMensajesPdf(String searchTerm, String modo, String tipo, String canales);
 }
 

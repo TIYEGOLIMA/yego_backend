@@ -22,6 +22,25 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import java.awt.Color;
+import java.io.ByteArrayOutputStream;
+
+import com.lowagie.text.Document;
+import com.lowagie.text.FontFactory;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Phrase;
+import com.lowagie.text.pdf.PdfPCell;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -44,6 +63,13 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final MinIOService minIOService;
+
+    /** Caché en memoria para flotas (API externa lenta). TTL 5 minutos. */
+    private static final long CACHE_TTL_MS = 5 * 60 * 1000;
+    private volatile List<FlotaResponse> flotasCache;
+    private volatile long flotasCacheExpiry;
+    private volatile List<GrupoWhatsAppResponse> gruposCache;
+    private volatile long gruposCacheExpiry;
 
     public MarketingMensajeServiceImpl(MarketingMensajeRepository marketingMensajeRepository, 
                                       ModuleMarketingGroupRepository moduleMarketingGroupRepository,
@@ -323,62 +349,76 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
 
     @Override
     public List<GrupoWhatsAppResponse> obtenerGrupos() {
-        log.info("📋 [MarketingMensajeService] Obteniendo grupos de WhatsApp desde la base de datos");
-        
-        try {
-            List<ModuleMarketingGroup> gruposBD = moduleMarketingGroupRepository.findAll();
-            
-            List<GrupoWhatsAppResponse> grupos = gruposBD.stream()
-                    .map(grupo -> {
-                        GrupoWhatsAppResponse response = new GrupoWhatsAppResponse();
-                        response.setId(grupo.getGroupId());
-                        response.setSubject(grupo.getSubject());
-                        response.setPictureUrl(grupo.getPictureUrl());
-                        return response;
-                    })
-                    .collect(Collectors.toList());
-            
-            log.info("✅ [MarketingMensajeService] Se obtuvieron {} grupos de WhatsApp desde la BD", grupos.size());
-            return grupos;
-            
-        } catch (Exception e) {
-            log.error("❌ [MarketingMensajeService] Error obteniendo grupos de WhatsApp desde la BD: {}", e.getMessage(), e);
-            return Collections.emptyList();
+        long now = System.currentTimeMillis();
+        if (gruposCache != null && now < gruposCacheExpiry) {
+            log.debug("📋 [MarketingMensajeService] Grupos desde caché ({} entradas)", gruposCache.size());
+            return gruposCache;
+        }
+        synchronized (this) {
+            now = System.currentTimeMillis();
+            if (gruposCache != null && now < gruposCacheExpiry) {
+                return gruposCache;
+            }
+            log.info("📋 [MarketingMensajeService] Obteniendo grupos de WhatsApp desde la base de datos");
+            try {
+                List<ModuleMarketingGroup> gruposBD = moduleMarketingGroupRepository.findAll();
+                List<GrupoWhatsAppResponse> grupos = gruposBD.stream()
+                        .map(grupo -> {
+                            GrupoWhatsAppResponse response = new GrupoWhatsAppResponse();
+                            response.setId(grupo.getGroupId());
+                            response.setSubject(grupo.getSubject());
+                            response.setPictureUrl(grupo.getPictureUrl());
+                            return response;
+                        })
+                        .collect(Collectors.toList());
+                gruposCache = grupos;
+                gruposCacheExpiry = now + CACHE_TTL_MS;
+                log.info("✅ [MarketingMensajeService] Se obtuvieron {} grupos de WhatsApp desde la BD (caché 5 min)", grupos.size());
+                return grupos;
+            } catch (Exception e) {
+                log.error("❌ [MarketingMensajeService] Error obteniendo grupos de WhatsApp desde la BD: {}", e.getMessage(), e);
+                return Collections.emptyList();
+            }
         }
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public List<FlotaResponse> obtenerFlotas() {
-        log.info("📋 [MarketingMensajeService] Obteniendo TODAS las flotas desde API externa");
-        
-        try {
-            String url = "http://162.55.214.109:6000/v2/partners";
-            Map<String, Object> response = restTemplate.postForObject(url, null, Map.class);
-            
-            List<FlotaResponse> flotas = new ArrayList<>();
-            
-            if (response != null && response.containsKey("partners")) {
-                List<Map<String, Object>> partners = (List<Map<String, Object>>) response.get("partners");
-                
-                // Convertir TODAS las flotas sin filtrar
-                for (Map<String, Object> item : partners) {
-                    FlotaResponse flota = new FlotaResponse();
-                    flota.setId(item.get("id").toString());
-                    flota.setName(item.get("name").toString());
-                    flota.setCity(item.get("city") != null ? item.get("city").toString() : null);
-                    flota.setSpecifications((List<String>) item.get("specifications"));
-                    flotas.add(flota);
-                    log.debug("✅ [MarketingMensajeService] Flota agregada: {} - {}", flota.getId(), flota.getName());
-                }
+        long now = System.currentTimeMillis();
+        if (flotasCache != null && now < flotasCacheExpiry) {
+            log.debug("📋 [MarketingMensajeService] Flotas desde caché ({} entradas)", flotasCache.size());
+            return flotasCache;
+        }
+        synchronized (this) {
+            now = System.currentTimeMillis();
+            if (flotasCache != null && now < flotasCacheExpiry) {
+                return flotasCache;
             }
-            
-            log.info("✅ [MarketingMensajeService] Se obtuvieron {} flotas (TODAS sin filtrar)", flotas.size());
-            return flotas;
-            
-        } catch (Exception e) {
-            log.error("❌ [MarketingMensajeService] Error obteniendo flotas: {}", e.getMessage(), e);
-            return Collections.emptyList();
+            log.info("📋 [MarketingMensajeService] Obteniendo TODAS las flotas desde API externa");
+            try {
+                String url = "http://162.55.214.109:6000/v2/partners";
+                Map<String, Object> response = restTemplate.postForObject(url, null, Map.class);
+                List<FlotaResponse> flotas = new ArrayList<>();
+                if (response != null && response.containsKey("partners")) {
+                    List<Map<String, Object>> partners = (List<Map<String, Object>>) response.get("partners");
+                    for (Map<String, Object> item : partners) {
+                        FlotaResponse flota = new FlotaResponse();
+                        flota.setId(item.get("id").toString());
+                        flota.setName(item.get("name").toString());
+                        flota.setCity(item.get("city") != null ? item.get("city").toString() : null);
+                        flota.setSpecifications((List<String>) item.get("specifications"));
+                        flotas.add(flota);
+                    }
+                }
+                flotasCache = flotas;
+                flotasCacheExpiry = now + CACHE_TTL_MS;
+                log.info("✅ [MarketingMensajeService] Se obtuvieron {} flotas (caché 5 min)", flotas.size());
+                return flotas;
+            } catch (Exception e) {
+                log.error("❌ [MarketingMensajeService] Error obteniendo flotas: {}", e.getMessage(), e);
+                return Collections.emptyList();
+            }
         }
     }
 
@@ -663,6 +703,171 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         }
         
         return resultado;
+    }
+
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+
+    /** Aplica filtros y orden por fecha (más recientes primero) para exportación. */
+    private List<MarketingMensajeResponse> filtrarYOrdenarParaExport(
+            String searchTerm, String modo, String tipo, String canales) {
+        List<MarketingMensajeResponse> list = obtenerTodosLosMensajes();
+        if (searchTerm != null && !searchTerm.trim().isEmpty()) {
+            String q = searchTerm.trim().toLowerCase();
+            list = list.stream().filter(m ->
+                (m.getTitulo() != null && m.getTitulo().toLowerCase().contains(q)) ||
+                (m.getMensaje() != null && m.getMensaje().toLowerCase().contains(q)) ||
+                (m.getModo() != null && m.getModo().toLowerCase().contains(q)) ||
+                (m.getTipo() != null && m.getTipo().toLowerCase().contains(q))
+            ).collect(Collectors.toList());
+        }
+        if (modo != null && !modo.isEmpty() && !"all".equalsIgnoreCase(modo)) {
+            list = list.stream().filter(m -> modo.equals(m.getModo())).collect(Collectors.toList());
+        }
+        if (tipo != null && !tipo.isEmpty() && !"all".equalsIgnoreCase(tipo)) {
+            list = list.stream().filter(m -> tipo.equals(m.getTipo())).collect(Collectors.toList());
+        }
+        if (canales != null && !canales.isEmpty() && !"all".equalsIgnoreCase(canales)) {
+            if ("whatsapp".equalsIgnoreCase(canales)) {
+                list = list.stream().filter(m -> Boolean.TRUE.equals(m.getWhatsapp())).collect(Collectors.toList());
+            } else if ("yandex".equalsIgnoreCase(canales)) {
+                list = list.stream().filter(m -> Boolean.TRUE.equals(m.getYandex())).collect(Collectors.toList());
+            } else if ("ambos".equalsIgnoreCase(canales)) {
+                list = list.stream().filter(m -> Boolean.TRUE.equals(m.getWhatsapp()) && Boolean.TRUE.equals(m.getYandex())).collect(Collectors.toList());
+            }
+        }
+        // Orden: más recientes primero
+        list = list.stream().sorted((a, b) -> {
+            long ta = a.getCreatedAt() != null ? a.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() : 0L;
+            long tb = b.getCreatedAt() != null ? b.getCreatedAt().atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() : 0L;
+            return Long.compare(tb, ta);
+        }).collect(Collectors.toList());
+        return list;
+    }
+
+    @Override
+    public byte[] exportarTodosMensajesExcel(String searchTerm, String modo, String tipo, String canales) {
+        List<MarketingMensajeResponse> mensajes = filtrarYOrdenarParaExport(searchTerm, modo, tipo, canales);
+        log.info("📊 [MarketingMensajeService] Exportando {} mensajes a Excel (filtros aplicados)", mensajes.size());
+        Map<String, String> grupoIdToName = obtenerGrupos().stream()
+                .collect(Collectors.toMap(GrupoWhatsAppResponse::getId, g -> g.getSubject() != null ? g.getSubject() : g.getId(), (a, b) -> a));
+        Map<String, String> flotaIdToName = obtenerFlotas().stream()
+                .collect(Collectors.toMap(FlotaResponse::getId, f -> f.getName() != null ? f.getName() : f.getId(), (a, b) -> a));
+        try (Workbook workbook = new XSSFWorkbook()) {
+            Sheet sheet = workbook.createSheet("Mensajes Marketing");
+            CellStyle headerStyle = workbook.createCellStyle();
+            headerStyle.setWrapText(true);
+            org.apache.poi.ss.usermodel.Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            CellStyle dataStyle = workbook.createCellStyle();
+            dataStyle.setWrapText(true);
+            int rowNum = 0;
+            Row headerRow = sheet.createRow(rowNum++);
+            String[] headers = { "ID", "Título", "Mensaje", "Modo", "Tipo", "WhatsApp", "Yandex", "Días activos", "Grupos", "Flotas", "Horas específicas", "Activo", "Creado", "Actualizado" };
+            for (int i = 0; i < headers.length; i++) {
+                Cell cell = headerRow.createCell(i);
+                cell.setCellValue(headers[i]);
+                cell.setCellStyle(headerStyle);
+            }
+            for (MarketingMensajeResponse m : mensajes) {
+                Row row = sheet.createRow(rowNum++);
+                row.createCell(0).setCellValue(m.getId() != null ? m.getId() : 0);
+                setCell(row, 1, m.getTitulo(), dataStyle);
+                setCell(row, 2, m.getMensaje(), dataStyle);
+                setCell(row, 3, m.getModo(), dataStyle);
+                setCell(row, 4, m.getTipo(), dataStyle);
+                setCell(row, 5, m.getWhatsapp() != null && m.getWhatsapp() ? "Sí" : "No", dataStyle);
+                setCell(row, 6, m.getYandex() != null && m.getYandex() ? "Sí" : "No", dataStyle);
+                setCell(row, 7, m.getDiasActivos() != null ? String.join(", ", m.getDiasActivos()) : "", dataStyle);
+                String gruposNombres = m.getGrupos() != null ? m.getGrupos().stream()
+                        .map(id -> grupoIdToName.getOrDefault(id, id))
+                        .collect(Collectors.joining(", ")) : "";
+                String flotasNombres = m.getFlotas() != null ? m.getFlotas().stream()
+                        .map(id -> flotaIdToName.getOrDefault(id, id))
+                        .collect(Collectors.joining(", ")) : "";
+                setCell(row, 8, gruposNombres, dataStyle);
+                setCell(row, 9, flotasNombres, dataStyle);
+                setCell(row, 10, m.getHorasEspecificas() != null ? m.getHorasEspecificas() : "", dataStyle);
+                setCell(row, 11, m.getActivo() != null && m.getActivo() ? "Sí" : "No", dataStyle);
+                setCell(row, 12, m.getCreatedAt() != null ? m.getCreatedAt().format(DATE_FORMATTER) : "", dataStyle);
+                setCell(row, 13, m.getUpdatedAt() != null ? m.getUpdatedAt().format(DATE_FORMATTER) : "", dataStyle);
+            }
+            for (int i = 0; i < headers.length; i++) {
+                sheet.autoSizeColumn(i);
+            }
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            log.info("✅ [MarketingMensajeService] Excel generado con {} mensajes", mensajes.size());
+            return out.toByteArray();
+        } catch (Exception e) {
+            log.error("❌ [MarketingMensajeService] Error generando Excel: {}", e.getMessage(), e);
+            throw new RuntimeException("Error generando Excel de mensajes", e);
+        }
+    }
+
+    private static void setCell(Row row, int column, String value, CellStyle style) {
+        Cell cell = row.createCell(column);
+        cell.setCellValue(value != null ? value : "");
+        cell.setCellStyle(style);
+    }
+
+    @Override
+    public byte[] exportarTodosMensajesPdf(String searchTerm, String modo, String tipo, String canales) {
+        List<MarketingMensajeResponse> mensajes = filtrarYOrdenarParaExport(searchTerm, modo, tipo, canales);
+        log.info("📄 [MarketingMensajeService] Exportando {} mensajes a PDF (filtros aplicados)", mensajes.size());
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Document document = new Document(PageSize.A4.rotate());
+            PdfWriter.getInstance(document, out);
+            document.open();
+            document.add(new Paragraph("Listado de mensajes - SMS Marketing YEGO", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14)));
+            document.add(new Paragraph(" "));
+            PdfPTable table = new PdfPTable(8);
+            table.setWidthPercentage(100f);
+            table.setWidths(new float[]{1f, 2f, 3f, 1f, 1f, 2f, 2f, 2f});
+            table.addCell(crearCeldaHeader("ID"));
+            table.addCell(crearCeldaHeader("Título"));
+            table.addCell(crearCeldaHeader("Mensaje"));
+            table.addCell(crearCeldaHeader("Modo"));
+            table.addCell(crearCeldaHeader("Tipo"));
+            table.addCell(crearCeldaHeader("Días"));
+            table.addCell(crearCeldaHeader("Canales"));
+            table.addCell(crearCeldaHeader("Creado"));
+            for (MarketingMensajeResponse m : mensajes) {
+                table.addCell(crearCelda(m.getId() != null ? m.getId().toString() : ""));
+                table.addCell(crearCelda(m.getTitulo()));
+                table.addCell(crearCelda(truncar(m.getMensaje(), 80)));
+                table.addCell(crearCelda(m.getModo()));
+                table.addCell(crearCelda(m.getTipo()));
+                table.addCell(crearCelda(m.getDiasActivos() != null ? String.join(", ", m.getDiasActivos()) : ""));
+                String textoCanales = "";
+                if (Boolean.TRUE.equals(m.getWhatsapp())) textoCanales = "WhatsApp";
+                if (Boolean.TRUE.equals(m.getYandex())) textoCanales += (textoCanales.isEmpty() ? "" : ", ") + "Yandex";
+                table.addCell(crearCelda(textoCanales));
+                table.addCell(crearCelda(m.getCreatedAt() != null ? m.getCreatedAt().format(DATE_FORMATTER) : ""));
+            }
+            document.add(table);
+            document.close();
+            log.info("✅ [MarketingMensajeService] PDF generado con {} mensajes", mensajes.size());
+            return out.toByteArray();
+        } catch (Exception e) {
+            log.error("❌ [MarketingMensajeService] Error generando PDF: {}", e.getMessage(), e);
+            throw new RuntimeException("Error generando PDF de mensajes", e);
+        }
+    }
+
+    private static PdfPCell crearCeldaHeader(String text) {
+        PdfPCell cell = new PdfPCell(new Phrase(text != null ? text : "", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8)));
+        cell.setBackgroundColor(Color.LIGHT_GRAY);
+        return cell;
+    }
+
+    private static PdfPCell crearCelda(String text) {
+        return new PdfPCell(new Phrase(text != null ? text : "", FontFactory.getFont(FontFactory.HELVETICA, 7)));
+    }
+
+    private static String truncar(String s, int max) {
+        if (s == null) return "";
+        return s.length() <= max ? s : s.substring(0, max) + "...";
     }
 
 }

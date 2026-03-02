@@ -12,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.http.HttpHeaders;
+
 import java.util.List;
 
 @RestController
@@ -221,6 +223,44 @@ public class MarketingMensajeController {
         try {
             List<MarketingMensajeCalendarioResponse> mensajes = marketingMensajeService.obtenerMensajesParaCalendario();
             return new ResponseEntity<>(mensajes, HttpStatus.OK);
+        } catch (Exception e) {
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Exporta mensajes a Excel. Acepta los mismos filtros que la lista (searchTerm, modo, tipo, canales).
+     */
+    @GetMapping("/export/excel")
+    public ResponseEntity<byte[]> exportarExcel(
+            @RequestParam(required = false) String searchTerm,
+            @RequestParam(required = false) String modo,
+            @RequestParam(required = false) String tipo,
+            @RequestParam(required = false) String canales) {
+        try {
+            byte[] excel = marketingMensajeService.exportarTodosMensajesExcel(searchTerm, modo, tipo, canales);
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"mensajes_marketing.xlsx\"");
+            return ResponseEntity.ok().headers(headers).body(excel);
+        } catch (Exception e) {
+            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Exporta mensajes a PDF. Acepta los mismos filtros que la lista.
+     */
+    @GetMapping("/export/pdf")
+    public ResponseEntity<byte[]> exportarPdf(
+            @RequestParam(required = false) String searchTerm,
+            @RequestParam(required = false) String modo,
+            @RequestParam(required = false) String tipo,
+            @RequestParam(required = false) String canales) {
+        try {
+            byte[] pdf = marketingMensajeService.exportarTodosMensajesPdf(searchTerm, modo, tipo, canales);
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"mensajes_marketing.pdf\"");
+            return ResponseEntity.ok().headers(headers).body(pdf);
         } catch (Exception e) {
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
