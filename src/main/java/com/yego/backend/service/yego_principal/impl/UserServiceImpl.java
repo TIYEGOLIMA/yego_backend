@@ -27,6 +27,7 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -95,15 +96,20 @@ public class UserServiceImpl implements UserService {
         }
     }
 
+    /** Usernames que no deben aparecer en el listado público /api/users/listado (tv, principal, tablet1, tablet2). */
+    private static final Set<String> USERNAMES_EXCLUIDOS_LISTADO = Set.of("tv", "principal", "tablet1", "tablet2");
+
     @Override
     public List<UsuarioResumenDto> findAllResumen() {
-        List<User> users = userRepository.findAllWithRole();
+        // Solo usuarios activos; excluir tv, principal, tablet1, tablet2
+        List<User> users = userRepository.findByActiveWithRole(true);
         List<Area> allAreas = areaRepository.findAll();
         Map<Long, Area> areaById = allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a));
         Map<Long, Area> areaByManagerId = allAreas.stream()
                 .filter(a -> a.getManagerId() != null)
                 .collect(Collectors.toMap(Area::getManagerId, a -> a, (a1, a2) -> a1));
         return users.stream()
+                .filter(u -> u.getUsername() != null && !USERNAMES_EXCLUIDOS_LISTADO.contains(u.getUsername().toLowerCase()))
                 .map(u -> toUsuarioResumenDto(u, areaById, areaByManagerId))
                 .collect(Collectors.toList());
     }
