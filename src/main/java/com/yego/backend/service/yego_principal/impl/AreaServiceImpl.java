@@ -21,7 +21,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -128,22 +127,18 @@ public class AreaServiceImpl implements AreaService {
     @Override
     @Transactional(readOnly = true)
     public List<UserSimpleDto> findUsersForResponsable(Long areaIdEnEdicion) {
-        Set<Long> managerIdsToExclude = areaRepository.findDistinctManagerIds().stream()
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
+        Long includeManagerId = null;
         if (areaIdEnEdicion != null) {
-            areaRepository.findById(areaIdEnEdicion).ifPresent(area -> {
-                if (area.getManagerId() != null) managerIdsToExclude.remove(area.getManagerId());
-            });
+            includeManagerId = areaRepository.findById(areaIdEnEdicion)
+                    .map(Area::getManagerId)
+                    .orElse(null);
         }
-        final Set<Long> exclude = managerIdsToExclude;
-        return userRepository.findActiveUsersWithoutAreaForDropdown().stream()
-                .filter(row -> !exclude.contains(((Number) row[0]).longValue()))
+        return userRepository.findActiveUsersForResponsableDropdown(includeManagerId).stream()
                 .map(row -> {
                     Long id = ((Number) row[0]).longValue();
                     String name = row[1] != null ? (String) row[1] : "";
                     String lastName = row[2] != null ? (String) row[2] : "";
-                    String nombreCompleto = (name + " " + (lastName != null ? lastName : "").trim()).trim();
+                    String nombreCompleto = (name + " " + lastName).trim();
                     return UserSimpleDto.builder().id(id).nombreCompleto(nombreCompleto).areaId(null).build();
                 })
                 .collect(Collectors.toList());
@@ -152,13 +147,21 @@ public class AreaServiceImpl implements AreaService {
     @Override
     @Transactional(readOnly = true)
     public List<ColaboradorDto> getColaboradoresByAreaId(Long areaId) {
-        return userRepository.findByAreaId(areaId).stream()
-                .map(u -> ColaboradorDto.builder()
-                        .id(u.getId())
-                        .nombreCompleto((u.getName() != null ? u.getName() : "") + " " + (u.getLastName() != null ? u.getLastName() : "").trim())
-                        .email(u.getEmail() != null ? u.getEmail() : "")
-                        .rol(u.getRoleName() != null ? u.getRoleName() : "")
-                        .build())
+        return userRepository.findColaboradoresProjectionByAreaId(areaId).stream()
+                .map(row -> {
+                    Long id = ((Number) row[0]).longValue();
+                    String name = row[1] != null ? (String) row[1] : "";
+                    String lastName = row[2] != null ? (String) row[2] : "";
+                    String email = row[3] != null ? (String) row[3] : "";
+                    String rol = row[4] != null ? (String) row[4] : "";
+                    String nombreCompleto = (name + " " + lastName).trim();
+                    return ColaboradorDto.builder()
+                            .id(id)
+                            .nombreCompleto(nombreCompleto)
+                            .email(email)
+                            .rol(rol)
+                            .build();
+                })
                 .collect(Collectors.toList());
     }
 

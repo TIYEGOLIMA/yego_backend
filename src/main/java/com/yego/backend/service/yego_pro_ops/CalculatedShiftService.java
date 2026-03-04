@@ -52,5 +52,10 @@ public interface CalculatedShiftService {
      * @return Lista de turnos calculados para ese driver y fecha
      */
     java.util.List<com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift> obtenerOCalcularTurnos(String driverId, String fecha);
+
+    /**
+     * Invalida la caché de resumen de pagos y turnos pagados para una fecha (tras registrar/actualizar cierre).
+     */
+    void invalidarCacheDetalle(String fecha);
 }
 

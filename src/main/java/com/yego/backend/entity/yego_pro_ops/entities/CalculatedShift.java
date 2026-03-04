@@ -53,7 +53,13 @@ public class CalculatedShift {
     private Integer cantidadViajes; // Cantidad de viajes que tuvo el conductor en ese turno
     
     @Column(name = "monto_total")
-    private Double montoTotal; // Cantidad total que hizo el conductor en ese turno (suma de precios de viajes)
+    private Double montoTotal; // Liquidación: solo suma de efectivo (cash) a pagar al conductor
+    
+    @Column(name = "produccion_total")
+    private Double produccionTotal; // Efectivo + pago corporativo + pago sin efectivo + propinas + compensación promoción + bonificación
+    
+    @Column(name = "comisiones_servicio")
+    private Double comisionesServicio; // Solo comisiones del servicio (price_commission_service)
     
     @Column(name = "pagado", nullable = false)
     @Builder.Default

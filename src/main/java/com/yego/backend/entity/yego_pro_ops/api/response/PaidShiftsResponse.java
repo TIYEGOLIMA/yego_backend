@@ -52,6 +52,12 @@ public class PaidShiftsResponse {
         @JsonProperty("monto_total_pagado")
         private Double montoTotalPagado; // Suma de monto_total de los turnos pagados
         
+        @JsonProperty("produccion_total")
+        private Double produccionTotal; // Suma de producción total de todos los turnos del conductor
+        
+        @JsonProperty("comisiones_servicio")
+        private Double comisionesServicio; // Suma de comisiones del servicio de todos los turnos del conductor
+        
         @JsonProperty("turnos")
         private List<TurnoPagadoInfo> turnos; // Lista de turnos pagados del conductor
     }
@@ -80,7 +86,7 @@ public class PaidShiftsResponse {
         private Integer duracionMinutos;
         
         @JsonProperty("monto_total")
-        private Double montoTotal;
+        private Double montoTotal; // Liquidación: solo efectivo (por turno)
         
         @JsonProperty("pagado")
         private Boolean pagado;

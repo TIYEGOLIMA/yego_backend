@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -57,12 +58,16 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     private static final int MINUTO_FIN_DIA = 59;
     private static final int SEGUNDO_FIN_DIA = 59;
     
-    private static final long DELAY_ENTRE_CONDUCTORES_MS = 2000; // 2 segu conductoresndos
+    private static final long DELAY_ENTRE_CONDUCTORES_MS = 2000; // 2 segundos entre conductores
     private static final int LOG_PROGRESO_CADA_N = 5; // Log cada 5
     private static final long INACTIVIDAD_MAXIMA_HORAS = 5; // 5 horas de inactividad para cerrar el turno
     private static final long INACTIVIDAD_MAXIMA_MINUTOS = INACTIVIDAD_MAXIMA_HORAS * 60; // 300 minutos
+    private static final long DETALLE_CACHE_TTL_MS = 60_000L; // 1 min para resumen/turnos (pestaña Detalle)
     
     // ==================== FIELDS ====================
+    
+    private static final ConcurrentHashMap<String, CachedResponse<DriverPaymentSummaryResponse>> resumenPagosCache = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, CachedResponse<PaidShiftsResponse>> turnosPagadosCache = new ConcurrentHashMap<>();
     
     private final CalculatedShiftRepository calculatedShiftRepository;
     private final DriverOrdersService driverOrdersService;
@@ -220,37 +225,38 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     @Override
     @Transactional(readOnly = true)
     public DriverPaymentSummaryResponse obtenerResumenPagos(String fecha) {
+        CachedResponse<DriverPaymentSummaryResponse> cached = resumenPagosCache.get(fecha);
+        if (cached != null && !cached.isExpired()) {
+            log.debug("💾 [CalculatedShiftService] Resumen pagos desde caché para fecha: {}", fecha);
+            return cached.response;
+        }
         log.info("💰 [CalculatedShiftService] Obteniendo resumen de pagos de todos los conductores para fecha: {}", fecha);
-        
         try {
             LocalDate fechaLocal = parsearFecha(fecha);
             if (fechaLocal == null) {
                 log.error("❌ [CalculatedShiftService] Fecha inválida: {}", fecha);
                 throw new IllegalArgumentException("Fecha inválida. Formato esperado: YYYY-MM-DD");
             }
-            
             List<CalculatedShift> turnosPorFecha = obtenerTurnosPorFecha(fechaLocal);
             if (turnosPorFecha.isEmpty()) {
                 log.info("ℹ️ [CalculatedShiftService] No se encontraron turnos para la fecha: {}", fechaLocal);
-                return crearRespuestaVaciaResumenPagos();
+                DriverPaymentSummaryResponse vacia = crearRespuestaVaciaResumenPagos();
+                resumenPagosCache.put(fecha, new CachedResponse<>(vacia));
+                return vacia;
             }
-            
             Map<String, List<CalculatedShift>> turnosPorConductor = agruparTurnosPorConductor(turnosPorFecha);
             Map<String, ConductorInfo> infoConductores = obtenerInfoConductores();
-            
-            List<DriverPaymentSummaryResponse.ConductorPaymentInfo> conductoresInfo = 
+            List<DriverPaymentSummaryResponse.ConductorPaymentInfo> conductoresInfo =
                 construirInfoConductores(turnosPorConductor, infoConductores);
-            
-            log.info("✅ [CalculatedShiftService] Resumen de pagos generado para {} conductores en fecha {}", 
+            log.info("✅ [CalculatedShiftService] Resumen de pagos generado para {} conductores en fecha {}",
                 conductoresInfo.size(), fechaLocal);
-            
-            return DriverPaymentSummaryResponse.builder()
+            DriverPaymentSummaryResponse response = DriverPaymentSummaryResponse.builder()
                 .conductores(conductoresInfo)
                 .build();
-                    
+            resumenPagosCache.put(fecha, new CachedResponse<>(response));
+            return response;
         } catch (Exception e) {
-            log.error("❌ [CalculatedShiftService] Error obteniendo resumen de pagos para fecha {}: {}", 
-                fecha, e.getMessage(), e);
+            log.error("❌ [CalculatedShiftService] Error obteniendo resumen de pagos para fecha {}: {}", fecha, e.getMessage(), e);
             throw new RuntimeException("Error al obtener resumen de pagos: " + e.getMessage(), e);
         }
     }
@@ -307,50 +313,47 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     
     @Override
     public PaidShiftsResponse obtenerTurnosPagados(String fecha) {
-        log.info("💰 [CalculatedShiftService] Obteniendo turnos pagados{}", 
-            fecha != null ? " para fecha: " + fecha : "");
-        
+        String cacheKey = fecha != null ? fecha : "__all__";
+        CachedResponse<PaidShiftsResponse> cached = turnosPagadosCache.get(cacheKey);
+        if (cached != null && !cached.isExpired()) {
+            log.debug("💾 [CalculatedShiftService] Turnos pagados desde caché para fecha: {}", cacheKey);
+            return cached.response;
+        }
+        log.info("💰 [CalculatedShiftService] Obteniendo turnos pagados{}", fecha != null ? " para fecha: " + fecha : "");
         try {
             LocalDate fechaLocal = fecha != null ? parsearFecha(fecha) : null;
             if (fecha != null && fechaLocal == null) {
                 log.error("❌ [CalculatedShiftService] Fecha inválida: {}", fecha);
                 throw new IllegalArgumentException("Fecha inválida. Formato esperado: YYYY-MM-DD");
             }
-            
-            List<CalculatedShift> turnosPagados = fechaLocal != null 
+            List<CalculatedShift> turnosPagados = fechaLocal != null
                 ? calculatedShiftRepository.findByPagadoTrueAndFecha(fechaLocal)
                 : calculatedShiftRepository.findByPagadoTrue();
-            
             if (turnosPagados.isEmpty()) {
-                log.info("ℹ️ [CalculatedShiftService] No se encontraron turnos pagados{}", 
+                log.info("ℹ️ [CalculatedShiftService] No se encontraron turnos pagados{}",
                     fechaLocal != null ? " para la fecha: " + fechaLocal : "");
-                return PaidShiftsResponse.builder()
+                PaidShiftsResponse vacia = PaidShiftsResponse.builder()
                     .totalConductores(0)
                     .conductores(new ArrayList<>())
                     .build();
+                turnosPagadosCache.put(cacheKey, new CachedResponse<>(vacia));
+                return vacia;
             }
-            
-            // Agrupar turnos por conductor
             Map<String, List<CalculatedShift>> turnosPorConductor = turnosPagados.stream()
                 .collect(Collectors.groupingBy(CalculatedShift::getDriverId));
-            
-            // Obtener información de los conductores
             Map<String, ConductorInfo> infoConductores = obtenerInfoConductores();
-            
-            // Construir la respuesta agrupada por conductor
-            List<PaidShiftsResponse.ConductorTurnosPagadosInfo> conductoresInfo = 
+            List<PaidShiftsResponse.ConductorTurnosPagadosInfo> conductoresInfo =
                 construirInfoConductoresTurnosPagados(turnosPorConductor, infoConductores);
-            
-            log.info("✅ [CalculatedShiftService] Se encontraron {} turnos pagados agrupados en {} conductores{}", 
+            log.info("✅ [CalculatedShiftService] Se encontraron {} turnos pagados agrupados en {} conductores{}",
                 turnosPagados.size(), conductoresInfo.size(), fechaLocal != null ? " para fecha: " + fechaLocal : "");
-            
-            return PaidShiftsResponse.builder()
+            PaidShiftsResponse response = PaidShiftsResponse.builder()
                 .totalConductores(conductoresInfo.size())
                 .conductores(conductoresInfo)
                 .build();
-                    
+            turnosPagadosCache.put(cacheKey, new CachedResponse<>(response));
+            return response;
         } catch (Exception e) {
-            log.error("❌ [CalculatedShiftService] Error obteniendo turnos pagados{}: {}", 
+            log.error("❌ [CalculatedShiftService] Error obteniendo turnos pagados{}: {}",
                 fecha != null ? " para fecha " + fecha : "", e.getMessage(), e);
             throw new RuntimeException("Error al obtener turnos pagados: " + e.getMessage(), e);
         }
@@ -375,13 +378,13 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             .map(this::convertirATurnoPagadoInfo)
             .collect(Collectors.toList());
         
-        // Calcular monto total pagado
         double montoTotalPagado = turnos.stream()
             .mapToDouble(turno -> turno.getMontoTotal() != null ? turno.getMontoTotal() : 0.0)
             .sum();
         montoTotalPagado = Math.round(montoTotalPagado * 100.0) / 100.0;
+        Double produccionTotal = sumarProduccionTotal(turnos);
+        Double comisionesServicio = sumarComisionesServicio(turnos);
         
-        // Calcular total de viajes y viajes por hora a nivel de conductor
         Integer cantidadViajesTotal = calcularCantidadViajesTotal(turnos);
         Double viajesPorHoraPromedio = calcularViajesPorHoraPromedio(turnos);
         
@@ -394,6 +397,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             .cantidadViajes(cantidadViajesTotal)
             .viajesPorHora(viajesPorHoraPromedio)
             .montoTotalPagado(montoTotalPagado)
+            .produccionTotal(produccionTotal)
+            .comisionesServicio(comisionesServicio)
             .turnos(turnosInfo)
             .build();
     }
@@ -480,10 +485,11 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             Map<String, ConductorInfo> infoConductores) {
         
         Double montoTotalPagar = calcularMontoTotalPagar(turnos);
+        Double produccionTotal = sumarProduccionTotal(turnos);
+        Double comisionesServicio = sumarComisionesServicio(turnos);
         ConductorInfo info = infoConductores.getOrDefault(driverId, new ConductorInfo());
         List<DriverPaymentSummaryResponse.TurnoInfo> turnosInfo = mapearTurnosAInfo(turnos);
         
-        // Calcular total de viajes y viajes por hora a nivel de conductor
         Integer cantidadViajesTotal = calcularCantidadViajesTotal(turnos);
         Double viajesPorHoraPromedio = calcularViajesPorHoraPromedio(turnos);
         
@@ -493,6 +499,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             .nombre(info.nombre)
             .telefono(info.telefono)
             .montoTotalPagar(montoTotalPagar)
+            .produccionTotal(produccionTotal)
+            .comisionesServicio(comisionesServicio)
             .cantidadTurnos(turnos.size())
             .cantidadViajes(cantidadViajesTotal)
             .viajesPorHora(viajesPorHoraPromedio)
@@ -561,6 +569,20 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             .montoTotal(turno.getMontoTotal())
             .pagado(turno.getPagado() != null ? turno.getPagado() : false)
             .build();
+    }
+
+    private Double sumarProduccionTotal(List<CalculatedShift> turnos) {
+        double sum = turnos.stream()
+            .mapToDouble(t -> t.getProduccionTotal() != null ? t.getProduccionTotal() : 0.0)
+            .sum();
+        return Math.round(sum * 100.0) / 100.0;
+    }
+
+    private Double sumarComisionesServicio(List<CalculatedShift> turnos) {
+        double sum = turnos.stream()
+            .mapToDouble(t -> t.getComisionesServicio() != null ? t.getComisionesServicio() : 0.0)
+            .sum();
+        return Math.round(sum * 100.0) / 100.0;
     }
     
     // ==================== PRIVATE METHODS: VALIDATION ====================
@@ -1347,14 +1369,25 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     }
     
     private void guardarTurnoNocturnoActual(String driverId, LocalDate fecha, ViajesNocturnos viajesNocturnos) {
-        if (!viajesNocturnos.viajesNocturnosActual.isEmpty()) {
-            log.info("🌙 [CalculatedShiftService] Guardando turno nocturno del día actual ({} viajes) para driver_id: {}, fecha: {}", 
-                viajesNocturnos.viajesNocturnosActual.size(), driverId, fecha);
-            procesarTurno(driverId, fecha, viajesNocturnos.viajesNocturnosActual, CalculatedShift.TipoTurno.nocturno);
-        } else {
+        if (viajesNocturnos.viajesNocturnosActual.isEmpty()) {
             log.info("⏭️ [CalculatedShiftService] No hay viajes nocturnos del día actual para guardar - driver_id: {}, fecha: {}", 
                 driverId, fecha);
+            return;
         }
+        LocalDate fechaAGuardar = fecha;
+        if (viajesNocturnos.viajesNocturnosAnterior.isEmpty()) {
+            LocalDateTime primerViaje = obtenerPrimerViaje(viajesNocturnos.viajesNocturnosActual);
+            if (primerViaje != null && primerViaje.getHour() < HORA_FIN_NOCTURNO) {
+                fechaAGuardar = viajesNocturnos.fechaSiguiente;
+                log.info("🌙 [CalculatedShiftService] No hubo viajes el día {} para este conductor (solo madrugada del día siguiente). No se considera para liquidación del {}; turno se asigna a {}",
+                    fecha, fecha, fechaAGuardar);
+            }
+        }
+        if (fechaAGuardar.equals(fecha)) {
+            log.info("🌙 [CalculatedShiftService] Guardando turno nocturno del día actual ({} viajes) para driver_id: {}, fecha: {}", 
+                viajesNocturnos.viajesNocturnosActual.size(), driverId, fecha);
+        }
+        procesarTurno(driverId, fechaAGuardar, viajesNocturnos.viajesNocturnosActual, CalculatedShift.TipoTurno.nocturno);
     }
     
     private void validarViajesEncontrados(String driverId, LocalDate fecha, ViajesDelDia viajesDelDia, ViajesNocturnos viajesNocturnos) {
@@ -1514,8 +1547,10 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         // Esto asegura que solo se incluyan los viajes que realmente pertenecen a este turno
         List<OrderInfoResponse> viajesEnRango = filtrarViajesEnRangoTurno(viajes, horasTurno.horaInicio, horasTurno.horaFin);
         
-        // Usar los viajes filtrados para calcular monto, cantidad y duración
-        Double montoTotal = calcularMontoTotal(viajesEnRango);
+        // Usar los viajes filtrados para calcular montos (liquidación, producción total, comisiones) y cantidad
+        Double montoLiquidacion = calcularMontoLiquidacion(viajesEnRango);
+        Double produccionTotal = calcularProduccionTotal(viajesEnRango);
+        Double comisionesServicio = calcularComisionesServicio(viajesEnRango);
         Integer cantidadViajes = viajesEnRango != null ? viajesEnRango.size() : 0;
         
         // Contar viajes de madrugada para verificación
@@ -1526,14 +1561,14 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             })
             .count() : 0;
         
-        log.info("💰 [CalculatedShiftService] Guardando turno {} - driver_id: {}, fecha: {}, rango: {} - {}, cantidad viajes: {} ({} de madrugada), monto total: {} soles, duración: {} minutos", 
+        log.info("💰 [CalculatedShiftService] Guardando turno {} - driver_id: {}, fecha: {}, rango: {} - {}, cantidad viajes: {} ({} de madrugada), liquidación: {} soles, producción: {} soles, comisiones servicio: {} soles, duración: {} min", 
             tipoTurno, driverId, fecha, 
             horasTurno.horaInicio != null ? horasTurno.horaInicio.toLocalTime() : "N/A",
             horasTurno.horaFin != null ? horasTurno.horaFin.toLocalTime() : "N/A",
-            cantidadViajes, viajesMadrugada, montoTotal, horasTurno.duracionMinutos);
+            cantidadViajes, viajesMadrugada, montoLiquidacion, produccionTotal, comisionesServicio, horasTurno.duracionMinutos);
         
-        actualizarTurno(turno, tipoTurno, horasTurno, fecha, montoTotal, cantidadViajes);
-        guardarTurno(turno, driverId, fecha, tipoTurno, horasTurno, montoTotal);
+        actualizarTurno(turno, tipoTurno, horasTurno, fecha, montoLiquidacion, produccionTotal, comisionesServicio, cantidadViajes);
+        guardarTurno(turno, driverId, fecha, tipoTurno, horasTurno, montoLiquidacion);
     }
     
     /**
@@ -1577,35 +1612,39 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             .collect(Collectors.toList());
     }
     
-    /**
-     * Calcula el monto total que ganó el conductor en el turno
-     * Solo usa el precio de Yango Pro (price)
-     * Incluye TODOS los viajes: diurnos, nocturnos y de madrugada
-     */
-    private Double calcularMontoTotal(List<OrderInfoResponse> viajes) {
-        if (viajes == null || viajes.isEmpty()) {
-            return 0.0;
+    /** Liquidación: solo efectivo (cash) a pagar al conductor. */
+    private Double calcularMontoLiquidacion(List<OrderInfoResponse> viajes) {
+        if (viajes == null || viajes.isEmpty()) return 0.0;
+        double total = 0.0;
+        for (OrderInfoResponse v : viajes) {
+            if (v.getCash() != null) total += v.getCash();
         }
-        
-        double montoTotal = viajes.stream()
-            .mapToDouble(viaje -> {
-                // Solo usar el precio de Yango Pro (price)
-                Double price = viaje.getPrice();
-                if (price == null) {
-                    log.debug("⚠️ [CalculatedShiftService] Viaje {} no tiene precio (price es null)", viaje.getId());
-                    return 0.0;
-                }
-                // Redondear cada precio individual a 2 decimales antes de sumar
-                return Math.round(price * 100.0) / 100.0;
-            })
-            .sum();
-        
-        // Redondear el total final a 2 decimales
-        double montoTotalRedondeado = Math.round(montoTotal * 100.0) / 100.0;
-        
-        log.info("💰 [CalculatedShiftService] Monto total calculado: {} soles para {} viajes (solo precio de Yango Pro, incluyendo viajes de madrugada)", 
-            montoTotalRedondeado, viajes.size());
-        return montoTotalRedondeado;
+        return Math.round(total * 100.0) / 100.0;
+    }
+
+    /** Producción total: efectivo + corporativo + card + propinas + compensación promoción + bonificación. */
+    private Double calcularProduccionTotal(List<OrderInfoResponse> viajes) {
+        if (viajes == null || viajes.isEmpty()) return 0.0;
+        double total = 0.0;
+        for (OrderInfoResponse v : viajes) {
+            if (v.getCash() != null) total += v.getCash();
+            if (v.getPriceCorporate() != null) total += v.getPriceCorporate();
+            if (v.getCard() != null) total += v.getCard();
+            if (v.getPriceTip() != null) total += v.getPriceTip();
+            if (v.getPricePromotion() != null) total += v.getPricePromotion();
+            if (v.getPriceBonus() != null) total += v.getPriceBonus();
+        }
+        return Math.round(total * 100.0) / 100.0;
+    }
+
+    /** Comisiones del servicio (price_commission_service). */
+    private Double calcularComisionesServicio(List<OrderInfoResponse> viajes) {
+        if (viajes == null || viajes.isEmpty()) return 0.0;
+        double total = 0.0;
+        for (OrderInfoResponse v : viajes) {
+            if (v.getPriceCommissionService() != null) total += v.getPriceCommissionService();
+        }
+        return Math.round(total * 100.0) / 100.0;
     }
     
     /**
@@ -2033,19 +2072,20 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         }
     }
     
-    private void actualizarTurno(CalculatedShift turno, CalculatedShift.TipoTurno tipoTurno, HorasTurno horasTurno, 
-                                 LocalDate fecha, Double montoTotal, Integer cantidadViajes) {
+    private void actualizarTurno(CalculatedShift turno, CalculatedShift.TipoTurno tipoTurno, HorasTurno horasTurno,
+                                 LocalDate fecha, Double montoLiquidacion, Double produccionTotal, Double comisionesServicio, Integer cantidadViajes) {
         turno.setTipoTurno(tipoTurno);
         turno.setHoraInicio(horasTurno.horaInicio);
         turno.setHoraFin(horasTurno.horaFin);
         turno.setEstado(horasTurno.estado);
         turno.setDuracionMinutos(horasTurno.duracionMinutos);
         turno.setCantidadViajes(cantidadViajes);
-        turno.setMontoTotal(montoTotal);
+        turno.setMontoTotal(montoLiquidacion);
+        turno.setProduccionTotal(produccionTotal);
+        turno.setComisionesServicio(comisionesServicio);
         // pagado se mantiene en false por defecto (se puede actualizar manualmente después)
-        
         if (!turno.getFecha().equals(fecha)) {
-            log.error("❌ [CalculatedShiftService] ERROR: La fecha del turno ({}) no coincide con la esperada ({}). Corrigiendo...", 
+            log.error("❌ [CalculatedShiftService] ERROR: La fecha del turno ({}) no coincide con la esperada ({}). Corrigiendo...",
                 turno.getFecha(), fecha);
             turno.setFecha(fecha);
         }
@@ -2323,6 +2363,29 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             this.totalOmitidos = totalOmitidos;
             this.totalErrores = totalErrores;
             this.tiempoTotal = tiempoTotal;
+        }
+    }
+
+    private static class CachedResponse<T> {
+        final T response;
+        final long timestampMs;
+
+        CachedResponse(T response) {
+            this.response = response;
+            this.timestampMs = System.currentTimeMillis();
+        }
+
+        boolean isExpired() {
+            return System.currentTimeMillis() - timestampMs > DETALLE_CACHE_TTL_MS;
+        }
+    }
+
+    @Override
+    public void invalidarCacheDetalle(String fecha) {
+        if (fecha != null && !fecha.isEmpty()) {
+            resumenPagosCache.remove(fecha);
+            turnosPagadosCache.remove(fecha);
+            log.debug("💾 [CalculatedShiftService] Caché Detalle invalidada para fecha: {}", fecha);
         }
     }
 }

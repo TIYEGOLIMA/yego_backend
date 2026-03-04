@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -40,11 +41,18 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
     private static final int CACHE_THRESHOLD_MS = 100;
     private static final String EMPTY_STRING = "";
-    
+    /** Caché de respuesta conductores en orden: TTL 45 segundos para evitar ~21s por request repetido */
+    private static final long DRIVERS_IN_ORDER_CACHE_TTL_MS = 45_000L;
+
     private final com.yego.backend.service.yego_pro_ops.DriverOrdersService driverOrdersService;
     private final CalculatedShiftRepository calculatedShiftRepository;
     private final ExecutorService executorService = Executors.newFixedThreadPool(20);
-    
+
+    /** Caché (page, limit) -> { response, timestamp } para obtenerConductoresEnOrden */
+    private final Map<String, CachedDriversInOrder> driversInOrderCache = new ConcurrentHashMap<>();
+    /** Caché lista completa (driverIds + balanceMap) para no repetir Paso 1 al cambiar de página */
+    private volatile CachedDriversList driversListCache = null;
+
     public FleetDriverServiceImpl(
             RestTemplate restTemplate,
             @Qualifier("yangoProxyRestTemplate") RestTemplate yangoProxyRestTemplate,
@@ -300,22 +308,34 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     @Override
     public DriversInOrderResponse obtenerConductoresEnOrden(Integer page, Integer limit) {
         long startTime = System.currentTimeMillis();
+        String cacheKey = page + ":" + limit;
+        CachedDriversInOrder cached = driversInOrderCache.get(cacheKey);
+        if (cached != null && (System.currentTimeMillis() - cached.timestampMs) < DRIVERS_IN_ORDER_CACHE_TTL_MS) {
+            log.debug("✅ [FleetDriverService] Conductores en orden (page={}, limit={}) desde caché ({} ms)", page, limit, System.currentTimeMillis() - startTime);
+            return cached.response;
+        }
         try {
-            JsonNode items = medirTiempo("Paso 1 - Obtener conductores desde API", 
-                () -> obtenerConductoresInOrderDesdeAPI());
-            
-            if (items == null || !items.isArray() || items.isEmpty()) {
-                return crearRespuestaVaciaConductores();
-            }
-            
+            List<String> driverIdsInOrder;
             Map<String, Double> balanceMap = new HashMap<>();
-            List<String> driverIdsInOrder = medirTiempo("Paso 2 - Extraer driverIds", 
-                () -> extraerDriverIdsYBalances(items, balanceMap));
-            
-            if (driverIdsInOrder.isEmpty()) {
-                return crearRespuestaVaciaConductores();
+            CachedDriversList listCache = driversListCache;
+            if (listCache != null && (System.currentTimeMillis() - listCache.timestampMs) < DRIVERS_IN_ORDER_CACHE_TTL_MS) {
+                driverIdsInOrder = listCache.driverIds;
+                balanceMap.putAll(listCache.balanceMap);
+                log.debug("✅ [FleetDriverService] Lista de conductores desde caché (evita Paso 1)");
+            } else {
+                warmupCookiePool();
+                JsonNode items = medirTiempo("Paso 1 - Obtener conductores desde API",
+                    () -> obtenerConductoresInOrderDesdeAPI());
+                if (items == null || !items.isArray() || items.isEmpty()) {
+                    return crearRespuestaVaciaConductores();
+                }
+                driverIdsInOrder = medirTiempo("Paso 2 - Extraer driverIds",
+                    () -> extraerDriverIdsYBalances(items, balanceMap));
+                if (driverIdsInOrder.isEmpty()) {
+                    return crearRespuestaVaciaConductores();
+                }
+                driversListCache = new CachedDriversList(new ArrayList<>(driverIdsInOrder), new HashMap<>(balanceMap), System.currentTimeMillis());
             }
-            
             int totalConductores = driverIdsInOrder.size();
             PaginationResult pagination = medirTiempo("Paso 3 - Aplicar paginación", 
                 () -> aplicarPaginacion(driverIdsInOrder, balanceMap, page, limit, totalConductores));
@@ -339,7 +359,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             } else {
                 result.setTotal(totalConductores);
             }
-            
+            driversInOrderCache.put(cacheKey, new CachedDriversInOrder(result, System.currentTimeMillis()));
             logTiempoTotal("obtenerConductoresEnOrden", startTime);
             return result;
         } catch (Exception e) {
@@ -416,37 +436,141 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
         return result;
     }
     
+    /**
+     * Obtiene detalles de conductores con paralelismo máximo:
+     * - drivers/list y todas las fuentes por conductor (GPS, órdenes, viajes) se ejecutan en paralelo.
+     * - Cruce final con HashMap O(n) en lugar de búsquedas anidadas.
+     */
     private DriversInOrderResponse obtenerDetallesConductores(List<String> driverIds, Map<String, Double> balanceMap) {
         long startTime = System.currentTimeMillis();
         try {
-            JsonNode items = obtenerItemsDesdeDriversList(driverIds);
-            
+            FechaRango fechaRango = obtenerFechaRangoHoy();
+
+            // 1) Ejecutar drivers/list y detalles por conductor en paralelo (ninguno espera al anterior)
+            CompletableFuture<JsonNode> listFuture = CompletableFuture
+                .supplyAsync(() -> obtenerItemsDesdeDriversList(driverIds), executorService)
+                .exceptionally(ex -> {
+                    log.warn("⚠️ [FleetDriverService] drivers/list falló: {}", ex.getMessage());
+                    return null;
+                });
+
+            List<CompletableFuture<DriverDetails>> detailFutures = driverIds.stream()
+                .map(driverId -> fetchDetailsForDriverAsync(driverId, fechaRango))
+                .collect(Collectors.toList());
+
+            // 2) Esperar a que todas las fuentes terminen
+            CompletableFuture<?>[] all = new CompletableFuture<?>[1 + detailFutures.size()];
+            all[0] = listFuture;
+            for (int i = 0; i < detailFutures.size(); i++) {
+                all[i + 1] = detailFutures.get(i);
+            }
+            CompletableFuture.allOf(all).get(30, TimeUnit.SECONDS);
+
+            JsonNode items = listFuture.join();
             if (items == null || !items.isArray() || items.isEmpty()) {
                 return DriversInOrderResponse.builder()
                     .conductores(crearConductoresBasicos(driverIds, balanceMap))
                     .total(driverIds.size())
                     .build();
             }
-            
-            FechaRango fechaRango = obtenerFechaRangoHoy();
-            List<CompletableFuture<DriversInOrderResponse.DriverInOrderInfo>> futures = 
-                crearFuturesParaConductores(items, balanceMap, fechaRango);
-            
-            List<DriversInOrderResponse.DriverInOrderInfo> conductores = ejecutarYRecolectarFutures(futures);
-            
+
+            // 3) HashMap para cruce O(n): driverId -> JsonNode (datos básicos)
+            Map<String, JsonNode> driverNodeById = new HashMap<>();
+            Map<String, Double> balanceById = new HashMap<>(balanceMap);
+            for (JsonNode item : items) {
+                JsonNode driver = item.has("driver") ? item.get("driver") : item;
+                String id = obtenerTexto(driver, "id");
+                if (id != null && !id.isEmpty()) {
+                    driverNodeById.put(id, driver);
+                }
+            }
+
+            // 4) Recoger detalles por conductor (orden igual que driverIds)
+            Map<String, DriverDetails> detailsById = new HashMap<>();
+            for (int i = 0; i < driverIds.size(); i++) {
+                try {
+                    DriverDetails d = detailFutures.get(i).join();
+                    if (d != null) {
+                        detailsById.put(driverIds.get(i), d);
+                    }
+                } catch (Exception e) {
+                    log.warn("⚠️ [FleetDriverService] Detalle para {} falló: {}", driverIds.get(i), e.getMessage());
+                }
+            }
+
+            // 5) Cruce final O(n) con mapas; parallelStream si hay muchos conductores
+            List<DriversInOrderResponse.DriverInOrderInfo> conductores = (driverIds.size() > 8
+                ? driverIds.parallelStream()
+                : driverIds.stream())
+                .map(driverId -> construirDriverInOrderInfo(
+                    driverId,
+                    driverNodeById.get(driverId),
+                    detailsById.get(driverId),
+                    balanceById.get(driverId)))
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toList());
+
             logTiempoTotal("obtenerDetallesConductores", startTime, driverIds.size());
             return DriversInOrderResponse.builder()
                 .conductores(conductores)
                 .total(conductores.size())
                 .build();
         } catch (Exception e) {
-            log.error("❌ [FleetDriverService] Error en obtenerDetallesConductores (después de {} ms): {}", 
+            log.error("❌ [FleetDriverService] Error en obtenerDetallesConductores (después de {} ms): {}",
                 System.currentTimeMillis() - startTime, e.getMessage(), e);
             return DriversInOrderResponse.builder()
                 .conductores(new ArrayList<>())
                 .total(0)
                 .build();
         }
+    }
+
+    /** Ejecuta las 3 fuentes (GPS, órdenes, viajes) en paralelo para un conductor. */
+    private CompletableFuture<DriverDetails> fetchDetailsForDriverAsync(String driverId, FechaRango fechaRango) {
+        CompletableFuture<GpsDataResult> gpsFuture = CompletableFuture
+            .supplyAsync(() -> obtenerDatosGpsCompletos(driverId, fechaRango.dateFrom, fechaRango.dateTo), executorService)
+            .exceptionally(ex -> { log.warn("GPS {}: {}", driverId, ex.getMessage()); return null; });
+        CompletableFuture<CompletedOrdersResult> ordersFuture = CompletableFuture
+            .supplyAsync(() -> obtenerOrdenesCompletadasDelDia(driverId), executorService)
+            .exceptionally(ex -> { log.warn("Órdenes {}: {}", driverId, ex.getMessage()); return new CompletedOrdersResult(0, 0.0); });
+        CompletableFuture<List<DriversInOrderResponse.TripSimplified>> viajesFuture = CompletableFuture
+            .supplyAsync(() -> obtenerViajesSimplificados(driverId, fechaRango.fechaHoyStr), executorService)
+            .exceptionally(ex -> { log.warn("Viajes {}: {}", driverId, ex.getMessage()); return new ArrayList<>(); });
+
+        return CompletableFuture.allOf(gpsFuture, ordersFuture, viajesFuture)
+            .thenApply(v -> new DriverDetails(gpsFuture.join(), ordersFuture.join(), viajesFuture.join()))
+            .exceptionally(ex -> new DriverDetails(null, new CompletedOrdersResult(0, 0.0), new ArrayList<>()));
+    }
+
+    /** Construye un DriverInOrderInfo a partir de datos básicos + detalles (lookup O(1)). */
+    private DriversInOrderResponse.DriverInOrderInfo construirDriverInOrderInfo(
+            String driverId, JsonNode driver, DriverDetails details, Double balanceFromPoints) {
+        if (driver == null) {
+            return crearConductorBasico(driverId, balanceFromPoints);
+        }
+        GpsDataResult gpsData = details != null ? details.gps : null;
+        CompletedOrdersResult completedOrders = details != null ? details.orders : new CompletedOrdersResult(0, 0.0);
+        List<DriversInOrderResponse.TripSimplified> viajes = details != null ? details.viajes : new ArrayList<>();
+        String balanceStr = obtenerBalance(balanceFromPoints, driver);
+        DriversInOrderResponse.SummaryDistance summaryDistance = gpsData != null && gpsData.summaryDistance != null
+            ? gpsData.summaryDistance : crearSummaryDistancePorDefecto();
+        Long totalActivityTime = gpsData != null && gpsData.totalActivityTime != null ? gpsData.totalActivityTime : 0L;
+        String vehicleNumber = obtenerVehicleNumber(driver);
+
+        return DriversInOrderResponse.DriverInOrderInfo.builder()
+            .id(driverId)
+            .avatarUrl(obtenerTexto(driver, "avatar_url"))
+            .balance(balanceStr)
+            .firstName(obtenerTexto(driver, "first_name"))
+            .lastName(obtenerTexto(driver, "last_name"))
+            .status(obtenerTexto(driver, "status", "in_order"))
+            .vehicleNumber(vehicleNumber)
+            .viajes(viajes)
+            .summaryDistance(summaryDistance)
+            .totalActivityTime(totalActivityTime)
+            .completedTripsCount(completedOrders.count)
+            .completedTripsTotalPrice(completedOrders.totalPrice)
+            .build();
     }
     
     private JsonNode obtenerItemsDesdeDriversList(List<String> driverIds) {
@@ -895,12 +1019,11 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     
     private void logTiempoTotal(String metodo, long startTime, Integer size) {
         long totalTime = System.currentTimeMillis() - startTime;
+        String seg = String.format("%.2f", totalTime / 1000.0);
         if (size != null) {
-            log.info("⏱️ [FleetDriverService] TIEMPO TOTAL {}: {} ms ({:.2f} seg) para {} elementos", 
-                metodo, totalTime, String.format("%.2f", totalTime / 1000.0), size);
+            log.info("⏱️ [FleetDriverService] TIEMPO TOTAL {}: {} ms ({} seg) para {} elementos", metodo, totalTime, seg, size);
         } else {
-            log.info("⏱️ [FleetDriverService] TIEMPO TOTAL {}: {} ms ({:.2f} seg)", 
-                metodo, totalTime, String.format("%.2f", totalTime / 1000.0));
+            log.info("⏱️ [FleetDriverService] TIEMPO TOTAL {}: {} ms ({} seg)", metodo, totalTime, seg);
         }
     }
     
@@ -909,6 +1032,26 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     private static class PaginationResult {
         List<String> driverIds;
         Map<String, Double> balanceMap;
+    }
+
+    private static class CachedDriversInOrder {
+        final DriversInOrderResponse response;
+        final long timestampMs;
+        CachedDriversInOrder(DriversInOrderResponse response, long timestampMs) {
+            this.response = response;
+            this.timestampMs = timestampMs;
+        }
+    }
+
+    private static class CachedDriversList {
+        final List<String> driverIds;
+        final Map<String, Double> balanceMap;
+        final long timestampMs;
+        CachedDriversList(List<String> driverIds, Map<String, Double> balanceMap, long timestampMs) {
+            this.driverIds = driverIds;
+            this.balanceMap = balanceMap;
+            this.timestampMs = timestampMs;
+        }
     }
     
     private static class GpsDataResult {
@@ -935,6 +1078,18 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             this.dateFrom = dateFrom;
             this.dateTo = dateTo;
             this.fechaHoyStr = fechaHoyStr;
+        }
     }
-}
+
+    /** Detalles por conductor (GPS, órdenes, viajes) para cruce O(n) con HashMap */
+    private static class DriverDetails {
+        final GpsDataResult gps;
+        final CompletedOrdersResult orders;
+        final List<DriversInOrderResponse.TripSimplified> viajes;
+        DriverDetails(GpsDataResult gps, CompletedOrdersResult orders, List<DriversInOrderResponse.TripSimplified> viajes) {
+            this.gps = gps;
+            this.orders = orders != null ? orders : new CompletedOrdersResult(0, 0.0);
+            this.viajes = viajes != null ? viajes : new ArrayList<>();
+        }
+    }
 }

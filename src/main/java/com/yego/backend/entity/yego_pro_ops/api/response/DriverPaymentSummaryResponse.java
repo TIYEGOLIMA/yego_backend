@@ -38,7 +38,13 @@ public class DriverPaymentSummaryResponse {
         private String telefono; // Teléfono del conductor
         
         @JsonProperty("monto_total_pagar")
-        private Double montoTotalPagar; // Suma de monto_total de turnos no pagados
+        private Double montoTotalPagar; // Suma de monto_total (liquidación/efectivo) de turnos no pagados
+        
+        @JsonProperty("produccion_total")
+        private Double produccionTotal; // Suma de producción total de todos los turnos del conductor
+        
+        @JsonProperty("comisiones_servicio")
+        private Double comisionesServicio; // Suma de comisiones del servicio de todos los turnos del conductor
         
         @JsonProperty("cantidad_turnos")
         private Integer cantidadTurnos; // Cantidad de turnos que tiene el conductor
@@ -77,7 +83,7 @@ public class DriverPaymentSummaryResponse {
         private Integer duracionMinutos;
         
         @JsonProperty("monto_total")
-        private Double montoTotal;
+        private Double montoTotal; // Liquidación: solo efectivo (por turno)
         
         @JsonProperty("pagado")
         private Boolean pagado;

@@ -26,7 +26,7 @@ public class AuditController {
      */
     @GetMapping
     public ResponseEntity<?> getAllAuditLogs(
-            @RequestParam(defaultValue = "0") Integer page,
+            @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "50") Integer size,
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String resource,

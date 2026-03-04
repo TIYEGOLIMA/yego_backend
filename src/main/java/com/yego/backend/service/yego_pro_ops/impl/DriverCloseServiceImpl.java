@@ -2,7 +2,6 @@ package com.yego.backend.service.yego_pro_ops.impl;
 
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverCloseRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverCloseResponse;
-import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
 import com.yego.backend.repository.yego_pro_ops.CalculatedShiftRepository;
@@ -10,7 +9,6 @@ import com.yego.backend.repository.yego_pro_ops.DriverCloseRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
-import com.yego.backend.service.yego_pro_ops.FleetDriverService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -22,6 +20,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -35,9 +34,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
     private final CalculatedShiftRepository calculatedShiftRepository;
     private final CalculatedShiftService calculatedShiftService;
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-    
-    // ==================== CONSTRUCTOR ====================
-    
+
     public DriverCloseServiceImpl(
             DriverCloseRepository driverCloseRepository,
             UserRepository userRepository,
@@ -47,12 +44,8 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         this.userRepository = userRepository;
         this.calculatedShiftRepository = calculatedShiftRepository;
         this.calculatedShiftService = calculatedShiftService;
-        log.info("✅ [DriverCloseService] Inicializado correctamente - Dependencias: DriverCloseRepository, UserRepository, CalculatedShiftRepository, CalculatedShiftService (Lazy)");
     }
     
-    /**
-     * Convierte un Double a BigDecimal, retorna null si el valor es null
-     */
     private BigDecimal toBigDecimal(Double value) {
         return value != null ? BigDecimal.valueOf(value) : null;
     }
@@ -64,19 +57,15 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         log.info("💰 [DriverCloseService] Registrando cierre para driver_id: {}, fecha: {}, registrado por user_id: {}", 
             request.getDriverId(), request.getFecha(), userId);
 
-        // Parsear la fecha
         LocalDate fecha = LocalDate.parse(request.getFecha(), DATE_FORMATTER);
 
-        // Verificar si ya existe un cierre para este driver y fecha
         driverCloseRepository.findFirstByDriverIdAndFechaOrderByIdDesc(request.getDriverId(), fecha)
             .ifPresent(existingClose -> {
                 log.warn("⚠️ [DriverCloseService] Ya existe un cierre para driver_id: {} y fecha: {}. Se actualizará el registro existente.", 
                     request.getDriverId(), request.getFecha());
                 driverCloseRepository.delete(existingClose);
             });
-        
-        // 🔄 NUEVO: Si no hay turnos calculados, calcularlos automáticamente antes de liquidar
-        // Usar obtenerOCalcularTurnos que es más eficiente (marca como manual automáticamente)
+
         List<CalculatedShift> turnosExistentes = calculatedShiftRepository.findByDriverIdAndFecha(
             request.getDriverId(), fecha);
         
@@ -84,7 +73,6 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             log.info("🔄 [DriverCloseService] No se encontraron turnos calculados para driver_id: {} y fecha: {}. Calculando turnos automáticamente...", 
                 request.getDriverId(), fecha);
             try {
-                // Usar obtenerOCalcularTurnos que es más eficiente y marca como manual
                 String fechaStr = fecha.format(DATE_FORMATTER);
                 turnosExistentes = calculatedShiftService.obtenerOCalcularTurnos(request.getDriverId(), fechaStr);
                 log.info("✅ [DriverCloseService] Turnos calculados exitosamente para driver_id: {} y fecha: {} ({} turnos encontrados)", 
@@ -94,27 +82,23 @@ public class DriverCloseServiceImpl implements DriverCloseService {
                     log.warn("⚠️ [DriverCloseService] No se encontraron turnos después de calcular. El conductor puede no tener viajes para esta fecha.");
                 }
             } catch (Exception e) {
-                log.error("❌ [DriverCloseService] Error calculando turnos automáticamente para driver_id: {} y fecha: {}: {}", 
+                log.error("❌ [DriverCloseService] Error calculando turnos para driver_id: {} y fecha: {}: {}",
                     request.getDriverId(), fecha, e.getMessage(), e);
-                // Continuar con el proceso aunque falle el cálculo (puede que el usuario quiera liquidar sin turnos)
             }
         }
-        
-        // Obtener los IDs de los turnos (del request si están, o buscar automáticamente)
+
         List<Long> turnoIds = request.getTurnoIds() != null && !request.getTurnoIds().isEmpty()
             ? request.getTurnoIds()
-            : obtenerCalculatedShiftIdsComoLista(request.getDriverId(), fecha);
+            : turnosExistentes.stream().map(CalculatedShift::getId).collect(Collectors.toList());
         
-        String calculatedShiftIds = turnoIds != null && !turnoIds.isEmpty()
-            ? turnoIds.stream().map(String::valueOf).collect(Collectors.joining(","))
-            : null;
+        String calculatedShiftIds = turnoIds.isEmpty()
+            ? null
+            : turnoIds.stream().map(String::valueOf).collect(Collectors.joining(","));
         
-        // Marcar los turnos como pagados
-        if (turnoIds != null && !turnoIds.isEmpty()) {
+        if (!turnoIds.isEmpty()) {
             marcarTurnosComoPagados(turnoIds);
         }
         
-        // Crear nueva entidad
         DriverClose driverClose = DriverClose.builder()
             .driverId(request.getDriverId())
             .fecha(fecha)
@@ -137,9 +121,9 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .build();
 
         DriverClose saved = driverCloseRepository.save(driverClose);
-        log.info("✅ [DriverCloseService] Cierre registrado exitosamente con ID: {}, creado por user_id: {}, turnos marcados como pagados: {}", 
-            saved.getId(), saved.getUserId(), turnoIds != null ? turnoIds.size() : 0);
-        
+        log.info("✅ [DriverCloseService] Cierre registrado exitosamente con ID: {}, creado por user_id: {}, turnos marcados como pagados: {}",
+            saved.getId(), saved.getUserId(), turnoIds.size());
+        calculatedShiftService.invalidarCacheDetalle(request.getFecha());
         return saved;
     }
 
@@ -150,17 +134,9 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         }
         
         try {
-            String driverIdLimpio = driverId.trim();
-            String fechaLimpia = fecha.trim();
-            LocalDate fechaLocalDate = LocalDate.parse(fechaLimpia, DATE_FORMATTER);
-            
-            Optional<DriverClose> cierre = driverCloseRepository.findFirstByDriverIdAndFechaOrderByIdDesc(driverIdLimpio, fechaLocalDate);
-            
-            if (cierre.isPresent()) {
-                return Optional.of(convertirAResponse(cierre.get()));
-            }
-            
-            return Optional.empty();
+            LocalDate fechaLocalDate = LocalDate.parse(fecha.trim(), DATE_FORMATTER);
+            return driverCloseRepository.findFirstByDriverIdAndFechaOrderByIdDesc(driverId.trim(), fechaLocalDate)
+                    .map(this::convertirAResponse);
         } catch (Exception e) {
             log.error("❌ [DriverCloseService] Error obteniendo cierre: {}", e.getMessage());
             return Optional.empty();
@@ -180,8 +156,6 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         
         DriverClose cierreExistente = driverCloseRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("No se encontró cierre con ID: " + id + " para actualizar"));
-
-        // Actualizar campos (NO se modifica userId que es quien creó el registro)
         cierreExistente.setGnvM3(request.getGnvM3());
         cierreExistente.setGnvSoles(toBigDecimal(request.getGnvSoles()));
         cierreExistente.setGasolinaGalones(request.getGasolinaGalones());
@@ -197,60 +171,38 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         cierreExistente.setOdometroFinal(request.getOdometroFinal());
         cierreExistente.setDiferenciaOdometro(request.getDiferenciaOdometro());
         
-        // Actualizar los CalculatedShift IDs si hay registros para esta fecha
-        // Usar turnoIds del request si están disponibles, sino buscar automáticamente
         List<Long> turnoIds = request.getTurnoIds() != null && !request.getTurnoIds().isEmpty()
             ? request.getTurnoIds()
             : obtenerCalculatedShiftIdsComoLista(request.getDriverId(), LocalDate.parse(request.getFecha(), DATE_FORMATTER));
-        
-        String calculatedShiftIds = turnoIds != null && !turnoIds.isEmpty()
-            ? turnoIds.stream().map(String::valueOf).collect(Collectors.joining(","))
-            : null;
+        String calculatedShiftIds = turnoIds.isEmpty()
+            ? null
+            : turnoIds.stream().map(String::valueOf).collect(Collectors.joining(","));
         cierreExistente.setCalculatedShiftIds(calculatedShiftIds);
-        
-        // Marcar los turnos como pagados
-        if (turnoIds != null && !turnoIds.isEmpty()) {
+        if (!turnoIds.isEmpty()) {
             marcarTurnosComoPagados(turnoIds);
         }
-        
-        // Guardar el userId que modificó el registro (userId original NO se modifica)
-        // El userId del request es quien está actualizando, se guarda en userIdModificado
         if (request.getUserId() != null) {
             cierreExistente.setUserIdModificado(request.getUserId());
         }
 
         DriverClose actualizado = driverCloseRepository.save(cierreExistente);
-        log.info("✅ [DriverCloseService] Cierre actualizado exitosamente con ID: {}, modificado por user_id: {}", 
+        log.info("✅ [DriverCloseService] Cierre actualizado exitosamente con ID: {}, modificado por user_id: {}",
             actualizado.getId(), actualizado.getUserIdModificado());
-        
+        calculatedShiftService.invalidarCacheDetalle(request.getFecha());
         return actualizado;
     }
 
-    /**
-     * Convierte la entidad DriverClose a DriverCloseResponse
-     */
     private DriverCloseResponse convertirAResponse(DriverClose cierre) {
-        // Obtener el nombre del usuario que registró el cierre
-        String userName = userRepository.findById(cierre.getUserId())
-            .map(user -> {
-                String name = user.getName() != null ? user.getName() : "";
-                String lastName = user.getLastName() != null ? user.getLastName() : "";
-                return (name + " " + lastName).trim();
-            })
-            .orElse("Usuario desconocido");
-        
-        // Obtener el nombre del usuario que modificó el cierre (si existe)
-        String userNameModificado = null;
-        if (cierre.getUserIdModificado() != null) {
-            userNameModificado = userRepository.findById(cierre.getUserIdModificado())
-                .map(user -> {
-                    String name = user.getName() != null ? user.getName() : "";
-                    String lastName = user.getLastName() != null ? user.getLastName() : "";
-                    return (name + " " + lastName).trim();
-                })
-                .orElse("Usuario desconocido");
-        }
-        
+        List<Long> userIds = new ArrayList<>();
+        userIds.add(cierre.getUserId());
+        if (cierre.getUserIdModificado() != null) userIds.add(cierre.getUserIdModificado());
+        Map<Long, String> nameByUserId = userRepository.findByIdInWithRole(userIds).stream()
+                .collect(Collectors.toMap(u -> u.getId(), u -> ((u.getName() != null ? u.getName() : "") + " " + (u.getLastName() != null ? u.getLastName() : "")).trim(), (a, b) -> a));
+        String userName = nameByUserId.getOrDefault(cierre.getUserId(), "Usuario desconocido").trim();
+        if (userName.isEmpty()) userName = "Usuario desconocido";
+        String userNameModificado = cierre.getUserIdModificado() != null ? nameByUserId.getOrDefault(cierre.getUserIdModificado(), "Usuario desconocido").trim() : null;
+        if (userNameModificado != null && userNameModificado.isEmpty()) userNameModificado = "Usuario desconocido";
+
         return DriverCloseResponse.builder()
             .id(cierre.getId())
             .driverId(cierre.getDriverId())
@@ -279,108 +231,37 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .build();
     }
 
-    /**
-     * Obtiene los IDs de los CalculatedShift para un driver y fecha específica como lista
-     * @param driverId ID del conductor
-     * @param fecha Fecha del turno
-     * @return Lista de IDs de CalculatedShift, o lista vacía si no hay turnos
-     */
     private List<Long> obtenerCalculatedShiftIdsComoLista(String driverId, LocalDate fecha) {
         try {
             List<CalculatedShift> shifts = calculatedShiftRepository.findByDriverIdAndFecha(driverId, fecha);
-            
-            if (shifts.isEmpty()) {
-                log.info("ℹ️ [DriverCloseService] No se encontraron turnos para driver_id: {} y fecha: {}", driverId, fecha);
-                return new ArrayList<>();
-            }
-            
-            List<Long> ids = shifts.stream()
-                    .map(CalculatedShift::getId)
-                    .collect(Collectors.toList());
-            
-            log.info("✅ [DriverCloseService] CalculatedShift IDs encontrados para driver_id: {} y fecha: {}: {}", 
-                    driverId, fecha, ids);
-            
-            return ids;
+            if (shifts.isEmpty()) return new ArrayList<>();
+            return shifts.stream().map(CalculatedShift::getId).collect(Collectors.toList());
         } catch (Exception e) {
-            log.error("❌ [DriverCloseService] Error obteniendo CalculatedShift IDs para driver_id: {} y fecha: {}: {}", 
-                    driverId, fecha, e.getMessage());
+            log.error("❌ [DriverCloseService] Error obteniendo IDs para driver_id: {} y fecha: {}", driverId, fecha, e);
             return new ArrayList<>();
-        }
-    }
-    
-    /**
-     * Marca los turnos especificados como pagados
-     * @param turnoIds Lista de IDs de turnos a marcar como pagados
-     */
-    private void marcarTurnosComoPagados(List<Long> turnoIds) {
-        if (turnoIds == null || turnoIds.isEmpty()) {
-            return;
-        }
-        
-        try {
-            List<CalculatedShift> turnos = calculatedShiftRepository.findAllById(turnoIds);
-            
-            if (turnos.isEmpty()) {
-                log.warn("⚠️ [DriverCloseService] No se encontraron turnos con los IDs proporcionados: {}", turnoIds);
-                return;
-            }
-            
-            int actualizados = 0;
-            for (CalculatedShift turno : turnos) {
-                if (turno.getPagado() == null || !turno.getPagado()) {
-                    turno.setPagado(true);
-                    actualizados++;
-                }
-            }
-            
-            calculatedShiftRepository.saveAll(turnos);
-            log.info("✅ [DriverCloseService] {} turnos marcados como pagados. IDs: {}", actualizados, turnoIds);
-            
-        } catch (Exception e) {
-            log.error("❌ [DriverCloseService] Error marcando turnos como pagados. IDs: {}. Error: {}", 
-                    turnoIds, e.getMessage(), e);
-            throw new RuntimeException("Error al marcar turnos como pagados: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * Obtiene los tipos de turno desde los IDs almacenados en calculatedShiftIds
-     * @param calculatedShiftIds String con IDs separados por coma (ej: "1,2")
-     * @return Lista de tipos de turno (ej: ["diurno", "nocturno"])
-     */
+    private void marcarTurnosComoPagados(List<Long> turnoIds) {
+        if (turnoIds == null || turnoIds.isEmpty()) return;
+        calculatedShiftRepository.markAsPaidByIds(turnoIds);
+    }
+
     private List<String> obtenerTiposTurnoDesdeIds(String calculatedShiftIds) {
-        if (calculatedShiftIds == null || calculatedShiftIds.trim().isEmpty()) {
-            return new ArrayList<>();
-        }
-        
+        if (calculatedShiftIds == null || calculatedShiftIds.trim().isEmpty()) return new ArrayList<>();
         try {
-            // Dividir los IDs por coma
             List<Long> ids = Arrays.stream(calculatedShiftIds.split(","))
                     .map(String::trim)
                     .filter(s -> !s.isEmpty())
                     .map(Long::parseLong)
                     .collect(Collectors.toList());
-            
-            if (ids.isEmpty()) {
-                return new ArrayList<>();
-            }
-            
-            // Buscar los CalculatedShift por IDs
-            List<CalculatedShift> shifts = calculatedShiftRepository.findAllById(ids);
-            
-            // Extraer los tipos de turno únicos
-            List<String> tiposTurno = shifts.stream()
-                    .map(shift -> shift.getTipoTurno().name())
+            if (ids.isEmpty()) return new ArrayList<>();
+            return calculatedShiftRepository.findTipoTurnoByIdIn(ids).stream()
+                    .map(Enum::name)
                     .distinct()
                     .collect(Collectors.toList());
-            
-            log.debug("✅ [DriverCloseService] Tipos de turno obtenidos desde IDs {}: {}", calculatedShiftIds, tiposTurno);
-            
-            return tiposTurno;
         } catch (Exception e) {
-            log.error("❌ [DriverCloseService] Error obteniendo tipos de turno desde IDs {}: {}", 
-                    calculatedShiftIds, e.getMessage());
+            log.error("❌ [DriverCloseService] Error obteniendo tipos de turno: {}", e.getMessage());
             return new ArrayList<>();
         }
     }

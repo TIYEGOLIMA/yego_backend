@@ -13,9 +13,15 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -47,14 +53,22 @@ public abstract class BaseYangoApiService {
         // Cookie 1: Jhajaira.ochoa
         "yashr=299832191758141387; receive-cookie-deprecation=1; gdpr=0; _ym_uid=175814138831171998; _ym_d=1758141396; yandexuid=9201743261758137514; yuidss=9201743261758137514; yandex_login=Jhajaira.ochoa; L=ZxtXZnxqBmR/SAVhdVZyXwJfaA9cBV1cLlAoE1ddHRAZOQxQLTM=.1759148388.1235855.353634.d47e5d7bafd679e1c83d4f42c6e23cd9; Session_id=3:1764107903.5.0.1758141420632:WbD9Jg:3a2a.1.2:1|2015824474.1006968.2.0:3.2:1006968.3:1759148388|60:11433100.181615.QwZv5z-R92wHzh4j43-daY0-K7g; sessar=1.1396519.CiDPtjUqckvAWEzdml3-Xvlj9hjrxSX6tJqOaxrdeZn5IA.jv1_Nvn5vO56j4mwzyFG1Wg8pHX_1BWCf-tAOHo6bQk; sessionid2=3:1764107903.5.0.1758141420632:WbD9Jg:3a2a.1.2:1|2015824474.1006968.2.0:3.2:1006968.3:1759148388|60:11433100.181615.fakesign0000000000000000000; i=XLXWMoCXAOgX6hzpx/AmT+HOGGwAwQhiTRKOzxl2tkMXu90DChcwoTT5z8qvZlmQyhkwZXurYZsuUa9AHb5foPXF2Rc=; _ym_isad=2; yp=2074508388.udn.cDpKaGFqYWlyYS5vY2hvYQ%3D%3D#1764940883.yu.9201743261758137514; ymex=1767446483.oyu.9201743261758137514#2073501389.yrts.1758141389; _ym_visorc=b; bh=Ej8iQ2hyb21pdW0iO3Y9IjE0MiIsIkdvb2dsZSBDaHJvbWUiO3Y9IjE0MiIsIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiIOMTQyLjAuNzQ0NC4xNzYqAj8wOgdXaW5kb3dzQgYxMC4wLjBKAjY0UlsiQ2hyb21pdW0iO3Y9IjE0Mi4wLjc0NDQuMTc2IiwiR29vZ2xlIENocm9tZSI7dj0iMTQyLjAuNzQ0NC4xNzYiLCJOb3RfQSBCcmFuZCI7dj0iOTkuMC4wLjAiYPzux8kGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYP+JzMhwg=; _yasc=fAS4rNTIoRKZq+JMg4Gaj9eUc5ZA62kxyJug7jaq8e08yG17i2jy7kvgtoikFrhpuyUc",
         
-        // Cookie 2: giomarortega
-        "i=x5tkbBS7C7HE+NXGcad3ZssQ3gf1F0rq356OWQvEx3ZB8N6sRw3Cgl6OxfwzvxG4EEjzwDu2xiGfC575M7+qz6ox3wc=; yandexuid=196877061764616562; yashr=2270601791764616562; yuidss=196877061764616562; ymex=2079976564.yrts.1764616564; receive-cookie-deprecation=1; gdpr=0; _ym_uid=1764616564116282218; _ym_d=1764616565; Session_id=3:1764616812.5.0.1764616812843:WbD9Jg:9933.1.2:1|2223153146.0.2.0:3.3:1764616812|60:11454337.136939.hHJxPhpQO1T97Iog_aHQCOuvpQo; sessar=1.1396519.CiCR_wLdjC3OTrDh2hgMr8--C-fwizMwlP9jW-dd6vGgRw.9KD2YMUjfA4ZbhzmsFVhHJOx2zEo94hMFlT83twWhyo; sessionid2=3:1764616812.5.0.1764616812843:WbD9Jg:9933.1.2:1|2223153146.0.2.0:3.3:1764616812|60:11454337.136939.fakesign0000000000000000000; yp=2079976812.udn.cDpnaW9tYXJvcnRlZ2E%3D; L=BBBBQ18BXmZ2XmtITlJ8VUBfcUBgeGFSPTgiLAs7KTUuNQkx.1764616812.1447419.396095.0920cd88815bbde83a0318732f9a8b82; yandex_login=giomarortega; _ym_isad=2; _yasc=GQ2XCBpQDzLhff5lrRlrxuaOh4LeuP1795j4xB9obQ+6KvYMs16SxDDeknIkX93UcXa/; bh=EjkiQ2hyb21pdW0iO3Y9IjE0MiIsICJCcmF2ZSI7dj0iMTQyIiwgIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiIJMTQyLjAuMC4wKgI/MDoHIkxpbnV4IkIGNi4xNy40SgI2NFJJIkNocm9taXVtIjt2PSIxNDIuMC4wLjAiLCJCcmF2ZSI7dj0iMTQyLjAuMC4wIiwiTm90X0EgQnJhbmQiO3Y9Ijk5LjAuMC4wImCi1cLJBmoZ3MrpiA7yrLelC/v68OcN6//99g/4nMyHCA==",
+        // Cookie 2: giomarortega (actualizada)
+        "i=nOvRJ2K/cZwWkUf8kHuUrHWLCzY44glVytXeWCF8UjS0SnNco2YVTIDg8AGF5VTgKfZpWwEgwj6jgfVAZT4CTM4GaRw=; yandexuid=2622840871772483002; yashr=7273643541772483002; yuidss=2622840871772483002; ymex=2087843007.yrts.1772483007; _yasc=H4vwUYsVB+r9GFV458dHFavRAjYyBFGrHkbwL4nBaMOTQpvR9guDabyjkFlc83Pc; gdpr=0; _ym_uid=1772483007632502910; _ym_d=1772483008; _ym_visorc=b; _ym_isad=2; Session_id=3:1772483086.5.0.1772483086636:WbD9Jg:6f7d.1.2:1|2223153146.0.2.0:3.3:1772483086|60:11753585.533197.wHgwORMpF9EKFQj7-SK2AVwmQbk; sessar=1.1719226.CiBRedxCvhmLjGyB74texUepBXRLzfY-1FZJSSO-qfJqgA.Y43nlzzfd6YKZ0L2ylK-8770uQK6vm1YPkmHiCM3JR4; sessionid2=3:1772483086.5.0.1772483086636:WbD9Jg:6f7d.1.2:1|2223153146.0.2.0:3.3:1772483086|60:11753585.533197.fakesign0000000000000000000; yp=2087843086.udn.cDpnaW9tYXJvcnRlZ2E%3D; ys=udn.cDpnaW9tYXJvcnRlZ2E%3D; L=Sg1hU15fdAB8TXVDWmJAWwhXZAZjAnBhPSQfWBcZWAMMB1Us.1772483086.1745990.328358.659e3758f20db470aa4cc2f40c1ef89b; yandex_login=giomarortega; bh=EkEiTm90KEE6QnJhbmQiO3Y9IjgiLCAiQ2hyb21pdW0iO3Y9IjE0NCIsICJNaWNyb3NvZnQgRWRnZSI7dj0iMTQ0IioCPzE6CSJBbmRyb2lkImDq5JfNBmom3Mql7AbPn4yfBaynvLsFoJ3s6wP8ua//B9/9+9wH5bXNhwi/gwM=",
         
         // Cookie 3: gonzalofajardo (nueva)
         "yandexuid=6009311931761677705; yashr=4567181961761677705; yuidss=6009311931761677705; receive-cookie-deprecation=1; gdpr=0; _ym_uid=1761677706290870939; _ym_d=1761677707; i=WPv45DbbiaiQTfOesurzPwPDcYTOSOoBsoiMqnCbM8UNdwnBPqcEVeWPbr+/nREEJsBHtNGb/FFdfO9HLKe33wC900U=; Session_id=3:1767916938.5.0.1761677775316:WbD9Jg:71df.1.2:1|1782860170.0.2.0:3.3:1761677775|2220343194.-1.0.0:3.2:2426755.3:1764104530|60:11590429.497800.3oxV2BfdArdTZgb0iJuNpsl7pTQ; sessar=1.1504434.CiBoQiEtUqB8Clq12Z20uRTAKOBx8rNaYp3ayAviftuOlQ.HmHoWlhWBAmESc7SsPOk0_fwoYScX1OCMb7N5WOch3w; sessionid2=3:1767916938.5.0.1761677775316:WbD9Jg:71df.1.2:1|1782860170.0.2.0:3.3:1761677775|2220343194.-1.0.0:3.2:2426755.3:1764104530|60:11590429.497800.fakesign0000000000000000000; L=cwNkZHx2bUdLfgZ1eX1WBUJKR0J7dVdUATclGQI2VgomGwMkLic=.1767916938.1586619.346423.d1431f8e0fe9a8126fdb675787bc79fb; yandex_login=gonzalofajardo; park_id=08e20910d81d42658d4334d3f6d10ac0; _ym_isad=2; yp=2079464530.multib.1#2083276938.udn.cDpHb256YWxvIEZhamFyZG8%3D#1768500383.yu.6009311931761677705; ymex=1771005983.oyu.6009311931761677705#2077037707.yrts.1761677707; _ym_visorc=w; _yasc=2mKcY8GygbjykCQel1V9urGg+aqTEZmAqVNXKfK1JjKMIohuQ3hRqw7ff6w9h+pemrcG; bh=EkEiR29vZ2xlIENocm9tZSI7dj0iMTQzIiwgIkNocm9taXVtIjt2PSIxNDMiLCAiTm90IEEoQnJhbmQiO3Y9IjI0IhoDeDg2Ig4xNDMuMC43NDk5LjE5MyoCPzA6CSJXaW5kb3dzIkIGMTkuMC4wSgI2NFJbIkdvb2dsZSBDaHJvbWUiO3Y9IjE0My4wLjc0OTkuMTkzIiwiQ2hyb21pdW0iO3Y9IjE0My4wLjc0OTkuMTkzIiwiTm90IEEoQnJhbmQiO3Y9IjI0LjAuMC4wImCjtp/LBmoe3Mrh/wiS2KGxA5/P4eoD+/rw5w3r//32D/vMzYcI"
     );
     
     private static final Random RANDOM = new Random();
+
+    /** Índices de cookies que ya devolvieron 401: todos los hilos las evitan sin probar de nuevo */
+    private static final Set<Integer> COOKIE_INDICES_INVALIDOS = ConcurrentHashMap.newKeySet();
+
+    /** Delay corto en retry 401 (cambio de cookie) para no sumar segundos */
+    private static final int RETRY_401_DELAY_MS = 150;
+    /** Delay en error de proxy (conexión) */
+    private static final int RETRY_PROXY_DELAY_MS = 800;
     
     // Throttling compartido
     protected final AtomicLong ultimaLlamadaTimestamp = new AtomicLong(0);
@@ -84,13 +98,37 @@ public abstract class BaseYangoApiService {
     }
     
     /**
-     * Obtiene una cookie aleatoria del pool para rotación
+     * Marca una cookie como inválida (401). El resto de hilos dejan de usarla de inmediato.
+     */
+    protected static void marcarCookieInvalida(int index) {
+        if (index >= 0 && index < COOKIES_POOL.size()) {
+            COOKIE_INDICES_INVALIDOS.add(index);
+            log.info("🍪 [BaseYangoApiService] Cookie #{} marcada como inválida (compartido)", index + 1);
+        }
+    }
+
+    /**
+     * Devuelve un índice de cookie válido (no marcado como inválida), o -1 si todas están inválidas.
+     */
+    protected static int obtenerIndiceCookieValida() {
+        List<Integer> validos = new ArrayList<>();
+        for (int i = 0; i < COOKIES_POOL.size(); i++) {
+            if (!COOKIE_INDICES_INVALIDOS.contains(i)) {
+                validos.add(i);
+            }
+        }
+        if (validos.isEmpty()) {
+            return -1;
+        }
+        return validos.get(RANDOM.nextInt(validos.size()));
+    }
+    
+    /**
+     * Obtiene una cookie aleatoria del pool, evitando las marcadas como inválidas
      */
     protected String obtenerCookieAleatoria() {
-        int index = RANDOM.nextInt(COOKIES_POOL.size());
-        String cookie = COOKIES_POOL.get(index);
-        log.debug("🍪 [BaseYangoApiService] Usando cookie #{} de {} disponibles", index + 1, COOKIES_POOL.size());
-        return cookie;
+        int index = obtenerIndiceCookieValida();
+        return COOKIES_POOL.get(index);
     }
     
     /**
@@ -188,10 +226,16 @@ public abstract class BaseYangoApiService {
             java.util.function.Function<String, HttpHeaders> headersFunc) throws Exception {
         
         Exception ultimoError = null;
+        boolean retriedAfter401 = false;
         
-        // Intentar con cada cookie del pool
-        for (int i = 0; i < COOKIES_POOL.size(); i++) {
-            String cookie = obtenerCookiePorIndice(i);
+        for (int attempt = 0; attempt < COOKIES_POOL.size(); attempt++) {
+            int i = obtenerIndiceCookieValida();
+            if (i < 0) {
+                COOKIE_INDICES_INVALIDOS.clear();
+                log.warn("🍪 [BaseYangoApiService] Todas las cookies marcadas inválidas; se reinicia el set para próximo intento");
+                break;
+            }
+            String cookie = COOKIES_POOL.get(i);
             HttpHeaders headers = headersFunc.apply(cookie);
             
             try {
@@ -199,14 +243,12 @@ public abstract class BaseYangoApiService {
                 ResponseEntity<String> response = getRestTemplate().exchange(url, method, request, String.class);
                 
                 if (response.getStatusCode().is2xxSuccessful()) {
-                    if (i > 0) {
-                        log.info("✅ [BaseYangoApiService] Retry exitoso con cookie #{} después de {} intentos fallidos", 
-                            i + 1, i);
+                    if (retriedAfter401) {
+                        log.info("✅ [BaseYangoApiService] Retry exitoso con cookie #{}", i + 1);
                     }
                     return response;
                 }
                 
-                // Si no es exitoso pero tampoco es error crítico, retornar igual
                 log.warn("⚠️ [BaseYangoApiService] Respuesta no exitosa con cookie #{}: {}", i + 1, response.getStatusCode());
                 return response;
                 
@@ -215,111 +257,67 @@ public abstract class BaseYangoApiService {
                 int statusCode = e.getStatusCode().value();
                 String responseBody = e.getResponseBodyAsString();
                 
-                // Verificar si el error es del proxy (contiene mensaje sobre proxy)
                 boolean esErrorProxy = responseBody != null && (
-                    responseBody.contains("proxy") || 
-                    responseBody.contains("Proxy") ||
+                    responseBody.contains("proxy") || responseBody.contains("Proxy") ||
                     responseBody.contains("update your proxy address") ||
-                    responseBody.contains("proxy username") ||
-                    responseBody.contains("proxy port")
+                    responseBody.contains("proxy username") || responseBody.contains("proxy port")
                 );
                 
                 if (esErrorProxy) {
-                    log.error("❌ [BaseYangoApiService] Error de PROXY con cookie #{}: {} - {}", 
-                        i + 1, statusCode, responseBody != null && responseBody.length() > 200 
-                            ? responseBody.substring(0, 200) + "..." 
-                            : responseBody);
-                    log.warn("🔄 [BaseYangoApiService] El proxy está rechazando la conexión. Intentando con siguiente cookie...");
-                    
-                    // Esperar un poco antes de intentar con la siguiente cookie
-                    try {
-                        Thread.sleep(2000); // 2 segundos entre intentos cuando hay error de proxy
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                    }
-                    continue; // Intentar con siguiente cookie
+                    log.error("❌ [BaseYangoApiService] Error de PROXY con cookie #{}: {}", i + 1, statusCode);
+                    log.warn("🔄 [BaseYangoApiService] Intentando con siguiente cookie...");
+                    delay(RETRY_PROXY_DELAY_MS);
+                    continue;
                 }
                 
-                // Si es 401 (Unauthorized), 403 (Forbidden) o 429 (Too Many Requests), probar con otra cookie
-                // 401 generalmente significa que la cookie expiró o no es válida
                 if (statusCode == 401 || statusCode == 403 || statusCode == 429) {
-                    String motivo = statusCode == 401 ? "Unauthorized (cookie expirada/inválida)" 
-                                     : statusCode == 403 ? "Forbidden" 
-                                     : "Too Many Requests";
-                    log.warn("🔄 [BaseYangoApiService] Error {} con cookie #{} ({}), intentando con siguiente cookie...", 
+                    String motivo = statusCode == 401 ? "Unauthorized (cookie expirada/inválida)"
+                                     : statusCode == 403 ? "Forbidden" : "Too Many Requests";
+                    log.warn("🔄 [BaseYangoApiService] Error {} con cookie #{} ({}); se marca inválida y se intenta con otra", 
                         statusCode, i + 1, motivo);
-                    
-                    // Esperar un poco antes de intentar con la siguiente cookie
-                    try {
-                        Thread.sleep(1000); // 1 segundo entre intentos
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                    }
-                    continue; // Intentar con siguiente cookie
-                } else {
-                    // Otro error HTTP, no es necesario probar con otras cookies
-                    log.error("❌ [BaseYangoApiService] Error HTTP {} con cookie #{}: {}", 
-                        statusCode, i + 1, e.getMessage());
-                    throw e;
+                    marcarCookieInvalida(i);
+                    retriedAfter401 = true;
+                    delay(RETRY_401_DELAY_MS);
+                    continue;
                 }
+                log.error("❌ [BaseYangoApiService] Error HTTP {} con cookie #{}: {}", statusCode, i + 1, e.getMessage());
+                throw e;
                 
             } catch (HttpServerErrorException e) {
                 ultimoError = e;
-                log.warn("🔄 [BaseYangoApiService] Error del servidor {} con cookie #{}, intentando con siguiente cookie...", 
-                    e.getStatusCode().value(), i + 1);
-                
-                // Esperar un poco antes de intentar con la siguiente cookie
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                }
-                continue; // Intentar con siguiente cookie
+                log.warn("🔄 [BaseYangoApiService] Error del servidor {} con cookie #{}", e.getStatusCode().value(), i + 1);
+                delay(RETRY_401_DELAY_MS);
+                continue;
                 
             } catch (Exception e) {
                 ultimoError = e;
-                String errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                
-                // Verificar si el error es del proxy
-                boolean esErrorProxy = errorMessage.toLowerCase().contains("proxy") || 
-                                     errorMessage.contains("update your proxy address") ||
-                                     errorMessage.contains("proxy username") ||
-                                     errorMessage.contains("proxy port") ||
-                                     errorMessage.contains("407") || // Proxy Authentication Required
-                                     e.getClass().getSimpleName().contains("Proxy");
-                
+                String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                boolean esErrorProxy = msg.toLowerCase().contains("proxy") || msg.contains("407");
                 if (esErrorProxy) {
-                    log.error("❌ [BaseYangoApiService] Error de PROXY con cookie #{}: {} - {}", 
-                        i + 1, e.getClass().getSimpleName(), errorMessage);
-                    log.warn("🔄 [BaseYangoApiService] El proxy está rechazando la conexión. Intentando con siguiente cookie...");
-                    
-                    // Esperar más tiempo cuando hay error de proxy
-                    try {
-                        Thread.sleep(2000); // 2 segundos entre intentos cuando hay error de proxy
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                    }
+                    log.error("❌ [BaseYangoApiService] Error de PROXY con cookie #{}: {}", i + 1, msg);
+                    delay(RETRY_PROXY_DELAY_MS);
                 } else {
-                    log.warn("🔄 [BaseYangoApiService] Error con cookie #{}: {}, intentando con siguiente cookie...", 
-                        i + 1, errorMessage);
-                    
-                    // Esperar un poco antes de intentar con la siguiente cookie
-                    try {
-                        Thread.sleep(1000);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                    }
+                    log.warn("🔄 [BaseYangoApiService] Error con cookie #{}: {}", i + 1, msg);
+                    delay(RETRY_401_DELAY_MS);
                 }
-                continue; // Intentar con siguiente cookie
+                continue;
             }
         }
         
-        // Si llegamos aquí, todas las cookies fallaron
+        COOKIE_INDICES_INVALIDOS.clear();
         log.error("❌ [BaseYangoApiService] Todas las {} cookies fallaron para URL: {}", COOKIES_POOL.size(), url);
         if (ultimoError != null) {
             throw ultimoError;
         }
-        throw new RuntimeException("Todas las cookies fallaron y no hay más información del error");
+        throw new RuntimeException("Todas las cookies fallaron");
+    }
+    
+    private static void delay(int ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
     
     /**
@@ -354,6 +352,24 @@ public abstract class BaseYangoApiService {
      */
     protected HttpHeaders crearHeadersDriversListConCookie(String cookie) {
         return crearHeadersDriversPointsConCookie(cookie);
+    }
+
+    /**
+     * Hace una petición de prueba para validar/rotar cookies antes del paralelismo.
+     * Si la cookie actual devuelve 401, se marca como inválida y se prueba la siguiente;
+     * así el resto de hilos no pierden tiempo con la misma cookie.
+     */
+    public void warmupCookiePool() {
+        try {
+            Map<String, Object> body = new HashMap<>();
+            body.put("park_id", PARK_ID);
+            body.put("car", Collections.emptyMap());
+            body.put("statuses", Arrays.asList("in_order", "free"));
+            ejecutarConRetryCookies(YANGO_API_URL, HttpMethod.POST, body, this::crearHeadersDriversPointsConCookie);
+            log.debug("🍪 [BaseYangoApiService] Warm-up de cookies OK");
+        } catch (Exception e) {
+            log.warn("🍪 [BaseYangoApiService] Warm-up de cookies falló (se usará retry en siguientes peticiones): {}", e.getMessage());
+        }
     }
 }
 

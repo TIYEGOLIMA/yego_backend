@@ -26,6 +26,9 @@ public class ProxyConfig {
     private String proxyFile = "proxies.txt";
     
     private List<String> proxies = new ArrayList<>();
+
+    /** Formato esperado por línea: IP:PUERTO:USUARIO:CONTRASEÑA */
+    private static final String PROXY_LINE_REGEX = "^\\d+\\.\\d+\\.\\d+\\.\\d+:\\d+:.+:.+$";
     
     @PostConstruct
     public void init() {
@@ -40,31 +43,44 @@ public class ProxyConfig {
         try {
             InputStream inputStream = getClass().getClassLoader().getResourceAsStream(proxyFile);
             if (inputStream == null) {
-                log.warn("⚠️ [ProxyConfig] No se encontró el archivo de proxies: {}", proxyFile);
-                enabled = false;
+                log.info("ℹ️ [ProxyConfig] No hay archivo {}; la lista se cargará desde Webshare (scheduler)", proxyFile);
                 return;
             }
-            
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
-                
                 proxies = reader.lines()
                     .map(String::trim)
                     .filter(line -> !line.isEmpty() && !line.startsWith("#"))
-                    .filter(line -> line.matches("^\\d+\\.\\d+\\.\\d+\\.\\d+:\\d+:.+:.+$"))
+                    .filter(line -> line.matches(PROXY_LINE_REGEX))
                     .collect(Collectors.toList());
-                
-                log.info("✅ [ProxyConfig] {} proxies cargados desde {}", proxies.size(), proxyFile);
-                
                 if (proxies.isEmpty()) {
-                    log.warn("⚠️ [ProxyConfig] No se encontraron proxies válidos en el archivo");
-                    enabled = false;
+                    log.info("ℹ️ [ProxyConfig] Archivo {} vacío o sin líneas válidas; la lista se cargará desde Webshare", proxyFile);
+                } else {
+                    log.info("✅ [ProxyConfig] {} proxies cargados desde {} (opcional; el scheduler actualizará desde Webshare)", proxies.size(), proxyFile);
                 }
             }
         } catch (Exception e) {
-            log.error("❌ [ProxyConfig] Error cargando proxies desde archivo: {}", e.getMessage(), e);
-            enabled = false;
-            proxies = new ArrayList<>();
+            log.warn("⚠️ [ProxyConfig] No se pudo leer {}: {}. La lista se cargará desde Webshare.", proxyFile, e.getMessage());
         }
+    }
+
+    /**
+     * Actualiza la lista de proxies en memoria (thread-safe).
+     * Usado por el scheduler que descarga la lista desde Webshare cada 5 horas.
+     *
+     * @param newProxies lista en formato IP:PORT:USER:PASSWORD por línea
+     */
+    public synchronized void updateProxies(List<String> newProxies) {
+        if (newProxies == null || newProxies.isEmpty()) {
+            log.warn("⚠️ [ProxyConfig] updateProxies: lista vacía, no se actualiza");
+            return;
+        }
+        List<String> valid = newProxies.stream()
+                .map(String::trim)
+                .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+                .filter(line -> line.matches(PROXY_LINE_REGEX))
+                .collect(Collectors.toList());
+        this.proxies = new ArrayList<>(valid);
+        log.info("✅ [ProxyConfig] Lista de proxies actualizada: {} proxies válidos", this.proxies.size());
     }
 }

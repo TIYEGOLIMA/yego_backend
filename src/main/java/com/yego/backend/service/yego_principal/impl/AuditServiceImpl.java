@@ -52,7 +52,9 @@ public class AuditServiceImpl implements AuditService {
     
     @Override
     public AuditLogPageDto findAll(Integer page, Integer limit, AuditFilterDto filters) {
-        Pageable pageable = PageRequest.of(page - 1, limit);
+        int pageIndex = (page == null || page < 1) ? 0 : page - 1;
+        int size = (limit == null || limit < 1) ? 50 : Math.min(limit, 100);
+        Pageable pageable = PageRequest.of(pageIndex, size);
         
         Page<AuditLog> auditPage = auditLogRepository.findWithFilters(
                 filters.getUserId(),
@@ -71,8 +73,8 @@ public class AuditServiceImpl implements AuditService {
         return AuditLogPageDto.builder()
                 .logs(logs)
                 .total(auditPage.getTotalElements())
-                .page(page)
-                .limit(limit)
+                .page(pageIndex + 1)
+                .limit(size)
                 .build();
     }
     

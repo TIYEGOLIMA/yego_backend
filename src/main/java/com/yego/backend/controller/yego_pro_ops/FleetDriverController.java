@@ -111,7 +111,7 @@ public class FleetDriverController {
         DriverTripsSimplifiedResponse response = driverOrdersService.obtenerViajesSimplificadosPorFecha(driverId, fecha);
         
         long totalTime = System.currentTimeMillis() - startTime;
-        log.info("✅ [FleetDriverController] Viajes simplificados obtenidos: {} viajes - Tiempo total: {} ms ({:.2f} seg)", 
+        log.info("✅ [FleetDriverController] Viajes simplificados obtenidos: {} viajes - Tiempo total: {} ms ({} seg)", 
             response.getTrips() != null ? response.getTrips().size() : 0, totalTime, String.format("%.2f", totalTime / 1000.0));
         
         return ResponseEntity.ok(response);
@@ -201,7 +201,7 @@ public class FleetDriverController {
         DriversInOrderResponse response = fleetDriverService.obtenerConductoresEnOrden(page, limit);
         
         long totalTime = System.currentTimeMillis() - startTime;
-        log.info("✅ [FleetDriverController] Se encontraron {} conductores en orden (página {}) - Tiempo total: {} ms ({:.2f} seg)", 
+        log.info("✅ [FleetDriverController] Se encontraron {} conductores en orden (página {}) - Tiempo total: {} ms ({} seg)",
             response.getTotal(), page, totalTime, String.format("%.2f", totalTime / 1000.0));
         return ResponseEntity.ok(response);
     }

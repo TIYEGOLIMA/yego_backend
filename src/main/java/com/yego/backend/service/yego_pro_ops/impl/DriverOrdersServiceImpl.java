@@ -45,9 +45,12 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
     private static final DateTimeFormatter DATE_ONLY_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
     
-    private static final long CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
+    private static final long CACHE_TTL_MS = 10 * 60 * 1000; // 10 min para fecha actual (más hits de caché)
+    private static final long CACHE_TTL_PAST_DATE_MS = 60 * 60 * 1000; // 1 h para fechas pasadas (no cambian)
     private static final long DEFAULT_THROTTLE_DELAY_MS = 15000; // 15 segundos
-    private static final long SIMPLIFIED_TRIPS_THROTTLE_DELAY_MS = 3000; // 3 segundos
+    private static final long SIMPLIFIED_TRIPS_THROTTLE_DELAY_MS = 3000; // 3 segundos (bulk)
+    /** GET por fecha: sin throttle para respuesta más rápida (petición única por request). */
+    private static final long SIMPLIFIED_TRIPS_THROTTLE_POR_FECHA_MS = 0;
     private static final double METERS_TO_KM = 1000.0;
     private static final String STATUS_COMPLETE = "complete";
     private static final String DATE_TYPE_BOOKED_AT = "booked_at";
@@ -218,36 +221,34 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
     
     @Override
     public DriverTripsSimplifiedResponse obtenerViajesSimplificadosPorFecha(String driverId, String fecha) {
-        long startTime = System.currentTimeMillis();
-        
         if (!validarParametros(driverId, fecha)) {
             return crearRespuestaVaciaViajesSimplificados();
         }
-        
         String cacheKey = driverId + "_" + fecha;
         CacheEntry cached = viajesSimplificadosCache.get(cacheKey);
         if (cached != null && !cached.isExpired()) {
-            logCacheHit(startTime, cached);
+            log.debug("💾 [DriverOrdersService] Viajes simplificados desde caché: {} - {} viajes", cacheKey,
+                cached.response.getTrips() != null ? cached.response.getTrips().size() : 0);
             return cached.response;
         }
-        
+        long startTime = System.currentTimeMillis();
         try {
             FechaRango fechaRango = convertirFechaARango(fecha);
+            LocalDate fechaLocal = LocalDate.parse(fecha, DATE_ONLY_FORMATTER);
+            boolean esFechaPasada = fechaLocal.isBefore(LocalDate.now(LIMA_ZONE));
             DriverTripsSimplifiedResponse response = obtenerViajesSimplificados(
-                driverId, fechaRango.dateFrom, fechaRango.dateTo);
-            
+                driverId, fechaRango.dateFrom, fechaRango.dateTo, SIMPLIFIED_TRIPS_THROTTLE_POR_FECHA_MS);
             if (response != null && response.getTrips() != null) {
-                viajesSimplificadosCache.put(cacheKey, new CacheEntry(response));
-                log.debug("💾 [DriverOrdersService] Viajes simplificados guardados en caché para {} - {}", 
-                    cacheKey, response.getTrips().size());
+                long ttl = esFechaPasada ? CACHE_TTL_PAST_DATE_MS : CACHE_TTL_MS;
+                viajesSimplificadosCache.put(cacheKey, new CacheEntry(response, ttl));
+                log.debug("💾 [DriverOrdersService] Viajes simplificados en caché: {} - {} viajes (TTL {} min)",
+                    cacheKey, response.getTrips().size(), ttl / 60000);
             }
-            
-            logTiempoTotal("obtenerViajesSimplificadosPorFecha", startTime, 
+            logTiempoTotal("obtenerViajesSimplificadosPorFecha", startTime,
                 response != null && response.getTrips() != null ? response.getTrips().size() : 0);
-            
-            return response;
+            return response != null ? response : crearRespuestaVaciaViajesSimplificados();
         } catch (Exception e) {
-            log.error("❌ [DriverOrdersService] Error obteniendo viajes simplificados por fecha para driver_id {} y fecha {} (después de {} ms): {}", 
+            log.error("❌ [DriverOrdersService] Error viajes simplificados por fecha driver_id={} fecha={} ({} ms): {}",
                 driverId, fecha, System.currentTimeMillis() - startTime, e.getMessage(), e);
             return crearRespuestaVaciaViajesSimplificados();
         }
@@ -444,6 +445,10 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
     // ==================== PRIVATE METHODS: SIMPLIFIED TRIPS ====================
     
     private DriverTripsSimplifiedResponse obtenerViajesSimplificados(String driverId, String dateFrom, String dateTo) {
+        return obtenerViajesSimplificados(driverId, dateFrom, dateTo, SIMPLIFIED_TRIPS_THROTTLE_DELAY_MS);
+    }
+    
+    private DriverTripsSimplifiedResponse obtenerViajesSimplificados(String driverId, String dateFrom, String dateTo, long throttleMs) {
         long startTime = System.currentTimeMillis();
         try {
             log.debug("⚡ [DriverOrdersService] Obteniendo viajes simplificados para driver_id: {}", driverId);
@@ -451,7 +456,9 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
             Map<String, Object> requestBody = crearRequestBody(driverId, dateFrom, dateTo, null, true);
             String requestBodyJson = objectMapper.writeValueAsString(requestBody);
             
-            esperarSiEsNecesario(SIMPLIFIED_TRIPS_THROTTLE_DELAY_MS);
+            if (throttleMs > 0) {
+                esperarSiEsNecesario(throttleMs);
+            }
             
             ResponseEntity<String> response = ejecutarConRetryCookies(
                 YANGO_ORDERS_API_URL,
@@ -467,8 +474,7 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
             }
             
             JsonNode jsonResponse = objectMapper.readTree(response.getBody());
-            List<OrderInfoResponse> orders = procesarViajesCompletos(jsonResponse);
-            List<DriverTripsSimplifiedResponse.TripSimplified> tripsSimplified = convertirAViajesSimplificados(orders);
+            List<DriverTripsSimplifiedResponse.TripSimplified> tripsSimplified = extraerViajesSimplificadosDesdeJson(jsonResponse);
             
             logTiempoTotal("obtenerViajesSimplificados", startTime, tripsSimplified.size());
             
@@ -482,6 +488,31 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
                 System.currentTimeMillis() - startTime, e.getMessage(), e);
             return crearRespuestaVaciaViajesSimplificados();
         }
+    }
+    
+    /** Extrae solo los campos necesarios para TripSimplified desde el JSON (sin construir OrderInfoResponse). */
+    private List<DriverTripsSimplifiedResponse.TripSimplified> extraerViajesSimplificadosDesdeJson(JsonNode jsonResponse) {
+        JsonNode ordersNode = jsonResponse.get("orders");
+        if (ordersNode == null || !ordersNode.isArray()) {
+            return new ArrayList<>(0);
+        }
+        int size = ordersNode.size();
+        List<DriverTripsSimplifiedResponse.TripSimplified> out = new ArrayList<>(size);
+        for (JsonNode orderNode : ordersNode) {
+            String status = obtenerTexto(orderNode, "status");
+            if (!STATUS_COMPLETE.equalsIgnoreCase(status)) {
+                continue;
+            }
+            DriverTripsSimplifiedResponse.TripSimplified trip = DriverTripsSimplifiedResponse.TripSimplified.builder()
+                .status(status)
+                .shortId(obtenerLong(orderNode, "short_id"))
+                .id(obtenerTexto(orderNode, "id"))
+                .endedAt(convertirHoraAPeru(obtenerTexto(orderNode, "ended_at")))
+                .bookedAt(convertirHoraAPeru(obtenerTexto(orderNode, "booked_at")))
+                .build();
+            out.add(trip);
+        }
+        return out;
     }
     
     private List<DriverTripsSimplifiedResponse.TripSimplified> convertirAViajesSimplificados(
@@ -681,9 +712,9 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
     
     private void logCacheHit(long startTime, CacheEntry cached) {
         long totalTime = System.currentTimeMillis() - startTime;
-        log.info("💾 [DriverOrdersService] Viajes simplificados obtenidos desde CACHÉ: {} ms ({:.2f} seg) - {} viajes", 
-            totalTime, String.format("%.2f", totalTime / 1000.0), 
-            cached.response.getTrips() != null ? cached.response.getTrips().size() : 0);
+        int numViajes = cached.response.getTrips() != null ? cached.response.getTrips().size() : 0;
+        log.info("💾 [DriverOrdersService] Viajes simplificados obtenidos desde CACHÉ: {} ms ({} seg) - {} viajes",
+            totalTime, String.format("%.2f", totalTime / 1000.0), numViajes);
     }
     
     private void logTiempoTotal(String metodo, long startTime) {
@@ -692,12 +723,11 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
     
     private void logTiempoTotal(String metodo, long startTime, Integer size) {
         long totalTime = System.currentTimeMillis() - startTime;
+        String seg = String.format("%.2f", totalTime / 1000.0);
         if (size != null) {
-            log.info("⏱️ [DriverOrdersService] TIEMPO TOTAL {}: {} ms ({:.2f} seg) - {} viajes", 
-                metodo, totalTime, String.format("%.2f", totalTime / 1000.0), size);
+            log.info("⏱️ [DriverOrdersService] TIEMPO TOTAL {}: {} ms ({} seg) - {} viajes", metodo, totalTime, seg, size);
         } else {
-            log.info("⏱️ [DriverOrdersService] TIEMPO TOTAL {}: {} ms ({:.2f} seg)", 
-                metodo, totalTime, String.format("%.2f", totalTime / 1000.0));
+            log.info("⏱️ [DriverOrdersService] TIEMPO TOTAL {}: {} ms ({} seg)", metodo, totalTime, seg);
         }
     }
     
@@ -706,14 +736,20 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
     private static class CacheEntry {
         final DriverTripsSimplifiedResponse response;
         final long timestamp;
+        final long ttlMs;
         
         CacheEntry(DriverTripsSimplifiedResponse response) {
+            this(response, CACHE_TTL_MS);
+        }
+        
+        CacheEntry(DriverTripsSimplifiedResponse response, long ttlMs) {
             this.response = response;
             this.timestamp = System.currentTimeMillis();
+            this.ttlMs = ttlMs;
         }
         
         boolean isExpired() {
-            return System.currentTimeMillis() - timestamp > CACHE_TTL_MS;
+            return System.currentTimeMillis() - timestamp > ttlMs;
         }
     }
     

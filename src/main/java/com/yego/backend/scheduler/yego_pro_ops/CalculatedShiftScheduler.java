@@ -26,23 +26,23 @@ public class CalculatedShiftScheduler {
     
     private static final ZoneId ZONE_UTC_MINUS_5 = ZoneId.of("America/Lima");
 
-    /**
+/**
      * Scheduler para calcular y guardar las horas de turno del día anterior
-     * Se ejecuta todos los días a las 5:00 AM para procesar el día anterior
-     * Cron: 0 0 5 * * * (segundo=0, minuto=0, hora=5, día=*, mes=*, día_semana=*)
-     * 
+     * Se ejecuta todos los días a la 1:20 AM (America/Lima) para procesar el día anterior
+     * Cron: 0 20 1 * * * (segundo=0, minuto=20, hora=1)
+     *
      * Este scheduler procesa TODOS los conductores uno por uno:
      * - Calcula turnos diurnos y nocturnos del día anterior
      * - Guarda los turnos calculados automáticamente
      * - Omite conductores que ya tienen turnos manuales registrados
      * - Incluye delay entre conductores para evitar saturar la API
      */
-    @Scheduled(cron = "0 0 9 * * *", zone = "America/Lima")
+    @Scheduled(cron = "0 29 13 * * *", zone = "America/Lima")
     public void calcularHorasTurnoDiaAnterior() {
         LocalDateTime ahora = LocalDateTime.now(ZONE_UTC_MINUS_5);
         LocalDate fechaAnterior = ahora.toLocalDate().minusDays(1);
         
-        log.info("⏰ [CalculatedShiftScheduler] ⏰⏰⏰ SCHEDULER DIARIO EJECUTÁNDOSE A LAS 5:00 AM - {} ⏰⏰⏰", ahora);
+        log.info("⏰ [CalculatedShiftScheduler] ⏰⏰⏰ SCHEDULER DIARIO EJECUTÁNDOSE A LA 1:20 - {} ⏰⏰⏰", ahora);
         log.info("📅 [CalculatedShiftScheduler] Procesando turnos del día anterior: {}", fechaAnterior);
         
         try {
@@ -61,12 +61,11 @@ public class CalculatedShiftScheduler {
     }
 
     /**
-     * Scheduler para actualizar conductores con status "in_order"
-     * Se ejecuta cada 5 minutos (300000 ms) para mantener datos actualizados sin saturar la API
-     * También actualiza automáticamente los viajes simplificados de estos conductores
-     * fixedDelay: 300000 ms = 5 minutos (300 segundos)
+     * Scheduler para actualizar conductores con status "in_order" y enviarlos por WebSocket.
+     * Intervalo configurable en application.properties (yego.pro-ops.conductores-en-orden-ws.*).
+     * Solo corre si hay al menos un usuario con acceso a pro-ops conectado por WebSocket.
      */
-    @Scheduled(fixedDelay = 800000, initialDelay = 60000, zone = "America/Lima")
+    @Scheduled(initialDelayString = "${yego.pro-ops.conductores-en-orden-ws.initial-delay-ms:60000}", fixedDelayString = "${yego.pro-ops.conductores-en-orden-ws.fixed-delay-ms:300000}", zone = "America/Lima")
     public void actualizarConductoresEnOrden() {
         LocalDateTime ahora = LocalDateTime.now(ZONE_UTC_MINUS_5);
         log.info("⏰ [CalculatedShiftScheduler] ⏰⏰⏰ SCHEDULER WEBSOCKET EJECUTÁNDOSE - {} ⏰⏰⏰", ahora);

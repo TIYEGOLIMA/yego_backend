@@ -76,8 +76,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT DISTINCT u FROM User u JOIN FETCH u.role WHERE u.id IN :ids")
     List<User> findByIdInWithRole(@Param("ids") List<Long> ids);
 
-    @Query("SELECT u.id, u.name, u.lastName FROM User u WHERE u.active = true AND u.areaId IS NULL ORDER BY u.name ASC")
-    List<Object[]> findActiveUsersWithoutAreaForDropdown();
+    /** Una sola consulta: usuarios activos sin área, excluyendo quienes ya son responsables; incluye opcionalmente un managerId (ej. responsable del área en edición). */
+    @Query("SELECT u.id, u.name, u.lastName FROM User u WHERE u.active = true AND u.areaId IS NULL "
+           + "AND (u.id NOT IN (SELECT a.managerId FROM Area a WHERE a.managerId IS NOT NULL) "
+           + "OR (:includeManagerId IS NOT NULL AND u.id = :includeManagerId)) ORDER BY u.name ASC")
+    List<Object[]> findActiveUsersForResponsableDropdown(@Param("includeManagerId") Long includeManagerId);
+
+    /** Proyección para colaboradores de un área (evita cargar entidades completas). */
+    @Query("SELECT u.id, u.name, u.lastName, u.email, r.name FROM User u JOIN u.role r WHERE u.areaId = :areaId ORDER BY u.name ASC")
+    List<Object[]> findColaboradoresProjectionByAreaId(@Param("areaId") Long areaId);
 
     // --- Reportes y estadísticas ---
 
