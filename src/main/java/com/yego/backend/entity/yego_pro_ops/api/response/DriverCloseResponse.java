@@ -71,6 +71,9 @@ public class DriverCloseResponse {
     @JsonProperty("resta")
     private BigDecimal resta;
 
+    @JsonProperty("placa")
+    private String placa;
+
     @JsonProperty("odometroInicial")
     private Integer odometroInicial;
 

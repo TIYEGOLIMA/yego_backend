@@ -63,6 +63,9 @@ public class DriverCloseRequest {
     @JsonProperty("resta")
     private Double resta;
 
+    @JsonProperty("placa")
+    private String placa;
+
     @JsonProperty("odometroInicial")
     private Integer odometroInicial;
 

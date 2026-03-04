@@ -70,6 +70,9 @@ public class DriverClose {
     @Column(name = "resta", precision = 10, scale = 2)
     private BigDecimal resta;
 
+    @Column(name = "placa", length = 20)
+    private String placa;
+
     @Column(name = "odometro_inicial")
     private Integer odometroInicial;
 

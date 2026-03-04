@@ -37,6 +37,9 @@ public class DriverPaymentSummaryResponse {
         @JsonProperty("telefono")
         private String telefono; // Teléfono del conductor
         
+        @JsonProperty("placa")
+        private String placa; // Placa del vehículo (del cierre/liquidación si existe)
+        
         @JsonProperty("monto_total_pagar")
         private Double montoTotalPagar; // Suma de monto_total (liquidación/efectivo) de turnos no pagados
         

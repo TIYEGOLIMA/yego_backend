@@ -114,6 +114,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .totalIngresos(toBigDecimal(request.getTotalIngresos()))
             .totalGastos(toBigDecimal(request.getTotalGastos()))
             .resta(toBigDecimal(request.getResta()))
+            .placa(request.getPlaca())
             .odometroInicial(request.getOdometroInicial())
             .odometroFinal(request.getOdometroFinal())
             .diferenciaOdometro(request.getDiferenciaOdometro())
@@ -167,6 +168,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         cierreExistente.setTotalIngresos(toBigDecimal(request.getTotalIngresos()));
         cierreExistente.setTotalGastos(toBigDecimal(request.getTotalGastos()));
         cierreExistente.setResta(toBigDecimal(request.getResta()));
+        cierreExistente.setPlaca(request.getPlaca());
         cierreExistente.setOdometroInicial(request.getOdometroInicial());
         cierreExistente.setOdometroFinal(request.getOdometroFinal());
         cierreExistente.setDiferenciaOdometro(request.getDiferenciaOdometro());
@@ -222,6 +224,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .totalIngresos(cierre.getTotalIngresos())
             .totalGastos(cierre.getTotalGastos())
             .resta(cierre.getResta())
+            .placa(cierre.getPlaca())
             .odometroInicial(cierre.getOdometroInicial())
             .odometroFinal(cierre.getOdometroFinal())
             .diferenciaOdometro(cierre.getDiferenciaOdometro())

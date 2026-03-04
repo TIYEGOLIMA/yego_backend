@@ -8,6 +8,7 @@ import com.yego.backend.entity.yego_pro_ops.api.response.PaidShiftsResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.OrderInfoResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
 import com.yego.backend.repository.yego_pro_ops.CalculatedShiftRepository;
+import com.yego.backend.repository.yego_pro_ops.DriverCloseRepository;
 import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
 import com.yego.backend.service.yego_pro_ops.FleetDriverService;
@@ -71,6 +72,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     private static final ConcurrentHashMap<String, CachedResponse<PaidShiftsResponse>> turnosPagadosCache = new ConcurrentHashMap<>();
     
     private final CalculatedShiftRepository calculatedShiftRepository;
+    private final DriverCloseRepository driverCloseRepository;
     private final DriverOrdersService driverOrdersService;
     private final FleetDriverService fleetDriverService;
     
@@ -78,9 +80,11 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     
     public CalculatedShiftServiceImpl(
             CalculatedShiftRepository calculatedShiftRepository,
+            DriverCloseRepository driverCloseRepository,
             @Lazy DriverOrdersService driverOrdersService,
             FleetDriverService fleetDriverService) {
         this.calculatedShiftRepository = calculatedShiftRepository;
+        this.driverCloseRepository = driverCloseRepository;
         this.driverOrdersService = driverOrdersService;
         this.fleetDriverService = fleetDriverService;
         log.info("✅ [CalculatedShiftService] Inicializado correctamente - Zona horaria: {}, Dependencias: DriverOrdersService (Lazy), FleetDriverService", 
@@ -250,7 +254,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             Map<String, List<CalculatedShift>> turnosPorConductor = agruparTurnosPorConductor(turnosPorFecha);
             Map<String, ConductorInfo> infoConductores = obtenerInfoConductores();
             List<DriverPaymentSummaryResponse.ConductorPaymentInfo> conductoresInfo =
-                construirInfoConductores(turnosPorConductor, infoConductores);
+                construirInfoConductores(turnosPorConductor, infoConductores, fechaLocal);
             log.info("✅ [CalculatedShiftService] Resumen de pagos generado para {} conductores en fecha {}",
                 conductoresInfo.size(), fechaLocal);
             DriverPaymentSummaryResponse response = DriverPaymentSummaryResponse.builder()
@@ -468,17 +472,19 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     
     private List<DriverPaymentSummaryResponse.ConductorPaymentInfo> construirInfoConductores(
             Map<String, List<CalculatedShift>> turnosPorConductor,
-            Map<String, ConductorInfo> infoConductores) {
+            Map<String, ConductorInfo> infoConductores,
+            LocalDate fecha) {
         
         return turnosPorConductor.entrySet().stream()
-            .map(entry -> construirInfoConductor(entry.getKey(), entry.getValue(), infoConductores))
+            .map(entry -> construirInfoConductor(entry.getKey(), entry.getValue(), infoConductores, fecha))
             .collect(Collectors.toList());
     }
     
     private DriverPaymentSummaryResponse.ConductorPaymentInfo construirInfoConductor(
             String driverId,
             List<CalculatedShift> turnos,
-            Map<String, ConductorInfo> infoConductores) {
+            Map<String, ConductorInfo> infoConductores,
+            LocalDate fecha) {
         
         Double montoTotalPagar = calcularMontoTotalPagar(turnos);
         Double produccionTotal = sumarProduccionTotal(turnos);
@@ -489,11 +495,18 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         Integer cantidadViajesTotal = calcularCantidadViajesTotal(turnos);
         Double viajesPorHoraPromedio = calcularViajesPorHoraPromedio(turnos);
         
+        String placa = null;
+        var cierreOpt = driverCloseRepository.findFirstByDriverIdAndFechaOrderByIdDesc(driverId, fecha);
+        if (cierreOpt.isPresent()) {
+            placa = cierreOpt.get().getPlaca();
+        }
+        
         return DriverPaymentSummaryResponse.ConductorPaymentInfo.builder()
             .driverId(driverId)
             .avatarUrl(info.avatarUrl)
             .nombre(info.nombre)
             .telefono(info.telefono)
+            .placa(placa)
             .montoTotalPagar(montoTotalPagar)
             .produccionTotal(produccionTotal)
             .comisionesServicio(comisionesServicio)
