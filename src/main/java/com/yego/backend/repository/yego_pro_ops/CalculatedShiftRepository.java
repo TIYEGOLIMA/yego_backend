@@ -37,6 +37,10 @@ public interface CalculatedShiftRepository extends JpaRepository<CalculatedShift
     @Query("UPDATE CalculatedShift c SET c.pagado = true WHERE c.id IN :ids")
     int markAsPaidByIds(@Param("ids") List<Long> ids);
 
+    @Modifying(clearAutomatically = true)
+    @Query("UPDATE CalculatedShift c SET c.esManual = true WHERE c.driverId = :driverId AND c.fecha = :fecha")
+    int markAsManualByDriverIdAndFecha(@Param("driverId") String driverId, @Param("fecha") LocalDate fecha);
+
     @Query("SELECT c.tipoTurno FROM CalculatedShift c WHERE c.id IN :ids")
     List<CalculatedShift.TipoTurno> findTipoTurnoByIdIn(@Param("ids") List<Long> ids);
 }

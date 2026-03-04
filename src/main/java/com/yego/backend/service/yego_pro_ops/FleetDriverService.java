@@ -38,13 +38,5 @@ public interface FleetDriverService {
      */
     DriverSimpleResponse obtenerListaConductoresSimplificada();
     
-    /**
-     * 📋 ENDPOINT: Buscar conductores por nombre
-     * Busca conductores por nombre (búsqueda parcial) y filtra los que ya tienen turnos manuales del día
-     * @param nombre Nombre o parte del nombre a buscar
-     * @param fecha Fecha para verificar turnos manuales (formato: "YYYY-MM-DD")
-     * @return Lista de conductores filtrados o mensaje de error si ya está procesado
-     */
-    DriverSimpleResponse buscarConductoresPorNombre(String nombre, String fecha);
-}
+    }
 

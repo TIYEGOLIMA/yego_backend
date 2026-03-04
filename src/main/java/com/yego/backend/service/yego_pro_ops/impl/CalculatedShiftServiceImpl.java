@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -96,14 +97,16 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                 return;
             }
             
-            log.info("🕐 [CalculatedShiftService] Calculando horas de turno para driver_id: {}, fecha: {}", driverId, fecha);
+            log.debug("🕐 [CalculatedShiftService] Calculando horas de turno para driver_id: {}, fecha: {}", driverId, fecha);
             
-            ViajesDelDia viajesDelDia = obtenerViajesDelDia(driverId, fecha);
-            
-            // Obtener primero los viajes nocturnos del día actual para decidir si consultar el día anterior
             LocalDate fechaSiguiente = fecha.plusDays(1);
-            List<OrderInfoResponse> viajesNocturnosActual = obtenerViajesNocturnosRango(
-                driverId, fecha, fechaSiguiente, "día actual");
+            // Ejecutar en paralelo las dos llamadas externas (API viajes día + viajes nocturnos actual)
+            CompletableFuture<ViajesDelDia> futureViajesDia = CompletableFuture.supplyAsync(() -> obtenerViajesDelDia(driverId, fecha));
+            CompletableFuture<List<OrderInfoResponse>> futureNocturnosActual = CompletableFuture.supplyAsync(
+                () -> obtenerViajesNocturnosRango(driverId, fecha, fechaSiguiente, "día actual"));
+            
+            ViajesDelDia viajesDelDia = futureViajesDia.join();
+            List<OrderInfoResponse> viajesNocturnosActual = futureNocturnosActual.join();
             
             // Decidir si consultar el día anterior basándose en viajes del día y viajes nocturnos del día actual
             boolean debeConsultarDiaAnterior = debeConsultarDiaAnterior(viajesDelDia, viajesNocturnosActual);
@@ -191,7 +194,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                 fechaAnterior, e.getMessage(), e);
         }
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public FechasConTiposTurnoResponse obtenerFechasConTiposTurno(String driverId) {
@@ -262,8 +265,9 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     }
     
     @Override
+    @Transactional
     public List<CalculatedShift> obtenerOCalcularTurnos(String driverId, String fecha) {
-        log.info("📋 [CalculatedShiftService] Obteniendo o calculando turnos para driver_id: {}, fecha: {}", driverId, fecha);
+        log.debug("📋 [CalculatedShiftService] Obteniendo o calculando turnos para driver_id: {}, fecha: {}", driverId, fecha);
         
         try {
             LocalDate fechaLocal = parsearFecha(fecha);
@@ -276,30 +280,22 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             List<CalculatedShift> turnosExistentes = calculatedShiftRepository.findByDriverIdAndFecha(driverId, fechaLocal);
             
             if (turnosExistentes.isEmpty()) {
-                log.info("🔄 [CalculatedShiftService] No se encontraron turnos calculados para driver_id: {} y fecha: {}. Calculando automáticamente...", 
-                    driverId, fechaLocal);
+                log.debug("🔄 [CalculatedShiftService] No hay turnos para driver_id: {} y fecha: {}. Calculando...", driverId, fechaLocal);
                 
                 // Calcular turnos automáticamente
                 calcularYGuardarHorasTurno(driverId, fechaLocal);
                 
-                // Re-buscar los turnos después de calcularlos
+                // Marcar como manuales con un solo UPDATE (evita N selects/updates)
+                calculatedShiftRepository.markAsManualByDriverIdAndFecha(driverId, fechaLocal);
                 turnosExistentes = calculatedShiftRepository.findByDriverIdAndFecha(driverId, fechaLocal);
                 
                 if (turnosExistentes.isEmpty()) {
                     log.warn("⚠️ [CalculatedShiftService] No se encontraron turnos después de calcular. El conductor puede no tener viajes para esta fecha.");
                     return new ArrayList<>();
                 }
-                
-                // Marcar los turnos como manuales (calculados manualmente, no por el scheduler)
-                for (CalculatedShift turno : turnosExistentes) {
-                    turno.setEsManual(true);
-                }
-                calculatedShiftRepository.saveAll(turnosExistentes);
-                log.info("✅ [CalculatedShiftService] Turnos calculados exitosamente y marcados como manuales. Se encontraron {} turno(s) para driver_id: {} y fecha: {}", 
-                    turnosExistentes.size(), driverId, fechaLocal);
+                log.debug("✅ [CalculatedShiftService] Turnos calculados: {} para driver_id: {}, fecha: {}", turnosExistentes.size(), driverId, fechaLocal);
             } else {
-                log.info("✅ [CalculatedShiftService] Se encontraron {} turno(s) existente(s) para driver_id: {} y fecha: {}", 
-                    turnosExistentes.size(), driverId, fechaLocal);
+                log.debug("✅ [CalculatedShiftService] Turnos existentes: {} para driver_id: {}, fecha: {}", turnosExistentes.size(), driverId, fechaLocal);
             }
             
             return turnosExistentes;
@@ -1224,7 +1220,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         // Solo guardar turno nocturno del día actual si NO se guardó el del día anterior y NO se unificó con el diurno
         // Porque si ya se guardó el del día anterior (con fecha del día actual), no necesitamos el del día actual
         if (!seGuardoTurnoNocturnoAnterior && !debenUnificarseDiurnoYNocturnoActual) {
-            guardarTurnoNocturnoActual(driverId, fecha, viajesNocturnos);
+            guardarTurnoNocturnoActual(driverId, fecha, viajesDelDia, viajesNocturnos);
         } else {
             if (seGuardoTurnoNocturnoAnterior) {
                 log.info("⏭️ [CalculatedShiftService] Turno nocturno del día anterior ya guardado con fecha {}. Omitiendo turno nocturno del día actual para evitar duplicados.", fecha);
@@ -1368,19 +1364,24 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         }
     }
     
-    private void guardarTurnoNocturnoActual(String driverId, LocalDate fecha, ViajesNocturnos viajesNocturnos) {
+    private void guardarTurnoNocturnoActual(String driverId, LocalDate fecha, ViajesDelDia viajesDelDia, ViajesNocturnos viajesNocturnos) {
         if (viajesNocturnos.viajesNocturnosActual.isEmpty()) {
             log.info("⏭️ [CalculatedShiftService] No hay viajes nocturnos del día actual para guardar - driver_id: {}, fecha: {}", 
                 driverId, fecha);
             return;
         }
         LocalDate fechaAGuardar = fecha;
-        if (viajesNocturnos.viajesNocturnosAnterior.isEmpty()) {
+        // Si no hubo viajes el día que estamos calculando (ni diurnos ni madrugada) y el primer viaje del turno
+        // nocturno es en madrugada (00:00-04:59 del día siguiente), NO guardar turno aquí: ese conductor no
+        // cuenta para la liquidación del día actual, y el turno se creará cuando el job procese el día siguiente
+        // (así no entra al 4 de marzo "antes de tiempo" — ese día aún puede estar en curso y el conductor haciendo viajes).
+        boolean noHuboViajesEnElDia = (viajesDelDia.viajesDiurnos.isEmpty() && viajesDelDia.viajesMadrugada.isEmpty());
+        if (viajesNocturnos.viajesNocturnosAnterior.isEmpty() && noHuboViajesEnElDia) {
             LocalDateTime primerViaje = obtenerPrimerViaje(viajesNocturnos.viajesNocturnosActual);
             if (primerViaje != null && primerViaje.getHour() < HORA_FIN_NOCTURNO) {
-                fechaAGuardar = viajesNocturnos.fechaSiguiente;
-                log.info("🌙 [CalculatedShiftService] No hubo viajes el día {} para este conductor (solo madrugada del día siguiente). No se considera para liquidación del {}; turno se asigna a {}",
-                    fecha, fecha, fechaAGuardar);
+                log.info("🌙 [CalculatedShiftService] No hubo viajes el día {} para este conductor (solo madrugada del {}). No se guarda turno aquí; se creará cuando se procese {}.",
+                    fecha, viajesNocturnos.fechaSiguiente, viajesNocturnos.fechaSiguiente);
+                return;
             }
         }
         if (fechaAGuardar.equals(fecha)) {
@@ -2093,12 +2094,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     
     private void guardarTurno(CalculatedShift turno, String driverId, LocalDate fecha, 
                              CalculatedShift.TipoTurno tipoTurno, HorasTurno horasTurno, Double montoTotal) {
-        CalculatedShift saved = calculatedShiftRepository.save(turno);
-        calculatedShiftRepository.flush();
-        
-        log.info("✅ [CalculatedShiftService] Turno {} guardado - ID: {}, driver_id: {}, fecha: {}, inicio: {}, fin: {}, duracion: {} min, cantidad_viajes: {}, monto: {} soles, pagado: {}", 
-            tipoTurno, saved.getId(), driverId, fecha, horasTurno.horaInicio, horasTurno.horaFin, 
-            horasTurno.duracionMinutos, saved.getCantidadViajes(), montoTotal, saved.getPagado());
+        calculatedShiftRepository.save(turno);
+        log.debug("✅ [CalculatedShiftService] Turno {} guardado - driver_id: {}, fecha: {}", tipoTurno, driverId, fecha);
     }
     
     // ==================== PRIVATE METHODS: BATCH PROCESSING ====================

@@ -5,8 +5,6 @@ import com.yego.backend.entity.yego_pro_ops.api.request.DriverListRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverSimpleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
-import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
-import com.yego.backend.repository.yego_pro_ops.CalculatedShiftRepository;
 import com.yego.backend.service.yego_pro_ops.FleetDriverService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -43,25 +41,26 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     private static final String EMPTY_STRING = "";
     /** Caché de respuesta conductores en orden: TTL 45 segundos para evitar ~21s por request repetido */
     private static final long DRIVERS_IN_ORDER_CACHE_TTL_MS = 45_000L;
+    /** Caché lista conductores GET /drivers: TTL 90 segundos para evitar ~3s por request repetido */
+    private static final long DRIVERS_LIST_SIMPLE_CACHE_TTL_MS = 90_000L;
 
     private final com.yego.backend.service.yego_pro_ops.DriverOrdersService driverOrdersService;
-    private final CalculatedShiftRepository calculatedShiftRepository;
     private final ExecutorService executorService = Executors.newFixedThreadPool(20);
 
     /** Caché (page, limit) -> { response, timestamp } para obtenerConductoresEnOrden */
     private final Map<String, CachedDriversInOrder> driversInOrderCache = new ConcurrentHashMap<>();
     /** Caché lista completa (driverIds + balanceMap) para no repetir Paso 1 al cambiar de página */
     private volatile CachedDriversList driversListCache = null;
+    /** Caché lista completa desde Yango (workRuleIds==null) para GET /drivers */
+    private volatile CachedDriverListRaw driverListRawCache = null;
 
     public FleetDriverServiceImpl(
             RestTemplate restTemplate,
             @Qualifier("yangoProxyRestTemplate") RestTemplate yangoProxyRestTemplate,
             com.yego.backend.config.yego_pro_ops.ProxyConfig proxyConfig,
-            com.yego.backend.service.yego_pro_ops.DriverOrdersService driverOrdersService,
-            CalculatedShiftRepository calculatedShiftRepository) {
+            com.yego.backend.service.yego_pro_ops.DriverOrdersService driverOrdersService) {
         super(restTemplate, yangoProxyRestTemplate, proxyConfig);
         this.driverOrdersService = driverOrdersService;
-        this.calculatedShiftRepository = calculatedShiftRepository;
         log.info("✅ [FleetDriverService] Inicializado correctamente - ExecutorService: {} threads", 
             executorService.getClass().getSimpleName());
     }
@@ -83,6 +82,15 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     
     @Override
     public DriverListResponse obtenerListaConductores(List<String> workRuleIds) {
+        if (workRuleIds == null) {
+            long now = System.currentTimeMillis();
+            CachedDriverListRaw cached = driverListRawCache;
+            if (cached != null && (now - cached.timestampMs) < DRIVERS_LIST_SIMPLE_CACHE_TTL_MS) {
+                log.debug("📋 [FleetDriverService] Lista conductores desde caché ({} contractors)", 
+                    cached.response.getContractors() != null ? cached.response.getContractors().size() : 0);
+                return cached.response;
+            }
+        }
         try {
             DriverListRequest requestBody = crearDriverListRequest(workRuleIds);
             String requestJson = objectMapper.writeValueAsString(requestBody);
@@ -96,7 +104,11 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 JsonNode jsonResponse = objectMapper.readTree(response.getBody());
-                return transformarAListaConductores(jsonResponse);
+                DriverListResponse result = transformarAListaConductores(jsonResponse);
+                if (workRuleIds == null && result != null) {
+                    driverListRawCache = new CachedDriverListRaw(result, System.currentTimeMillis());
+                }
+                return result;
             }
             
             return crearDriverListResponseVacio();
@@ -111,17 +123,16 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     @Override
     public DriverSimpleResponse obtenerListaConductoresSimplificada() {
         log.info("📋 [FleetDriverService] Obteniendo lista de conductores simplificada");
-        
         try {
             DriverListResponse driverList = obtenerListaConductores(null);
-            
+
             if (driverList == null || driverList.getContractors() == null) {
                 log.warn("⚠️ [FleetDriverService] No se encontraron conductores");
                 return DriverSimpleResponse.builder()
                     .conductores(new ArrayList<>())
-            .build();
-    }
-    
+                    .build();
+            }
+
             List<DriverSimpleResponse.DriverInfo> conductores = driverList.getContractors().stream()
                 .filter(contractor -> contractor.getId() != null && !contractor.getId().isEmpty())
                 .map(contractor -> DriverSimpleResponse.DriverInfo.builder()
@@ -131,7 +142,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
                     .avatarUrl(contractor.getAvatarUrl())
                     .build())
                 .collect(Collectors.toList());
-            
+
             log.info("✅ [FleetDriverService] Se encontraron {} conductores", conductores.size());
             return DriverSimpleResponse.builder()
                 .conductores(conductores)
@@ -142,88 +153,6 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
                 .conductores(new ArrayList<>())
                 .build();
         }
-    }
-
-    @Override
-    public DriverSimpleResponse buscarConductoresPorNombre(String nombre, String fecha) {
-        log.info("🔍 [FleetDriverService] Buscando conductores por nombre: '{}', fecha: {}", nombre, fecha);
-        
-        try {
-            LocalDate fechaLocal = LocalDate.parse(fecha, DATE_FORMATTER);
-            DriverListResponse driverList = obtenerListaConductores(null);
-            
-            if (driverList == null || driverList.getContractors() == null) {
-                log.warn("⚠️ [FleetDriverService] No se encontraron conductores");
-                return DriverSimpleResponse.builder()
-                    .conductores(new ArrayList<>())
-                    .mensaje("No se encontraron conductores")
-                    .build();
-            }
-            
-            String nombreBusqueda = nombre != null ? nombre.trim().toLowerCase() : "";
-            List<DriverSimpleResponse.DriverInfo> conductoresFiltrados = new ArrayList<>();
-            DriverListResponse.ContractorResponse conductorUnico = null;
-            
-            // Filtrar por nombre y verificar turnos manuales en un solo paso
-            for (DriverListResponse.ContractorResponse contractor : driverList.getContractors()) {
-                if (contractor.getId() == null || contractor.getId().isEmpty()) {
-                    continue;
-    }
-    
-                // Filtrar por nombre
-                String nombreCompleto = contractor.getFullName() != null 
-                    ? contractor.getFullName().toLowerCase() 
-                    : "";
-                if (!nombreBusqueda.isEmpty() && !nombreCompleto.contains(nombreBusqueda)) {
-                    continue;
-    }
-    
-                // Verificar turnos manuales
-                List<CalculatedShift> turnosManuales = calculatedShiftRepository
-                    .findByDriverIdAndFechaAndEsManual(contractor.getId(), fechaLocal);
-                
-                if (!turnosManuales.isEmpty()) {
-                    // Si es el único resultado, devolver mensaje de error
-                    if (conductorUnico == null && conductoresFiltrados.isEmpty()) {
-                        conductorUnico = contractor;
-        }
-                    log.debug("⚠️ [FleetDriverService] Conductor {} ya tiene turnos manuales - excluido", 
-                        contractor.getId());
-                    continue;
-                }
-                
-                // Agregar conductor válido
-                conductoresFiltrados.add(DriverSimpleResponse.DriverInfo.builder()
-                    .driverId(contractor.getId())
-                    .nombre(contractor.getFullName())
-                    .telefono(contractor.getPhone())
-                    .avatarUrl(contractor.getAvatarUrl())
-                    .build());
-            }
-            
-            // Si solo había un conductor y tiene turnos manuales, devolver mensaje de error
-            if (conductorUnico != null && conductoresFiltrados.isEmpty()) {
-                log.warn("⚠️ [FleetDriverService] Conductor {} ({}) ya procesado para {}", 
-                    conductorUnico.getId(), conductorUnico.getFullName(), fechaLocal);
-                return DriverSimpleResponse.builder()
-                    .conductores(new ArrayList<>())
-                    .mensaje("Conductor ya procesado para el día de hoy")
-                    .build();
-            }
-            
-            log.info("✅ [FleetDriverService] Se encontraron {} conductores que coinciden con '{}' y no tienen turnos manuales", 
-                conductoresFiltrados.size(), nombre);
-            
-            return DriverSimpleResponse.builder()
-                .conductores(conductoresFiltrados)
-                .build();
-        } catch (Exception e) {
-            log.error("❌ [FleetDriverService] Error buscando conductores por nombre: {}", e.getMessage(), e);
-            return DriverSimpleResponse.builder()
-                .conductores(new ArrayList<>())
-                .mensaje("Error al buscar conductores: " + e.getMessage())
-            .build();
-    }
     }
 
     private DriverListRequest crearDriverListRequest(List<String> workRuleIds) {
@@ -1053,7 +982,16 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             this.timestampMs = timestampMs;
         }
     }
-    
+
+    private static class CachedDriverListRaw {
+        final DriverListResponse response;
+        final long timestampMs;
+        CachedDriverListRaw(DriverListResponse response, long timestampMs) {
+            this.response = response;
+            this.timestampMs = timestampMs;
+        }
+    }
+
     private static class GpsDataResult {
         DriversInOrderResponse.SummaryDistance summaryDistance;
         Long totalActivityTime;

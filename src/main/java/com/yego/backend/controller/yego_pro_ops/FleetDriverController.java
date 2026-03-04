@@ -309,23 +309,7 @@ public class FleetDriverController {
      */
     @GetMapping("/drivers")
     public ResponseEntity<DriverSimpleResponse> obtenerListaConductores(
-            @RequestParam(required = false) String nombre,
             @RequestParam(required = false) String fecha) {
-        
-        // Si se proporciona nombre y fecha, buscar por nombre y filtrar por turnos manuales
-        if (nombre != null && !nombre.trim().isEmpty() && fecha != null && !fecha.trim().isEmpty()) {
-            log.info("🔍 [FleetDriverController] Buscando conductores por nombre: '{}', fecha: {}", nombre, fecha);
-            DriverSimpleResponse response = fleetDriverService.buscarConductoresPorNombre(nombre, fecha);
-            
-            // Si hay un mensaje de error, devolverlo
-            if (response.getMensaje() != null && !response.getMensaje().isEmpty()) {
-                return ResponseEntity.badRequest().body(response);
-            }
-            
-            return ResponseEntity.ok(response);
-        }
-        
-        // Si no se proporciona nombre, devolver lista completa
         log.info("📋 [FleetDriverController] Obteniendo lista de conductores");
         DriverSimpleResponse response = fleetDriverService.obtenerListaConductoresSimplificada();
         return ResponseEntity.ok(response);

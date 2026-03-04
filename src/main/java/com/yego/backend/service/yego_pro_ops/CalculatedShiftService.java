@@ -18,8 +18,8 @@ public interface CalculatedShiftService {
      * Procesa las horas de turno del día anterior para todos los conductores activos
      */
     void procesarHorasTurnoDiaAnterior();
-    
-    /**
+
+/**
      * 📋 VISTA: DetalleView
      * Obtiene las fechas únicas con sus tipos de turno para un conductor
      * @param driverId ID del conductor
