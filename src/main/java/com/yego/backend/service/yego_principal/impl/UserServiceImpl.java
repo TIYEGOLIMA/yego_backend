@@ -105,26 +105,28 @@ public class UserServiceImpl implements UserService {
         List<User> users = userRepository.findByActiveWithRole(true);
         List<Area> allAreas = areaRepository.findAll();
         Map<Long, Area> areaById = allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a));
-        Map<Long, Area> areaByManagerId = allAreas.stream()
+        Map<Long, List<Area>> areasByManagerId = allAreas.stream()
                 .filter(a -> a.getManagerId() != null)
-                .collect(Collectors.toMap(Area::getManagerId, a -> a, (a1, a2) -> a1));
+                .collect(Collectors.groupingBy(Area::getManagerId));
         return users.stream()
                 .filter(u -> !USER_IDS_EXCLUIDOS_LISTADO.contains(u.getId()))
-                .map(u -> toUsuarioResumenDto(u, areaById, areaByManagerId))
+                .map(u -> toUsuarioResumenDto(u, areaById, areasByManagerId))
                 .collect(Collectors.toList());
     }
 
-    private UsuarioResumenDto toUsuarioResumenDto(User u, Map<Long, Area> areaById, Map<Long, Area> areaByManagerId) {
+    private UsuarioResumenDto toUsuarioResumenDto(User u, Map<Long, Area> areaById, Map<Long, List<Area>> areasByManagerId) {
         String areaNombre = null;
         if (u.getAreaId() != null) {
             Area a = areaById.get(u.getAreaId());
             if (a != null) areaNombre = a.getName();
         }
         if (areaNombre == null) {
-            Area a = areaByManagerId.get(u.getId());
-            if (a != null) areaNombre = a.getName();
+            List<Area> areas = areasByManagerId.get(u.getId());
+            if (areas != null && !areas.isEmpty()) {
+                areaNombre = areas.stream().map(Area::getName).collect(Collectors.joining(", "));
+            }
         }
-        boolean esJefe = areaByManagerId.containsKey(u.getId());
+        boolean esJefe = areasByManagerId.containsKey(u.getId());
         return UsuarioResumenDto.builder()
                 .id(u.getId())
                 .username(u.getUsername())
@@ -157,9 +159,9 @@ public class UserServiceImpl implements UserService {
         // Una sola query de áreas (evita N+1)
         List<Area> allAreas = areaRepository.findAll();
         Map<Long, Area> areaById = allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a));
-        Map<Long, Area> areaByManagerId = allAreas.stream()
+        Map<Long, List<Area>> areasByManagerId = allAreas.stream()
                 .filter(a -> a.getManagerId() != null)
-                .collect(Collectors.toMap(Area::getManagerId, a -> a, (a1, a2) -> a1));
+                .collect(Collectors.groupingBy(Area::getManagerId));
 
         // Usuarios con rol en una sola query (JOIN FETCH evita N+1)
         List<User> allUsers;
@@ -187,7 +189,7 @@ public class UserServiceImpl implements UserService {
         List<User> pagedUsers = allUsers.subList(startIndex, endIndex);
 
         List<UserResponseCompleteDto> users = pagedUsers.stream()
-                .map(u -> mapToUserResponseCompleteDto(u, areaById, areaByManagerId))
+                .map(u -> mapToUserResponseCompleteDto(u, areaById, areasByManagerId))
                 .collect(Collectors.toList());
         
         log.info("Usuarios YEGO Principal obtenidos: {} de {} total", users.size(), totalElements);
@@ -549,8 +551,8 @@ public class UserServiceImpl implements UserService {
                 .build();
     }
     
-    /** Usa mapas pre-cargados para evitar N+1 (una sola query de áreas para toda la lista). */
-    private UserResponseCompleteDto mapToUserResponseCompleteDto(User user, Map<Long, Area> areaById, Map<Long, Area> areaByManagerId) {
+    /** Usa mapas pre-cargados para evitar N+1 (una sola query de áreas para toda la lista). Un usuario puede ser responsable de varias áreas. */
+    private UserResponseCompleteDto mapToUserResponseCompleteDto(User user, Map<Long, Area> areaById, Map<Long, List<Area>> areasByManagerId) {
         Long areaId = user.getAreaId();
         String areaNombre = null;
         Boolean areaEsResponsable = false;
@@ -560,11 +562,12 @@ public class UserServiceImpl implements UserService {
                 areaNombre = area.getName();
                 areaEsResponsable = area.getManagerId() != null && area.getManagerId().equals(user.getId());
             }
-        } else {
-            Area area = areaByManagerId.get(user.getId());
-            if (area != null) {
-                areaId = area.getId();
-                areaNombre = area.getName();
+        }
+        if (areaNombre == null) {
+            List<Area> areas = areasByManagerId.get(user.getId());
+            if (areas != null && !areas.isEmpty()) {
+                areaId = areas.get(0).getId();
+                areaNombre = areas.stream().map(Area::getName).collect(Collectors.joining(", "));
                 areaEsResponsable = true;
             }
         }
@@ -588,10 +591,10 @@ public class UserServiceImpl implements UserService {
     private UserResponseCompleteDto mapToUserResponseCompleteDto(User user) {
         List<Area> allAreas = areaRepository.findAll();
         Map<Long, Area> areaById = allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a));
-        Map<Long, Area> areaByManagerId = allAreas.stream()
+        Map<Long, List<Area>> areasByManagerId = allAreas.stream()
                 .filter(a -> a.getManagerId() != null)
-                .collect(Collectors.toMap(Area::getManagerId, a -> a, (a1, a2) -> a1));
-        return mapToUserResponseCompleteDto(user, areaById, areaByManagerId);
+                .collect(Collectors.groupingBy(Area::getManagerId));
+        return mapToUserResponseCompleteDto(user, areaById, areasByManagerId);
     }
     
     /**

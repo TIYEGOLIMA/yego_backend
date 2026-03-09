@@ -627,7 +627,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     /**
      * Obtener usuarios para lista de asistencias:
      * - SUPERADMIN y ADMIN: ven todos los usuarios.
-     * - Si es jefe de un área: solo sus colaboradores de esa área.
+     * - Si es jefe de una o más áreas: colaboradores de todas sus áreas (sin duplicados).
      * - Resto: lista vacía.
      */
     @Override
@@ -646,20 +646,31 @@ public class AttendanceServiceImpl implements AttendanceService {
             return new ArrayList<>();
         }
 
-        Area area = areasComoJefe.get(0);
-        // Caso especial: jefe del área "Administración" Y rol "Administración" → ve todos los usuarios en la lista de asistencia
-        boolean areaEsAdministracion = area.getName() != null
-                && ("Administración".equalsIgnoreCase(area.getName().trim()) || "Administracion".equalsIgnoreCase(area.getName().trim()));
+        // Caso especial: jefe del área "Administración" Y rol "Administración" → ve todos los usuarios
         boolean rolEsAdministracion = userRole != null
                 && ("Administración".equalsIgnoreCase(userRole.trim()) || "Administracion".equalsIgnoreCase(userRole.trim()));
-        if (areaEsAdministracion && rolEsAdministracion) {
+        boolean algunaAreaEsAdministracion = areasComoJefe.stream().anyMatch(a ->
+                a.getName() != null && ("Administración".equalsIgnoreCase(a.getName().trim()) || "Administracion".equalsIgnoreCase(a.getName().trim())));
+        if (algunaAreaEsAdministracion && rolEsAdministracion) {
             log.info("🔓 [AttendanceService] Jefe del área Administración con rol Administración - listando todos los usuarios");
             List<Object[]> usersData = attendanceRepository.findAllUsers();
             return mapearUsuariosParaLista(usersData);
         }
-        log.info("👔 [AttendanceService] Usuario es jefe del área: {} - listando solo colaboradores", area.getName());
-        List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
-        return mapearUsuariosParaLista(usersData);
+
+        // Jefe de una o más áreas: unir colaboradores de todas sus áreas (sin duplicados por id)
+        java.util.Set<Long> idsVistos = new java.util.HashSet<>();
+        List<Object[]> todosLosRows = new ArrayList<>();
+        for (Area area : areasComoJefe) {
+            List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
+            for (Object[] row : usersData) {
+                Long id = ((Number) row[0]).longValue();
+                if (idsVistos.add(id)) {
+                    todosLosRows.add(row);
+                }
+            }
+        }
+        log.info("👔 [AttendanceService] Usuario es jefe de {} área(s) - listando {} colaboradores en total", areasComoJefe.size(), todosLosRows.size());
+        return mapearUsuariosParaLista(todosLosRows);
     }
 
     private List<Map<String, Object>> mapearUsuariosParaLista(List<Object[]> usersData) {
@@ -739,29 +750,29 @@ public class AttendanceServiceImpl implements AttendanceService {
         LocalDate fechaConsultaFin = LocalDate.parse(fechaFin);
 
         try {
-            // Determinar si filtrar por área (solo colaboradores del área + el jefe que exporta)
+            // Determinar si filtrar por área (colaboradores de todas las áreas del jefe + el jefe)
             List<Long> userIdsPermitidos = null;
             if (userIdGenerador != null && !"ADMIN".equalsIgnoreCase(rolUsuarioGenerador) && !"SUPERADMIN".equalsIgnoreCase(rolUsuarioGenerador)) {
                 List<Area> areasComoJefe = areaRepository.findByManagerId(userIdGenerador);
                 if (areasComoJefe != null && !areasComoJefe.isEmpty()) {
-                    Area area = areasComoJefe.get(0);
-                    boolean areaEsAdministracionExport = area.getName() != null
-                            && ("Administración".equalsIgnoreCase(area.getName().trim()) || "Administracion".equalsIgnoreCase(area.getName().trim()));
                     boolean rolEsAdministracionExport = rolUsuarioGenerador != null
                             && ("Administración".equalsIgnoreCase(rolUsuarioGenerador.trim()) || "Administracion".equalsIgnoreCase(rolUsuarioGenerador.trim()));
-                    if (areaEsAdministracionExport && rolEsAdministracionExport) {
+                    boolean algunaAreaEsAdministracionExport = areasComoJefe.stream().anyMatch(a ->
+                            a.getName() != null && ("Administración".equalsIgnoreCase(a.getName().trim()) || "Administracion".equalsIgnoreCase(a.getName().trim())));
+                    if (algunaAreaEsAdministracionExport && rolEsAdministracionExport) {
                         userIdsPermitidos = null;
                         log.info("🔓 [AttendanceService] Jefe del área Administración con rol Administración - exportando todas las marcaciones");
                     } else {
-                        List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
-                        userIdsPermitidos = new java.util.ArrayList<>();
-                        for (Object[] row : usersData) {
-                            userIdsPermitidos.add(((Number) row[0]).longValue());
+                        java.util.Set<Long> idsSet = new java.util.HashSet<>();
+                        idsSet.add(userIdGenerador);
+                        for (Area area : areasComoJefe) {
+                            List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
+                            for (Object[] row : usersData) {
+                                idsSet.add(((Number) row[0]).longValue());
+                            }
                         }
-                        if (!userIdsPermitidos.contains(userIdGenerador)) {
-                            userIdsPermitidos.add(userIdGenerador);
-                        }
-                        log.info("👔 [AttendanceService] Exportación filtrada por área: {} - {} colaboradores + jefe (incluido)", area.getName(), userIdsPermitidos.size());
+                        userIdsPermitidos = new java.util.ArrayList<>(idsSet);
+                        log.info("👔 [AttendanceService] Exportación filtrada por {} área(s) del jefe - {} usuarios (colaboradores + jefe)", areasComoJefe.size(), userIdsPermitidos.size());
                     }
                 } else {
                     // No es jefe: no puede exportar

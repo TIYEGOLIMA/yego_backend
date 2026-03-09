@@ -38,6 +38,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Implementación del servicio de autenticación del sistema YEGO Principal
@@ -179,7 +180,7 @@ public class AuthServiceImpl implements AuthService {
             
             List<Area> areasComoJefe = areaRepository.findByManagerId(userId);
             boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
-            String nombreArea = esJefe ? areasComoJefe.get(0).getName() : null;
+            String nombreArea = esJefe ? areasComoJefe.stream().map(Area::getName).collect(Collectors.joining(", ")) : null;
 
             // Construir respuesta
             LoginResponseDto.LoginUserDto loginUser = LoginResponseDto.LoginUserDto.builder()
@@ -235,10 +236,10 @@ public class AuthServiceImpl implements AuthService {
         String userAgent = request.getHeader("User-Agent");
         auditService.logLogin(user.getId(), user.getUsername(), clientIp, userAgent);
         
-        // Si es jefe de un área (manager_id), incluir para localStorage y cuenta
+        // Si es jefe de una o más áreas (manager_id), incluir para localStorage y cuenta
         List<Area> areasComoJefe = areaRepository.findByManagerId(user.getId());
         boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
-        String nombreArea = esJefe ? areasComoJefe.get(0).getName() : null;
+        String nombreArea = esJefe ? areasComoJefe.stream().map(Area::getName).collect(Collectors.joining(", ")) : null;
 
         // Construir respuesta (incluir si debe cambiar contraseña por política semanal)
         boolean requirePasswordChange = isPasswordExpiredInternal(user.getPasswordChangedAt());
@@ -364,7 +365,7 @@ public class AuthServiceImpl implements AuthService {
         
         List<Area> areasComoJefe = areaRepository.findByManagerId(userId);
         boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
-        String nombreArea = esJefe ? areasComoJefe.get(0).getName() : null;
+        String nombreArea = esJefe ? areasComoJefe.stream().map(Area::getName).collect(Collectors.joining(", ")) : null;
 
         return UserProfileDto.builder()
                 .id(user.getId())

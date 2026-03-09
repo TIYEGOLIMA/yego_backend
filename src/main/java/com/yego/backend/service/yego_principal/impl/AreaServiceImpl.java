@@ -127,13 +127,7 @@ public class AreaServiceImpl implements AreaService {
     @Override
     @Transactional(readOnly = true)
     public List<UserSimpleDto> findUsersForResponsable(Long areaIdEnEdicion) {
-        Long includeManagerId = null;
-        if (areaIdEnEdicion != null) {
-            includeManagerId = areaRepository.findById(areaIdEnEdicion)
-                    .map(Area::getManagerId)
-                    .orElse(null);
-        }
-        return userRepository.findActiveUsersForResponsableDropdown(includeManagerId).stream()
+        return userRepository.findActiveUsersForResponsableDropdown().stream()
                 .map(row -> {
                     Long id = ((Number) row[0]).longValue();
                     String name = row[1] != null ? (String) row[1] : "";
