@@ -64,6 +64,21 @@ public class AuthServiceImpl implements AuthService {
     @Value("${jwt.expiration:28800}")
     private Long jwtExpiration;
     
+    @Value("${auth.password-policy.excluded-user-ids:1,4,5,6}")
+    private String excludedUserIdsConfig;
+    
+    private java.util.Set<Long> getExcludedUserIdsPasswordPolicy() {
+        if (excludedUserIdsConfig == null || excludedUserIdsConfig.isBlank()) return java.util.Set.of(1L, 4L, 5L, 6L);
+        java.util.Set<Long> set = new java.util.HashSet<>();
+        for (String s : excludedUserIdsConfig.split(",")) {
+            try {
+                long id = Long.parseLong(s.trim());
+                set.add(id);
+            } catch (NumberFormatException ignored) { }
+        }
+        return set.isEmpty() ? java.util.Set.of(1L, 4L, 5L, 6L) : set;
+    }
+    
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
@@ -241,8 +256,8 @@ public class AuthServiceImpl implements AuthService {
         boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
         String nombreArea = esJefe ? areasComoJefe.stream().map(Area::getName).collect(Collectors.joining(", ")) : null;
 
-        // Construir respuesta (incluir si debe cambiar contraseña por política semanal)
-        boolean requirePasswordChange = isPasswordExpiredInternal(user.getPasswordChangedAt());
+        // Construir respuesta (incluir si debe cambiar contraseña por política semanal; excluir usuarios sin política)
+        boolean requirePasswordChange = shouldRequirePasswordChange(user.getId(), user.getPasswordChangedAt());
         LoginResponseDto.LoginUserDto loginUser = LoginResponseDto.LoginUserDto.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -378,7 +393,7 @@ public class AuthServiceImpl implements AuthService {
                 .lastLogin(user.getLastLogin())
                 .esJefe(esJefe)
                 .nombreArea(nombreArea)
-                .requirePasswordChange(isPasswordExpiredInternal(user.getPasswordChangedAt()))
+                .requirePasswordChange(shouldRequirePasswordChange(user.getId(), user.getPasswordChangedAt()))
                 .build();
     }
     
@@ -465,6 +480,14 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /**
+     * Usuarios con estos IDs no tienen obligación de cambiar contraseña cada semana.
+     */
+    private boolean shouldRequirePasswordChange(Long userId, java.time.LocalDateTime passwordChangedAt) {
+        if (userId != null && getExcludedUserIdsPasswordPolicy().contains(userId)) return false;
+        return isPasswordExpiredInternal(passwordChangedAt);
+    }
+
+    /**
      * true si la contraseña debe renovarse: han pasado 7 o más días desde el ÚLTIMO CAMBIO de contraseña.
      * Si el usuario cambia la contraseña en el transcurso de la semana (p. ej. desde el menú), se actualiza
      * password_changed_at y los 7 días vuelven a contar desde ese momento. No es "cada semana en día fijo".
@@ -478,6 +501,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional(readOnly = true)
     public boolean isPasswordExpired(Long userId) {
         if (userId == null) return false;
+        if (getExcludedUserIdsPasswordPolicy().contains(userId)) return false;
         return userRepository.findById(userId)
                 .map(u -> isPasswordExpiredInternal(u.getPasswordChangedAt()))
                 .orElse(false);

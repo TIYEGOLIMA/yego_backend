@@ -139,45 +139,53 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             // Si el token es válido, configurar Spring Security para establecer manualmente la autenticación
             if (validateToken(jwtToken, userDetails)) {
                 
-                // Obtener userId del token para usarlo como nombre de autenticación
-                // Reutilizar los claims ya parseados del request attribute
-                String userId = null;
+                // Obtener userId del token (puede venir como Long o Integer en el JWT)
+                String userIdStr = null;
+                Long userIdLong = null;
                 try {
                     Claims tokenClaims = (Claims) request.getAttribute("jwtClaims");
                     if (tokenClaims != null) {
-                        // El userId viene como Integer en el token, lo convertimos a String
-                        Integer userIdInt = tokenClaims.get("userId", Integer.class);
-                        userId = userIdInt != null ? userIdInt.toString() : null;
+                        Long uid = tokenClaims.get("userId", Long.class);
+                        if (uid == null) {
+                            Integer uidInt = tokenClaims.get("userId", Integer.class);
+                            if (uidInt != null) userIdLong = uidInt.longValue();
+                        } else {
+                            userIdLong = uid;
+                        }
+                        if (userIdLong != null) userIdStr = userIdLong.toString();
                     }
-                    if (userId == null) {
-                        userId = username; // Fallback al username si no se puede obtener userId
-                    }
+                    if (userIdStr == null) userIdStr = username;
                 } catch (Exception e) {
                     log.warn("No se pudo obtener userId del token: {}", e.getMessage());
-                    userId = username; // Fallback al username si no se puede obtener userId
+                    userIdStr = username;
                 }
                 
                 UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = 
                         new UsernamePasswordAuthenticationToken(
-                                userId, null, userDetails.getAuthorities());
+                                userIdStr, null, userDetails.getAuthorities());
                 usernamePasswordAuthenticationToken
                         .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 
                 log.info("🔐 [JwtRequestFilter] Authorities asignadas: {}", userDetails.getAuthorities());
                 
-                // Después de establecer la autenticación en el contexto, especificamos
-                // que el usuario actual está autenticado. Así pasa los filtros de Spring Security.
                 SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
                 
                 // Política semanal: si la contraseña está vencida, solo permitir cambio de contraseña, reset o logout
+                // Solo aplicar si tenemos un userId numérico (excluidos: 1, 4, 5, 6 no tienen esta obligación)
                 String path = request.getRequestURI();
                 boolean pathAllowed = path.contains("/change-password") || path.contains("/reset-password") || path.contains("/logout");
-                if (!pathAllowed && authService.isPasswordExpired(Long.parseLong(userId))) {
-                    log.info("🔒 [JwtRequestFilter] Acceso bloqueado: contraseña vencida (política semanal) para usuario {}", userId);
-                    response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"error\":\"PASSWORD_EXPIRED\",\"message\":\"Debes cambiar tu contraseña para continuar usando Integral.\"}");
-                    return;
+                if (!pathAllowed && userIdLong != null) {
+                    try {
+                        if (authService.isPasswordExpired(userIdLong)) {
+                            log.info("🔒 [JwtRequestFilter] Acceso bloqueado: contraseña vencida (política semanal) para usuario {}", userIdLong);
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType("application/json;charset=UTF-8");
+                            response.getWriter().write("{\"error\":\"PASSWORD_EXPIRED\",\"message\":\"Debes cambiar tu contraseña para continuar usando Integral.\"}");
+                            return;
+                        }
+                    } catch (Exception e) {
+                        log.warn("Error comprobando expiración de contraseña para userId {}: {}", userIdLong, e.getMessage());
+                    }
                 }
             }
         }
