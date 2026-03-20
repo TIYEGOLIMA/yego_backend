@@ -93,7 +93,6 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh").permitAll()
-                .requestMatchers("/api/pro-ops/parks/*/contractor").permitAll() // Contractor suggestions sin auth (CT4, etc.)
                 .requestMatchers("/api/users/listado").permitAll() // Listado usuarios sin token
                 .requestMatchers("/api/ticketera/auth/refresh").permitAll() // Alias ticketera auth
                 .requestMatchers("/api/recaudo/**").permitAll() // Recaudo endpoints
@@ -112,7 +111,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/health").permitAll() // Health check
                 .requestMatchers("/api/yego-premiun/**").permitAll() // Driver active stats endpoints
                 .requestMatchers("/api/marketing-mensajes/**").permitAll() // Marketing mensajes endpoints
-                .requestMatchers("/api/pro-ops/**").permitAll() // Pro Ops endpoints
+                .requestMatchers("/api/pro-ops/**", "/pro-ops/**").permitAll() // Pro Ops endpoints (con o sin /api si context-path=/api)
                 .requestMatchers("/api/GoBot/**").permitAll() // GoBot API externa endpoints
                 .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                 .requestMatchers("/actuator/**").permitAll() // Actuator endpoints

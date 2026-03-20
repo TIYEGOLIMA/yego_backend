@@ -47,6 +47,7 @@ public abstract class BaseYangoApiService {
     protected static final String YANGO_DRIVER_INCOME_API_URL = "https://fleet.yango.com/api/v1/cards/driver/income";
     protected static final String YANGO_WORK_RULES_API_URL = "https://fleet.yango.com/api/fleet/driver-work-rules/v1/work-rules/light-list";
     protected static final String YANGO_ORDERS_API_URL = "https://fleet.yango.com/api/reports-api/v1/orders/list";
+    //PARA OTRA APLICACION
     protected static final String YANGO_SUGGESTIONS_LIST_URL = "https://fleet.yango.com/api/fleet/contractor-profiles-manager/v1/suggestions/list";
     
     // Pool de cookies para rotación aleatoria
