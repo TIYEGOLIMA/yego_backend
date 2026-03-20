@@ -1,7 +1,9 @@
 package com.yego.backend.controller.yego_pro_ops;
 
+import com.yego.backend.entity.yego_pro_ops.api.request.ContractorSuggestionsRequest;
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverCloseRequest;
 import com.yego.backend.entity.yego_pro_ops.api.request.MultipleDriversTripsRequest;
+import com.yego.backend.entity.yego_pro_ops.api.response.ContractorSuggestionsResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverCloseResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverSimpleResponse;
@@ -312,6 +314,19 @@ public class FleetDriverController {
             @RequestParam(required = false) String fecha) {
         log.info("📋 [FleetDriverController] Obteniendo lista de conductores");
         DriverSimpleResponse response = fleetDriverService.obtenerListaConductoresSimplificada();
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Sugerencias de contratista por teléfono (Yango suggestions/list).
+     * Park_id dinámico en URL; teléfono normalizado a +51. Sin autenticación.
+     */
+    @PostMapping("/parks/{parkId}/contractor")
+    public ResponseEntity<ContractorSuggestionsResponse> getContractorSuggestions(
+            @PathVariable String parkId,
+            @Valid @RequestBody ContractorSuggestionsRequest request) {
+        log.info("📋 [FleetDriverController] Contractor suggestions parkId={}", parkId);
+        ContractorSuggestionsResponse response = fleetDriverService.getContractorSuggestions(parkId, request.getTelefono());
         return ResponseEntity.ok(response);
     }
 }

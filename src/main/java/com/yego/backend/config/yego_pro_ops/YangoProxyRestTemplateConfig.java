@@ -202,10 +202,9 @@ public class YangoProxyRestTemplateConfig {
                     new UsernamePasswordCredentials(proxyInfo.username, proxyInfo.password.toCharArray())
                 );
                 
-                // Pequeño delay aleatorio (0-500ms) para distribuir mejor las requests entre proxies
-                // Esto ayuda a evitar que múltiples requests simultáneas usen el mismo proxy
+                // Pequeño delay (0-80ms) para distribuir requests entre proxies sin afectar tiempo de respuesta
                 try {
-                    int delayMs = config.random.nextInt(500); // 0-500ms aleatorio
+                    int delayMs = config.random.nextInt(80);
                     if (delayMs > 0) {
                         Thread.sleep(delayMs);
                     }

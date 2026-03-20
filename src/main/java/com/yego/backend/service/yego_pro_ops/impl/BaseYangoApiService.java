@@ -47,6 +47,7 @@ public abstract class BaseYangoApiService {
     protected static final String YANGO_DRIVER_INCOME_API_URL = "https://fleet.yango.com/api/v1/cards/driver/income";
     protected static final String YANGO_WORK_RULES_API_URL = "https://fleet.yango.com/api/fleet/driver-work-rules/v1/work-rules/light-list";
     protected static final String YANGO_ORDERS_API_URL = "https://fleet.yango.com/api/reports-api/v1/orders/list";
+    protected static final String YANGO_SUGGESTIONS_LIST_URL = "https://fleet.yango.com/api/fleet/contractor-profiles-manager/v1/suggestions/list";
     
     // Pool de cookies para rotación aleatoria
     private static final List<String> COOKIES_POOL = Arrays.asList(
@@ -352,6 +353,25 @@ public abstract class BaseYangoApiService {
      */
     protected HttpHeaders crearHeadersDriversListConCookie(String cookie) {
         return crearHeadersDriversPointsConCookie(cookie);
+    }
+
+    /**
+     * Crea headers para suggestions/list con cookie y park_id dinámicos (para usar en retry).
+     * Sustituye park_id en la cookie por el parkId recibido.
+     */
+    protected HttpHeaders crearHeadersSuggestionsConCookieYParkId(String cookie, String parkId) {
+        String cookieConParkId = cookie != null && cookie.contains("park_id=")
+            ? cookie.replaceFirst("park_id=[^;]+", "park_id=" + parkId)
+            : cookie;
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("Cookie", cookieConParkId != null ? cookieConParkId : cookie);
+        headers.set("x-park-id", parkId != null ? parkId : PARK_ID);
+        headers.set("language", "es-419");
+        headers.set("x-client-version", "fleet/19321");
+        headers.set("origin", "https://fleet.yango.com");
+        headers.set("accept-language", "es-419,es;q=0.9");
+        return headers;
     }
 
     /**

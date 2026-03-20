@@ -1,5 +1,6 @@
 package com.yego.backend.service.yego_pro_ops;
 
+import com.yego.backend.entity.yego_pro_ops.api.response.ContractorSuggestionsResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverSimpleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
@@ -37,6 +38,12 @@ public interface FleetDriverService {
      * @return Lista de conductores con información básica
      */
     DriverSimpleResponse obtenerListaConductoresSimplificada();
-    
-    }
+
+    /**
+     * Sugerencias de contratista por teléfono (API Yango suggestions/list).
+     * Park_id dinámico; teléfono normalizado a +51 antes de enviar a Yango.
+     * Sin autenticación.
+     */
+    ContractorSuggestionsResponse getContractorSuggestions(String parkId, String telefono);
+}
 

@@ -2,6 +2,7 @@ package com.yego.backend.service.yego_pro_ops.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverListRequest;
+import com.yego.backend.entity.yego_pro_ops.api.response.ContractorSuggestionsResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverSimpleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
@@ -43,6 +44,8 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     private static final long DRIVERS_IN_ORDER_CACHE_TTL_MS = 45_000L;
     /** Caché lista conductores GET /drivers: TTL 90 segundos para evitar ~3s por request repetido */
     private static final long DRIVERS_LIST_SIMPLE_CACHE_TTL_MS = 90_000L;
+    /** Caché contractor suggestions (parkId + teléfono): TTL 90 s para respuestas instantáneas en búsquedas repetidas */
+    private static final long CONTRACTOR_SUGGESTIONS_CACHE_TTL_MS = 90_000L;
 
     private final com.yego.backend.service.yego_pro_ops.DriverOrdersService driverOrdersService;
     private final ExecutorService executorService = Executors.newFixedThreadPool(20);
@@ -53,6 +56,8 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     private volatile CachedDriversList driversListCache = null;
     /** Caché lista completa desde Yango (workRuleIds==null) para GET /drivers */
     private volatile CachedDriverListRaw driverListRawCache = null;
+    /** Caché (parkId|telefonoNormalizado) -> respuesta para contractor suggestions */
+    private final Map<String, CachedContractorSuggestions> contractorSuggestionsCache = new ConcurrentHashMap<>();
 
     public FleetDriverServiceImpl(
             RestTemplate restTemplate,
@@ -992,6 +997,15 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
         }
     }
 
+    private static class CachedContractorSuggestions {
+        final ContractorSuggestionsResponse response;
+        final long timestampMs;
+        CachedContractorSuggestions(ContractorSuggestionsResponse response, long timestampMs) {
+            this.response = response;
+            this.timestampMs = timestampMs;
+        }
+    }
+
     private static class GpsDataResult {
         DriversInOrderResponse.SummaryDistance summaryDistance;
         Long totalActivityTime;
@@ -1029,5 +1043,110 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             this.orders = orders != null ? orders : new CompletedOrdersResult(0, 0.0);
             this.viajes = viajes != null ? viajes : new ArrayList<>();
         }
+    }
+
+    // ==================== CONTRACTOR SUGGESTIONS (parks/{parkId}/contractor) ====================
+
+    @Override
+    public ContractorSuggestionsResponse getContractorSuggestions(String parkId, String telefono) {
+        String telefonoNormalizado = normalizeTelefonoToPeruE164(telefono);
+        String cacheKey = parkId + "|" + telefonoNormalizado;
+        long now = System.currentTimeMillis();
+
+        CachedContractorSuggestions cached = contractorSuggestionsCache.get(cacheKey);
+        if (cached != null && (now - cached.timestampMs) < CONTRACTOR_SUGGESTIONS_CACHE_TTL_MS) {
+            log.debug("📋 [FleetDriverService] Contractor suggestions desde caché (parkId={})", parkId);
+            return cached.response;
+        }
+
+        log.info("📋 [FleetDriverService] Contractor suggestions parkId={}, telefono(normalized)={}", parkId, telefonoNormalizado);
+        Map<String, Object> body = new HashMap<>();
+        body.put("query", Map.of("text", telefonoNormalizado));
+
+        try {
+            // Conexión directa (sin proxy) para menor latencia en primera llamada; retry con otra cookie si 401/403/429
+            ResponseEntity<String> response = ejecutarSuggestionsConConexionDirecta(body, parkId);
+            ContractorSuggestionsResponse parsed;
+            if (response == null || response.getBody() == null) {
+                parsed = ContractorSuggestionsResponse.builder().suggestions(new ArrayList<>()).existing(false).build();
+            } else {
+                parsed = objectMapper.readValue(response.getBody(), ContractorSuggestionsResponse.class);
+                if (parsed.getSuggestions() == null) {
+                    parsed.setSuggestions(new ArrayList<>());
+                }
+                parsed.setExisting(!parsed.getSuggestions().isEmpty());
+            }
+            contractorSuggestionsCache.put(cacheKey, new CachedContractorSuggestions(parsed, System.currentTimeMillis()));
+            return parsed;
+        } catch (Exception e) {
+            log.error("❌ [FleetDriverService] Error getContractorSuggestions parkId={}: {}", parkId, e.getMessage(), e);
+            throw new RuntimeException("Error al obtener sugerencias de contratista: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Llama a Yango suggestions/list con conexión directa (restTemplate sin proxy) para respuesta más rápida.
+     * Si falla con 401/403/429, reintenta con otra cookie hasta 3 intentos.
+     */
+    private ResponseEntity<String> ejecutarSuggestionsConConexionDirecta(Map<String, Object> body, String parkId) {
+        for (int attempt = 0; attempt < 3; attempt++) {
+            int cookieIndex = obtenerIndiceCookieValida();
+            if (cookieIndex < 0) break;
+            String cookie = obtenerCookiePorIndice(cookieIndex);
+            HttpHeaders headers = crearHeadersSuggestionsConCookieYParkId(cookie, parkId);
+            try {
+                HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+                ResponseEntity<String> response = restTemplate.exchange(
+                    YANGO_SUGGESTIONS_LIST_URL,
+                    HttpMethod.POST,
+                    request,
+                    String.class
+                );
+                if (response.getStatusCode().is2xxSuccessful()) {
+                    return response;
+                }
+                if (response.getStatusCode().value() == 401 || response.getStatusCode().value() == 403 || response.getStatusCode().value() == 429) {
+                    marcarCookieInvalida(cookieIndex);
+                    continue;
+                }
+                return response;
+            } catch (HttpClientErrorException e) {
+                int code = e.getStatusCode().value();
+                if (code == 401 || code == 403 || code == 429) {
+                    marcarCookieInvalida(cookieIndex);
+                    continue;
+                }
+                throw e;
+            } catch (Exception e) {
+                if (attempt == 2) throw e;
+                log.warn("⚠️ [FleetDriverService] Suggestions intento {} falló: {}", attempt + 1, e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Normaliza teléfono a formato E.164 (siempre con +).
+     * - Perú: 9 dígitos (con o sin 9 inicial, móvil o fijo) → +51 + dígitos. Ej: 970180035 → +51970180035, 012345678 → +51012345678.
+     * - Ya con prefijo país (11+ dígitos o 10 sin 0): se mantiene. Ej: 51970180035 → +51970180035, 835025330123 → +835025330123.
+     */
+    private static String normalizeTelefonoToPeruE164(String raw) {
+        if (raw == null) return "+51";
+        String digits = raw.replaceAll("\\D", "");
+        if (digits.isEmpty()) return "+51";
+        // 9 dígitos: asumir Perú (móvil 9XXXXXXXX o fijo)
+        if (digits.length() == 9) {
+            return "+51" + digits;
+        }
+        // 10 dígitos empezando en 0: quitar 0 y prefijo Perú
+        if (digits.length() == 10 && digits.startsWith("0")) {
+            return "+51" + digits.substring(1);
+        }
+        // 11 dígitos empezando en 51: Perú con código país
+        if (digits.length() == 11 && digits.startsWith("51")) {
+            return "+" + digits;
+        }
+        // Cualquier otro caso (ej. +83 5025330123 → 835025330123): otro país, devolver + y dígitos
+        return "+" + digits;
     }
 }
