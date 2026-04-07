@@ -53,6 +53,12 @@ public class AreaTask {
     @Column(name = "assigned_user_id")
     private Long assignedUserId;
 
+    @Column(name = "assigned_user_ids", length = 1000)
+    private String assignedUserIds;
+
+    @Column(name = "tags", length = 2000)
+    private String tags;
+
     @Column(name = "sort_order", nullable = false)
     @Builder.Default
     private Integer sortOrder = 0;

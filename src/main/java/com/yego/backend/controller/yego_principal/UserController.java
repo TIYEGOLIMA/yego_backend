@@ -5,6 +5,7 @@ import com.yego.backend.entity.yego_principal.api.response.*;
 import com.yego.backend.service.yego_principal.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -13,13 +14,9 @@ import jakarta.validation.Valid;
 
 import java.util.List;
 
-/**
- * Controlador REST para usuarios del sistema YEGO Principal
- * Equivalente a UsersController de NestJS
- */
 @Slf4j
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping(value = "/api/users", produces = MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8")
 @RequiredArgsConstructor
 public class UserController {
     

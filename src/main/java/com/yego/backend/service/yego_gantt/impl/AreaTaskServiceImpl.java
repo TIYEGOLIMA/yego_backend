@@ -19,7 +19,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -144,6 +146,29 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 .collect(Collectors.toMap(Area::getId, a -> a.getName() != null ? a.getName() : ""));
     }
 
+    private String idsToString(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) return null;
+        return ids.stream().map(String::valueOf).collect(Collectors.joining(","));
+    }
+
+    private List<Long> stringToIds(String csv) {
+        if (csv == null || csv.isBlank()) return Collections.emptyList();
+        return Arrays.stream(csv.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty())
+                .map(Long::valueOf).toList();
+    }
+
+    private String tagsToString(List<String> tags) {
+        if (tags == null || tags.isEmpty()) return null;
+        return tags.stream().map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.joining(","));
+    }
+
+    private List<String> stringToTags(String csv) {
+        if (csv == null || csv.isBlank()) return Collections.emptyList();
+        return Arrays.stream(csv.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty()).toList();
+    }
+
     private AreaTaskResponseDto toDto(AreaTask t, Map<Long, String> names) {
         return AreaTaskResponseDto.builder()
                 .id(t.getId())
@@ -157,6 +182,8 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 .priority(t.getPriority())
                 .progressPercent(t.getProgressPercent())
                 .assignedUserId(t.getAssignedUserId())
+                .assignedUserIds(stringToIds(t.getAssignedUserIds()))
+                .tags(stringToTags(t.getTags()))
                 .sortOrder(t.getSortOrder())
                 .createdAt(t.getCreatedAt())
                 .updatedAt(t.getUpdatedAt())
@@ -236,6 +263,8 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 .priority(dto.getPriority() != null ? dto.getPriority() : AreaTaskPriority.MEDIUM)
                 .progressPercent(dto.getProgressPercent() != null ? dto.getProgressPercent() : 0)
                 .assignedUserId(dto.getAssignedUserId())
+                .assignedUserIds(idsToString(dto.getAssignedUserIds()))
+                .tags(tagsToString(dto.getTags()))
                 .sortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : 0)
                 .build();
         AreaTask saved = areaTaskRepository.save(task);
@@ -270,6 +299,12 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         }
         if (dto.getAssignedUserId() != null) {
             task.setAssignedUserId(dto.getAssignedUserId());
+        }
+        if (dto.getAssignedUserIds() != null) {
+            task.setAssignedUserIds(idsToString(dto.getAssignedUserIds()));
+        }
+        if (dto.getTags() != null) {
+            task.setTags(tagsToString(dto.getTags()));
         }
         if (dto.getSortOrder() != null) {
             task.setSortOrder(dto.getSortOrder());

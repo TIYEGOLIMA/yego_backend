@@ -5,6 +5,12 @@
 
 server:
   port: ${PORT:3030}
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+      force-response: true
 
 spring:
   # Permitir referencias circulares (temporal para resolver dependencias)

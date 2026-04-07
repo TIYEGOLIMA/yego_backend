@@ -13,8 +13,6 @@ import com.yego.backend.handler.yego_principal.UserNotificationHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,512 +34,366 @@ import com.fasterxml.jackson.databind.JsonNode;
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
-    
+
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final AreaRepository areaRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final UserNotificationHandler userNotificationHandler;
     private final ObjectMapper objectMapper;
-    
+
+    private static final Set<Long> USER_IDS_EXCLUIDOS_LISTADO = Set.of(1L, 4L, 6L);
+
+    private static final List<String> WEAK_PASSWORDS = Arrays.asList(
+            "123456", "admin", "password", "123456789", "qwerty");
+
+    // ── CRUD ──
+
     @Override
     @Transactional
-    public UserResponseDto create(CreateUserDto createUserDto) {
-        // Verificar si el usuario ya existe
-        if (userRepository.existsByUsernameOrEmail(createUserDto.getUsername(), createUserDto.getEmail())) {
+    public UserResponseDto create(CreateUserDto dto) {
+        if (userRepository.existsByUsernameOrEmail(dto.getUsername(), dto.getEmail())) {
             throw new IllegalStateException("El usuario o email ya existe");
         }
-        
-        // Validar contraseña
-        if (!validatePassword(createUserDto.getPassword())) {
-            throw new IllegalArgumentException("La contraseña no cumple con los requisitos de seguridad");
+        if (!validatePassword(dto.getPassword())) {
+            throw new IllegalArgumentException("La contrasena no cumple con los requisitos de seguridad");
         }
-        
-        // Validar que el rol existe
-        Role role = roleRepository.findById(createUserDto.getRoleId())
-                .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + createUserDto.getRoleId() + " no encontrado"));
-        
-        // Crear usuario
+
+        Role role = roleRepository.findById(dto.getRoleId())
+                .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + dto.getRoleId() + " no encontrado"));
+
         User user = User.builder()
-                .username(createUserDto.getUsername())
-                .email(createUserDto.getEmail())
-                .name(createUserDto.getName())
-                .lastName(createUserDto.getLastName())
-                .password(passwordEncoder.encode(createUserDto.getPassword()))
+                .username(dto.getUsername())
+                .email(dto.getEmail())
+                .name(dto.getName())
+                .lastName(dto.getLastName())
+                .password(passwordEncoder.encode(dto.getPassword()))
                 .role(role)
-                .dni(createUserDto.getDni())
-                .moduleId(createUserDto.getModuleId())
+                .dni(dto.getDni())
+                .moduleId(dto.getModuleId())
                 .active(true)
                 .build();
-        
-        User savedUser = userRepository.save(user);
-        
-        // Enviar notificación WebSocket para refrescar tabla
-        userNotificationHandler.enviarActualizacionUsuarios("USER_CREATED", savedUser.getId(), savedUser.getUsername());
-        
-        log.info("✅ Usuario YEGO Principal creado: {}", savedUser.getUsername());
-        
-        return mapToResponseDto(savedUser);
+
+        User saved = userRepository.save(user);
+        userNotificationHandler.enviarActualizacionUsuarios("USER_CREATED", saved.getId(), saved.getUsername());
+        log.info("[UserService] Usuario creado: {}", saved.getUsername());
+        return mapToResponseDto(saved);
     }
 
-
-
-    
     @Override
     public Object findAll(Integer page, Integer limit, String search, Boolean active) {
         if (page != null && limit != null) {
-            return findAllConPaginacion(page, limit, search, active);
-        } else {
-            return findAllSinPaginacion(active);
+            return findAllPaginado(page, limit, search, active);
         }
+        return findAllSinPaginacion(active);
     }
-
-    /** IDs de usuarios que no deben aparecer en el listado público /api/users/listado (tv, principal, tablet1, tablet2, etc.). */
-    private static final Set<Long> USER_IDS_EXCLUIDOS_LISTADO = Set.of(1L, 4L, 6L);
 
     @Override
     public List<UsuarioResumenDto> findAllResumen() {
-        // Solo usuarios activos; excluir tv, principal, tablet1, tablet2
         List<User> users = userRepository.findByActiveWithRole(true);
-        List<Area> allAreas = areaRepository.findAll();
-        Map<Long, Area> areaById = allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a));
-        Map<Long, List<Area>> areasByManagerId = allAreas.stream()
-                .filter(a -> a.getManagerId() != null)
-                .collect(Collectors.groupingBy(Area::getManagerId));
+        AreaMaps areaMaps = loadAreaMaps();
         return users.stream()
                 .filter(u -> !USER_IDS_EXCLUIDOS_LISTADO.contains(u.getId()))
-                .map(u -> toUsuarioResumenDto(u, areaById, areasByManagerId))
+                .map(u -> toUsuarioResumenDto(u, areaMaps))
                 .collect(Collectors.toList());
     }
 
-    private UsuarioResumenDto toUsuarioResumenDto(User u, Map<Long, Area> areaById, Map<Long, List<Area>> areasByManagerId) {
-        String areaNombre = null;
-        if (u.getAreaId() != null) {
-            Area a = areaById.get(u.getAreaId());
-            if (a != null) areaNombre = a.getName();
-        }
-        if (areaNombre == null) {
-            List<Area> areas = areasByManagerId.get(u.getId());
-            if (areas != null && !areas.isEmpty()) {
-                areaNombre = areas.stream().map(Area::getName).collect(Collectors.joining(", "));
-            }
-        }
-        boolean esJefe = areasByManagerId.containsKey(u.getId());
-        return UsuarioResumenDto.builder()
-                .id(u.getId())
-                .username(u.getUsername())
-                .rol(u.getRoleName() != null ? u.getRoleName() : "")
-                .esJefe(esJefe)
-                .area(areaNombre != null ? areaNombre : "")
-                .nombre(u.getName() != null ? u.getName() : "")
-                .apellido(u.getLastName() != null ? u.getLastName() : "")
-                .email(u.getEmail() != null ? u.getEmail() : "")
-                .dni(u.getDni() != null ? u.getDni() : "")
-                .build();
-    }
-    
-    private UserPageDto findAllConPaginacion(Integer page, Integer limit, String search, Boolean active) {
-        log.info("Filtrando usuarios - page: {}, limit: {}, search: {}, active: {}", page, limit, search, active);
-        
-        // Obtener el rol del usuario autenticado
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String userRole = authentication.getAuthorities().stream()
-                .findFirst()
-                .map(authority -> {
-                    String authorityStr = authority.getAuthority();
-                    log.debug("🔍 Authority completo: {}", authorityStr);
-                    return authorityStr.replace("ROLE_", "").toUpperCase();
-                })
-                .orElse("");
-        
-        log.info("👤 Usuario autenticado con rol extraído: {}", userRole);
-        
-        // Una sola query de áreas (evita N+1)
-        List<Area> allAreas = areaRepository.findAll();
-        Map<Long, Area> areaById = allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a));
-        Map<Long, List<Area>> areasByManagerId = allAreas.stream()
-                .filter(a -> a.getManagerId() != null)
-                .collect(Collectors.groupingBy(Area::getManagerId));
-
-        // Usuarios con rol en una sola query (JOIN FETCH evita N+1)
-        List<User> allUsers;
-        String searchTrim = search != null ? search.trim() : "";
-        if (!searchTrim.isEmpty()) {
-            String searchPattern = "%" + searchTrim + "%";
-            if (active != null) {
-                allUsers = userRepository.findBySearchAndActiveWithRole(searchPattern, active);
-            } else {
-                allUsers = userRepository.findBySearchWithRole(searchPattern);
-            }
-        } else {
-            if (active != null) {
-                allUsers = userRepository.findByActiveWithRole(active);
-            } else {
-                allUsers = userRepository.findAllWithRole();
-            }
-        }
-
-        // Calcular paginación manual
-        int totalElements = allUsers.size();
-        int totalPages = (int) Math.ceil((double) totalElements / limit);
-        int startIndex = (page - 1) * limit;
-        int endIndex = Math.min(startIndex + limit, totalElements);
-        List<User> pagedUsers = allUsers.subList(startIndex, endIndex);
-
-        List<UserResponseCompleteDto> users = pagedUsers.stream()
-                .map(u -> mapToUserResponseCompleteDto(u, areaById, areasByManagerId))
-                .collect(Collectors.toList());
-        
-        log.info("Usuarios YEGO Principal obtenidos: {} de {} total", users.size(), totalElements);
-        
-        return UserPageDto.builder()
-                .users(users)
-                .total((long) totalElements)
-                .page(page)
-                .limit(limit)
-                .totalPages(totalPages)
-                .search(search)
-                .active(active)
-                .build();
-    }
-    
-    private List<UserResponseDto> findAllSinPaginacion(Boolean active) {
-        log.info("Obteniendo todos los usuarios sin paginación");
-        
-        // Obtener el rol del usuario autenticado
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        String userRole = authentication.getAuthorities().stream()
-                .findFirst()
-                .map(authority -> {
-                    String authorityStr = authority.getAuthority();
-                    log.debug("🔍 Authority completo: {}", authorityStr);
-                    return authorityStr.replace("ROLE_", "").toUpperCase();
-                })
-                .orElse("");
-        
-        log.info("👤 Usuario autenticado con rol extraído: {}", userRole);
-        
-        List<User> users;
-        
-        if (active != null) {
-            users = userRepository.findByActive(active);
-        } else {
-            users = userRepository.findAll();
-        }
-        
-        return users.stream()
-                .map(this::mapToResponseDto)
-                .collect(Collectors.toList());
-    }
-    
     @Override
     public UserResponseDto findOne(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
-        
-        return mapToResponseDto(user);
+        return mapToResponseDto(findUserOrThrow(id));
     }
-    
+
     @Override
     public UserResponseDto findByUsername(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
-        
         return mapToResponseDto(user);
     }
-    
+
     @Override
     @Transactional
-    public ResponseEntity<?> update(Long id, UpdateUserDto updateUserDto) {
+    public ResponseEntity<?> update(Long id, UpdateUserDto dto) {
         try {
-            // Actualización parcial: solo areaId, active y/o password (sin enviar username, email, name, etc.)
-            boolean isPartialUpdate = updateUserDto.getUsername() == null
-                    && updateUserDto.getEmail() == null
-                    && updateUserDto.getName() == null
-                    && updateUserDto.getLastName() == null
-                    && updateUserDto.getDni() == null
-                    && updateUserDto.getRoleId() == null;
+            boolean isPartialUpdate = dto.getUsername() == null
+                    && dto.getEmail() == null
+                    && dto.getName() == null
+                    && dto.getLastName() == null
+                    && dto.getDni() == null
+                    && dto.getRoleId() == null;
 
             if (isPartialUpdate) {
                 User user = userRepository.findById(id).orElse(null);
-                if (user == null) {
-                    return badRequest("Usuario no encontrado");
+                if (user == null) return badRequest("Usuario no encontrado");
+
+                User saved = userRepository.save(updateEntityFromDto(user, dto));
+                if (Boolean.FALSE.equals(dto.getActive())) {
+                    verificarYEnviarLogoutForzado(saved);
                 }
-                User updatedUser = updateEntityFromDto(user, updateUserDto);
-                User savedUser = userRepository.save(updatedUser);
-                if (Boolean.FALSE.equals(updateUserDto.getActive())) {
-                    verificarYEnviarLogoutForzado(savedUser);
-                }
-                userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
-                log.info("✅ Usuario actualizado (parcial): {} - areaId={}", savedUser.getUsername(), savedUser.getAreaId());
-                return ResponseEntity.ok(mapToResponseDto(savedUser));
+                userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", saved.getId(), saved.getUsername());
+                log.info("[UserService] Usuario actualizado (parcial): {} - areaId={}", saved.getUsername(), saved.getAreaId());
+                return ResponseEntity.ok(mapToResponseDto(saved));
             }
 
-            // Validar campos obligatorios y formato para actualización completa
-            ResponseEntity<?> validationError = validateUpdateUserDto(updateUserDto);
-            if (validationError != null) {
-                return validationError;
-            }
+            ResponseEntity<?> validationError = validateUpdateUserDto(dto);
+            if (validationError != null) return validationError;
 
-            User user = userRepository.findById(id)
-                    .orElse(null);
+            User user = userRepository.findById(id).orElse(null);
+            if (user == null) return badRequest("Usuario no encontrado");
 
-            if (user == null) {
-                return badRequest("Usuario no encontrado");
-            }
-
-            // Verificar conflictos de username
-            if (!updateUserDto.getUsername().equals(user.getUsername())
-                    && userRepository.findByUsername(updateUserDto.getUsername()).isPresent()) {
+            if (!dto.getUsername().equals(user.getUsername())
+                    && userRepository.findByUsername(dto.getUsername()).isPresent()) {
                 return badRequest("El nombre de usuario ya existe");
             }
-
-            // Verificar conflictos de email
-            if (!updateUserDto.getEmail().equals(user.getEmail())
-                    && userRepository.findByEmail(updateUserDto.getEmail()).isPresent()) {
+            if (!dto.getEmail().equals(user.getEmail())
+                    && userRepository.findByEmail(dto.getEmail()).isPresent()) {
                 return badRequest("El email ya existe");
             }
 
-            // Verificar que el rol existe y tiene nombre válido
-            Role role = roleRepository.findById(updateUserDto.getRoleId())
-                    .orElse(null);
-            if (role == null) {
-                return badRequest("Rol con ID " + updateUserDto.getRoleId() + " no encontrado");
-            }
-            if (isNullOrEmpty(role.getName())) {
-                return badRequest("El rol no tiene un nombre válido");
-            }
+            Role role = roleRepository.findById(dto.getRoleId()).orElse(null);
+            if (role == null) return badRequest("Rol con ID " + dto.getRoleId() + " no encontrado");
+            if (isNullOrEmpty(role.getName())) return badRequest("El rol no tiene un nombre valido");
 
-            // Actualizar entidad desde DTO
-            User updatedUser = updateEntityFromDto(user, updateUserDto);
+            User saved = userRepository.save(updateEntityFromDto(user, dto));
+            verificarYEnviarLogoutForzado(saved);
+            userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", saved.getId(), saved.getUsername());
+            log.info("[UserService] Usuario actualizado: {}", saved.getUsername());
+            return ResponseEntity.ok(mapToResponseDto(saved));
 
-            User savedUser = userRepository.save(updatedUser);
-
-            // Verificar si el usuario actualizado está logueado y enviar notificación
-            verificarYEnviarLogoutForzado(savedUser);
-
-            // Enviar notificación WebSocket para refrescar tabla
-            userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
-
-            log.info("✅ Usuario YEGO Principal actualizado: {}", savedUser.getUsername());
-            
-            return ResponseEntity.ok(mapToResponseDto(savedUser));
-            
         } catch (Exception e) {
-            log.error("❌ Error actualizando usuario: {}", e.getMessage());
-            ErrorResponseDto error = ErrorResponseDto.builder()
-                    .message(e.getMessage())
-                    .build();
-            return ResponseEntity.badRequest().body(error);
+            log.error("[UserService] Error actualizando usuario: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(ErrorResponseDto.builder().message(e.getMessage()).build());
         }
     }
 
     @Override
     @Transactional
     public UserResponseDto updateArea(Long id, Long areaId) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
+        User user = findUserOrThrow(id);
         user.setAreaId(areaId == null || areaId == 0 ? null : areaId);
-        User savedUser = userRepository.save(user);
-        userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", savedUser.getId(), savedUser.getUsername());
-        log.info("✅ Área del usuario actualizada: {} -> areaId={}", savedUser.getUsername(), savedUser.getAreaId());
-        return mapToResponseDto(savedUser);
+        User saved = userRepository.save(user);
+        userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", saved.getId(), saved.getUsername());
+        log.info("[UserService] Area del usuario actualizada: {} -> areaId={}", saved.getUsername(), saved.getAreaId());
+        return mapToResponseDto(saved);
     }
 
     @Override
     @Transactional
     public void remove(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
-        
-        // Soft delete - marcar como inactivo
-        user.setActive(false);
-        userRepository.save(user);
-        
-        // Enviar notificación WebSocket para refrescar tabla
-        userNotificationHandler.enviarActualizacionUsuarios("USER_DELETED", user.getId(), user.getUsername());
-        
-        log.info("🗑️ Usuario YEGO Principal eliminado (soft delete): {}", user.getUsername());
+        User user = findUserOrThrow(id);
+        String username = user.getUsername();
+        Long userId = user.getId();
+
+        userRepository.delete(user);
+
+        userNotificationHandler.enviarActualizacionUsuarios("USER_DELETED", userId, username);
+        log.info("[UserService] Usuario eliminado permanentemente: {}", username);
     }
-    
+
     @Override
     @Transactional
     public UserResponseDto cambiarEstado(Long id, Boolean activo) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
-        
+        User user = findUserOrThrow(id);
         user.setActive(activo);
-        User savedUser = userRepository.save(user);
-        
-        // Si se desactiva el usuario, forzar logout con mensaje de bloqueo
+        User saved = userRepository.save(user);
+
         if (!activo) {
-            enviarNotificacionBloqueo(savedUser);
+            enviarNotificacionBloqueo(saved);
         }
-        
-        // Enviar notificación WebSocket para refrescar tabla
-        userNotificationHandler.enviarActualizacionUsuarios("USER_STATUS_CHANGED", savedUser.getId(), savedUser.getUsername());
-        
-        log.info("{} Usuario YEGO Principal: {}", activo ? "Activado" : "Desactivado", savedUser.getUsername());
-        
-        return mapToResponseDto(savedUser);
+
+        userNotificationHandler.enviarActualizacionUsuarios("USER_STATUS_CHANGED", saved.getId(), saved.getUsername());
+        log.info("[UserService] Usuario {}: {}", activo ? "activado" : "desactivado", saved.getUsername());
+        return mapToResponseDto(saved);
     }
-    
+
     @Override
     @Transactional
     public void changePassword(Long id, String newPassword) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
-        
+        User user = findUserOrThrow(id);
         if (!validatePassword(newPassword)) {
-            throw new IllegalArgumentException("La contraseña no cumple con los requisitos de seguridad");
+            throw new IllegalArgumentException("La contrasena no cumple con los requisitos de seguridad");
         }
-        
         user.setPassword(passwordEncoder.encode(newPassword));
-        user.setPasswordChangedAt(java.time.LocalDateTime.now());
+        user.setPasswordChangedAt(LocalDateTime.now());
         userRepository.save(user);
-        
-        // Enviar notificación WebSocket para refrescar tabla
         userNotificationHandler.enviarActualizacionUsuarios("USER_PASSWORD_CHANGED", user.getId(), user.getUsername());
-        
-        log.info("🔑 Contraseña cambiada para usuario YEGO Principal: {}", user.getUsername());
+        log.info("[UserService] Contrasena cambiada para: {}", user.getUsername());
     }
-    
+
     @Override
     public boolean validatePassword(String password) {
-        // Verificar contraseñas débiles
-        List<String> weakPasswords = Arrays.asList("123456", "admin", "password", "123456789", "qwerty");
-        if (weakPasswords.contains(password.toLowerCase())) {
-            return false;
-        }
-        
-        // Verificar requisitos mínimos
-        boolean hasUpperCase = password.matches(".*[A-Z].*");
-        boolean hasLowerCase = password.matches(".*[a-z].*");
-        boolean hasNumbers = password.matches(".*\\d.*");
-        boolean hasSpecialChar = password.matches(".*[!@#$%^&*(),.?\":{}|<>].*");
-        boolean isLongEnough = password.length() >= 8;
-        
-        return hasUpperCase && hasLowerCase && hasNumbers && hasSpecialChar && isLongEnough;
+        if (WEAK_PASSWORDS.contains(password.toLowerCase())) return false;
+        return password.length() >= 8
+                && password.matches(".*[A-Z].*")
+                && password.matches(".*[a-z].*")
+                && password.matches(".*\\d.*")
+                && password.matches(".*[!@#$%^&*(),.?\":{}|<>].*");
     }
-    
-    /**
-     * Valida el DTO de actualización de usuario
-     */
-    private ResponseEntity<?> validateUpdateUserDto(UpdateUserDto updateUserDto) {
-        // Validar campos obligatorios
-        if (isNullOrEmpty(updateUserDto.getUsername())) {
-            return badRequest("El nombre de usuario es obligatorio");
+
+    @Override
+    public ResponseEntity<DniResponseDto> consultarDni(String dni) {
+        try {
+            if (!dni.matches("^\\d{8}$")) {
+                return ResponseEntity.ok(DniResponseDto.builder()
+                        .success(false).dni(dni)
+                        .error("Solo se pueden consultar DNI peruanos de 8 digitos")
+                        .build());
+            }
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.factiliza.com/pe/v1/dni/info/" + dni))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NTkiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJjb25zdWx0b3IifQ.NaoAXramusCzks7mRCzWFWcMiBaSA0d8rNBgw-OVeYg")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                log.error("[UserService] Error API DNI: status {}", response.statusCode());
+                return ResponseEntity.status(response.statusCode()).body(DniResponseDto.builder()
+                        .success(false).dni(dni)
+                        .error("Error consultando DNI: status " + response.statusCode())
+                        .build());
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            if (!root.has("success") || !root.get("success").asBoolean()) {
+                String message = root.has("message") ? root.get("message").asText() : "Error en la consulta";
+                return ResponseEntity.ok(DniResponseDto.builder()
+                        .success(false).dni(dni).error(message).build());
+            }
+
+            JsonNode data = root.get("data");
+            if (data == null || data.isNull()) {
+                return ResponseEntity.ok(DniResponseDto.builder()
+                        .success(false).dni(dni).error("No se encontraron datos").build());
+            }
+
+            return ResponseEntity.ok(DniResponseDto.builder()
+                    .success(true)
+                    .nombres(data.has("nombres") ? data.get("nombres").asText() : "")
+                    .apellidoPaterno(data.has("apellido_paterno") ? data.get("apellido_paterno").asText() : "")
+                    .apellidoMaterno(data.has("apellido_materno") ? data.get("apellido_materno").asText() : "")
+                    .build());
+
+        } catch (Exception e) {
+            log.error("[UserService] Error consultando DNI {}: {}", dni, e.getMessage());
+            return ResponseEntity.internalServerError().body(DniResponseDto.builder()
+                    .success(false).dni(dni).error("Error interno: " + e.getMessage()).build());
         }
-        if (isNullOrEmpty(updateUserDto.getEmail())) {
-            return badRequest("El email es obligatorio");
+    }
+
+    // ── Consultas internas ──
+
+    private UserPageDto findAllPaginado(Integer page, Integer limit, String search, Boolean active) {
+        AreaMaps areaMaps = loadAreaMaps();
+
+        String searchTrim = search != null ? search.trim() : "";
+
+        List<Object[]> rows;
+        if (!searchTrim.isEmpty()) {
+            String pattern = "%" + searchTrim + "%";
+            List<User> allUsers = active != null
+                    ? userRepository.findBySearchAndActiveWithRole(pattern, active)
+                    : userRepository.findBySearchWithRole(pattern);
+            int total = allUsers.size();
+            int totalPages = (int) Math.ceil((double) total / limit);
+            int start = Math.min((page - 1) * limit, total);
+            int end = Math.min(start + limit, total);
+            List<UserResponseCompleteDto> users = allUsers.subList(start, end).stream()
+                    .map(u -> mapToCompleteDto(u, areaMaps))
+                    .collect(Collectors.toList());
+            return UserPageDto.builder().users(users).total((long) total)
+                    .page(page).limit(limit).totalPages(totalPages).search(search).active(active).build();
         }
-        if (isNullOrEmpty(updateUserDto.getName())) {
-            return badRequest("El nombre es obligatorio");
-        }
-        if (isNullOrEmpty(updateUserDto.getLastName())) {
-            return badRequest("El apellido es obligatorio");
-        }
-        if (isNullOrEmpty(updateUserDto.getDni())) {
-            return badRequest("El DNI es obligatorio");
-        }
-        if (updateUserDto.getRoleId() == null) {
-            return badRequest("El rol es obligatorio");
-        }
-        
-        // Validar formato y longitud
-        if (updateUserDto.getUsername().length() < 2 || updateUserDto.getUsername().length() > 255) {
+
+        rows = active != null
+                ? userRepository.findAllLightweightByActive(active)
+                : userRepository.findAllLightweight();
+
+        int total = rows.size();
+        int totalPages = (int) Math.ceil((double) total / limit);
+        int start = Math.min((page - 1) * limit, total);
+        int end = Math.min(start + limit, total);
+
+        List<UserResponseCompleteDto> users = rows.subList(start, end).stream()
+                .map(row -> mapRowToCompleteDto(row, areaMaps))
+                .collect(Collectors.toList());
+
+        return UserPageDto.builder().users(users).total((long) total)
+                .page(page).limit(limit).totalPages(totalPages).search(search).active(active).build();
+    }
+
+    private List<UserResponseDto> findAllSinPaginacion(Boolean active) {
+        List<User> users = active != null
+                ? userRepository.findByActive(active)
+                : userRepository.findAll();
+        return users.stream().map(this::mapToResponseDto).collect(Collectors.toList());
+    }
+
+    // ── Validacion ──
+
+    private ResponseEntity<?> validateUpdateUserDto(UpdateUserDto dto) {
+        if (isNullOrEmpty(dto.getUsername())) return badRequest("El nombre de usuario es obligatorio");
+        if (isNullOrEmpty(dto.getEmail())) return badRequest("El email es obligatorio");
+        if (isNullOrEmpty(dto.getName())) return badRequest("El nombre es obligatorio");
+        if (isNullOrEmpty(dto.getLastName())) return badRequest("El apellido es obligatorio");
+        if (isNullOrEmpty(dto.getDni())) return badRequest("El DNI es obligatorio");
+        if (dto.getRoleId() == null) return badRequest("El rol es obligatorio");
+
+        if (dto.getUsername().length() < 2 || dto.getUsername().length() > 255)
             return badRequest("El nombre de usuario debe tener entre 2 y 255 caracteres");
-        }
-        if (!updateUserDto.getEmail().matches("^[A-Za-z0-9+_.-]+@(.+)$")) {
-            return badRequest("El formato del email no es válido");
-        }
-        if (updateUserDto.getName().length() > 255) {
-            return badRequest("El nombre no puede exceder 255 caracteres");
-        }
-        if (updateUserDto.getLastName().length() > 255) {
-            return badRequest("El apellido no puede exceder 255 caracteres");
-        }
-        if (updateUserDto.getDni().length() < 8 || updateUserDto.getDni().length() > 12) {
+        if (!dto.getEmail().matches("^[A-Za-z0-9+_.-]+@(.+)$"))
+            return badRequest("El formato del email no es valido");
+        if (dto.getName().length() > 255) return badRequest("El nombre no puede exceder 255 caracteres");
+        if (dto.getLastName().length() > 255) return badRequest("El apellido no puede exceder 255 caracteres");
+        if (dto.getDni().length() < 8 || dto.getDni().length() > 12)
             return badRequest("El documento debe tener entre 8 y 12 caracteres");
-        }
-        if (updateUserDto.getPassword() != null && updateUserDto.getPassword().length() < 6) {
-            return badRequest("La contraseña debe tener al menos 6 caracteres");
-        }
-        
-        return null; // Validación exitosa
+        if (dto.getPassword() != null && dto.getPassword().length() < 6)
+            return badRequest("La contrasena debe tener al menos 6 caracteres");
+
+        return null;
     }
-    
-    /**
-     * Helper para verificar si un string es null o vacío
-     */
-    private boolean isNullOrEmpty(String value) {
-        return value == null || value.trim().isEmpty();
-    }
-    
-    /**
-     * Helper para crear respuesta de error
-     */
-    private ResponseEntity<ErrorResponseDto> badRequest(String message) {
-        ErrorResponseDto error = ErrorResponseDto.builder()
-                .message(message)
-                .build();
-        return ResponseEntity.badRequest().body(error);
-    }
-    
-    /**
-     * Actualiza la entidad User con los datos del DTO
-     */
-    private User updateEntityFromDto(User user, UpdateUserDto updateUserDto) {
-        if (updateUserDto.getUsername() != null) {
-            user.setUsername(updateUserDto.getUsername());
-        }
-        if (updateUserDto.getEmail() != null) {
-            user.setEmail(updateUserDto.getEmail());
-        }
-        if (updateUserDto.getName() != null) {
-            user.setName(updateUserDto.getName());
-        }
-        if (updateUserDto.getLastName() != null) {
-            user.setLastName(updateUserDto.getLastName());
-        }
-        if (updateUserDto.getDni() != null) {
-            user.setDni(updateUserDto.getDni());
-        }
-        if (updateUserDto.getRoleId() != null) {
-            Role role = roleRepository.findById(updateUserDto.getRoleId())
-                    .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + updateUserDto.getRoleId() + " no encontrado"));
+
+    // ── Mappers ──
+
+    private User updateEntityFromDto(User user, UpdateUserDto dto) {
+        if (dto.getUsername() != null) user.setUsername(dto.getUsername());
+        if (dto.getEmail() != null) user.setEmail(dto.getEmail());
+        if (dto.getName() != null) user.setName(dto.getName());
+        if (dto.getLastName() != null) user.setLastName(dto.getLastName());
+        if (dto.getDni() != null) user.setDni(dto.getDni());
+        if (dto.getRoleId() != null) {
+            Role role = roleRepository.findById(dto.getRoleId())
+                    .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + dto.getRoleId() + " no encontrado"));
             user.setRole(role);
         }
-        if (updateUserDto.getPassword() != null) {
-            if (!validatePassword(updateUserDto.getPassword())) {
-                throw new IllegalArgumentException("La contraseña no cumple con los requisitos de seguridad");
+        if (dto.getPassword() != null) {
+            if (!validatePassword(dto.getPassword())) {
+                throw new IllegalArgumentException("La contrasena no cumple con los requisitos de seguridad");
             }
-            user.setPassword(passwordEncoder.encode(updateUserDto.getPassword()));
+            user.setPassword(passwordEncoder.encode(dto.getPassword()));
         }
-        if (updateUserDto.getActive() != null) {
-            user.setActive(updateUserDto.getActive());
-        }
-        if (updateUserDto.getAreaId() != null) {
-            user.setAreaId(updateUserDto.getAreaId().longValue() == 0 ? null : updateUserDto.getAreaId());
-        }
+        if (dto.getActive() != null) user.setActive(dto.getActive());
+        if (dto.getAreaId() != null) user.setAreaId(dto.getAreaId().longValue() == 0 ? null : dto.getAreaId());
         return user;
     }
 
-    /**
-     * Convierte la entidad User a UserResponseDto
-     */
     private UserResponseDto mapToResponseDto(User user) {
         Long areaId = user.getAreaId();
-        String areaNombre = areaId != null ? areaRepository.findById(areaId).map(Area::getName).orElse(null) : null;
+        String areaNombre = areaId != null
+                ? areaRepository.findById(areaId).map(Area::getName).orElse(null)
+                : null;
         return UserResponseDto.builder()
                 .id(user.getId())
-                .username(user.getUsername() != null ? user.getUsername() : "")
-                .email(user.getEmail() != null ? user.getEmail() : "")
-                .name(user.getName() != null ? user.getName() : "")
-                .lastName(user.getLastName() != null ? user.getLastName() : "")
-                .dni(user.getDni() != null ? user.getDni() : "")
+                .username(orEmpty(user.getUsername()))
+                .email(orEmpty(user.getEmail()))
+                .name(orEmpty(user.getName()))
+                .lastName(orEmpty(user.getLastName()))
+                .dni(orEmpty(user.getDni()))
                 .role(user.getRoleId() != null ? user.getRoleId() : 0L)
-                .roleName(user.getRoleName() != null ? user.getRoleName() : "")
+                .roleName(orEmpty(user.getRoleName()))
                 .moduleId(user.getModuleId() != null ? user.getModuleId() : 0L)
                 .active(user.getActive() != null ? user.getActive() : false)
                 .lastLogin(user.getLastLogin())
@@ -550,27 +402,67 @@ public class UserServiceImpl implements UserService {
                 .areaNombre(areaNombre)
                 .build();
     }
-    
-    /** Usa mapas pre-cargados para evitar N+1 (una sola query de áreas para toda la lista). Un usuario puede ser responsable de varias áreas. */
-    private UserResponseCompleteDto mapToUserResponseCompleteDto(User user, Map<Long, Area> areaById, Map<Long, List<Area>> areasByManagerId) {
-        Long areaId = user.getAreaId();
+
+    private UserResponseCompleteDto mapRowToCompleteDto(Object[] row, AreaMaps areaMaps) {
+        Long id = ((Number) row[0]).longValue();
+        String username = (String) row[1];
+        String email = (String) row[2];
+        String name = (String) row[3];
+        String lastName = (String) row[4];
+        String roleName = (String) row[5];
+        Boolean active = (Boolean) row[6];
+        String dni = (String) row[7];
+        LocalDateTime createdAt = row[8] != null ? ((java.sql.Timestamp) row[8]).toLocalDateTime() : null;
+        LocalDateTime lastLogin = row[9] != null ? ((java.sql.Timestamp) row[9]).toLocalDateTime() : null;
+        Long areaId = row[10] != null ? ((Number) row[10]).longValue() : null;
+
         String areaNombre = null;
-        Boolean areaEsResponsable = false;
+        boolean esResponsable = false;
+
         if (areaId != null) {
-            Area area = areaById.get(areaId);
+            Area area = areaMaps.byId.get(areaId);
             if (area != null) {
                 areaNombre = area.getName();
-                areaEsResponsable = area.getManagerId() != null && area.getManagerId().equals(user.getId());
+                esResponsable = area.getManagerId() != null && area.getManagerId().equals(id);
             }
         }
         if (areaNombre == null) {
-            List<Area> areas = areasByManagerId.get(user.getId());
+            List<Area> areas = areaMaps.byManagerId.get(id);
             if (areas != null && !areas.isEmpty()) {
                 areaId = areas.get(0).getId();
                 areaNombre = areas.stream().map(Area::getName).collect(Collectors.joining(", "));
-                areaEsResponsable = true;
+                esResponsable = true;
             }
         }
+
+        return UserResponseCompleteDto.builder()
+                .id(id).username(username).email(email).name(name).lastName(lastName)
+                .role(roleName).dni(dni).active(active).createdAt(createdAt).lastLogin(lastLogin)
+                .areaId(areaId).areaNombre(areaNombre).areaEsResponsable(esResponsable)
+                .build();
+    }
+
+    private UserResponseCompleteDto mapToCompleteDto(User user, AreaMaps areaMaps) {
+        Long areaId = user.getAreaId();
+        String areaNombre = null;
+        boolean esResponsable = false;
+
+        if (areaId != null) {
+            Area area = areaMaps.byId.get(areaId);
+            if (area != null) {
+                areaNombre = area.getName();
+                esResponsable = area.getManagerId() != null && area.getManagerId().equals(user.getId());
+            }
+        }
+        if (areaNombre == null) {
+            List<Area> areas = areaMaps.byManagerId.get(user.getId());
+            if (areas != null && !areas.isEmpty()) {
+                areaId = areas.get(0).getId();
+                areaNombre = areas.stream().map(Area::getName).collect(Collectors.joining(", "));
+                esResponsable = true;
+            }
+        }
+
         return UserResponseCompleteDto.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -584,157 +476,85 @@ public class UserServiceImpl implements UserService {
                 .lastLogin(user.getLastLogin())
                 .areaId(areaId)
                 .areaNombre(areaNombre)
-                .areaEsResponsable(areaEsResponsable)
+                .areaEsResponsable(esResponsable)
                 .build();
     }
 
-    private UserResponseCompleteDto mapToUserResponseCompleteDto(User user) {
-        List<Area> allAreas = areaRepository.findAll();
-        Map<Long, Area> areaById = allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a));
-        Map<Long, List<Area>> areasByManagerId = allAreas.stream()
-                .filter(a -> a.getManagerId() != null)
-                .collect(Collectors.groupingBy(Area::getManagerId));
-        return mapToUserResponseCompleteDto(user, areaById, areasByManagerId);
+    private UsuarioResumenDto toUsuarioResumenDto(User u, AreaMaps areaMaps) {
+        String areaNombre = null;
+        if (u.getAreaId() != null) {
+            Area a = areaMaps.byId.get(u.getAreaId());
+            if (a != null) areaNombre = a.getName();
+        }
+        if (areaNombre == null) {
+            List<Area> areas = areaMaps.byManagerId.get(u.getId());
+            if (areas != null && !areas.isEmpty()) {
+                areaNombre = areas.stream().map(Area::getName).collect(Collectors.joining(", "));
+            }
+        }
+        return UsuarioResumenDto.builder()
+                .id(u.getId())
+                .username(u.getUsername())
+                .rol(orEmpty(u.getRoleName()))
+                .esJefe(areaMaps.byManagerId.containsKey(u.getId()))
+                .area(orEmpty(areaNombre))
+                .nombre(orEmpty(u.getName()))
+                .apellido(orEmpty(u.getLastName()))
+                .email(orEmpty(u.getEmail()))
+                .dni(orEmpty(u.getDni()))
+                .build();
     }
-    
-    /**
-     * Verifica si el usuario está logueado y envía notificación de logout forzado
-     */
+
+    // ── Notificaciones ──
+
     private void verificarYEnviarLogoutForzado(User user) {
         try {
-            // Verificar si el usuario está logueado (podemos usar lastLogin como indicador)
-            // Si el lastLogin es reciente (menos de 24 horas), asumimos que está logueado
-            if (user.getLastLogin() != null && 
-                user.getLastLogin().isAfter(LocalDateTime.now().minusHours(24))) {
-                
-                log.info("🚨 Usuario {} está logueado, enviando notificación de logout forzado", user.getUsername());
-                
-                // Enviar notificación WebSocket
+            if (user.getLastLogin() != null
+                    && user.getLastLogin().isAfter(LocalDateTime.now().minusHours(24))) {
+                log.info("[UserService] Usuario {} logueado, enviando logout forzado", user.getUsername());
                 userNotificationHandler.enviarLogoutForzado(user.getId(), user.getUsername());
             }
         } catch (Exception e) {
-            log.error("❌ Error enviando logout forzado para usuario {}: {}", user.getUsername(), e.getMessage());
+            log.error("[UserService] Error enviando logout forzado para {}: {}", user.getUsername(), e.getMessage());
         }
     }
-    
-    /**
-     * Envía notificación de bloqueo de cuenta con logout automático
-     */
+
     private void enviarNotificacionBloqueo(User user) {
         try {
-            // Siempre enviar notificación de bloqueo, independientemente del último login
-            log.info("🚨 Usuario {} desactivado, enviando notificación de bloqueo", user.getUsername());
-            
-            // Enviar notificación WebSocket de bloqueo
+            log.info("[UserService] Usuario {} desactivado, enviando notificacion de bloqueo", user.getUsername());
             userNotificationHandler.enviarBloqueoCuenta(user.getId(), user.getUsername());
         } catch (Exception e) {
-            log.error("❌ Error enviando notificación de bloqueo para usuario {}: {}", user.getUsername(), e.getMessage());
+            log.error("[UserService] Error enviando notificacion de bloqueo para {}: {}", user.getUsername(), e.getMessage());
         }
     }
-    
-    @Override
-    public ResponseEntity<DniResponseDto> consultarDni(String dni) {
-        log.info("🆔 [UserService] Consultando DNI: {}", dni);
-        
-        try {
-            // Validar si es un DNI peruano (exactamente 8 dígitos)
-            if (!dni.matches("^\\d{8}$")) {
-                // Si no es DNI de 8 dígitos, no consultar API (puede ser CE, pasaporte, etc.)
-                log.info("📄 [UserService] Documento {} no es DNI peruano (8 dígitos), no se consulta API", dni);
-                return ResponseEntity.ok(DniResponseDto.builder()
-                    .success(false)
-                    .dni(dni)
-                    .error("Solo se pueden consultar DNI peruanos de 8 dígitos")
-                    .build());
-            }
-            
-            // Consultar API externa (Factiliza)
-            String apiUrl = "https://api.factiliza.com/pe/v1/dni/info/" + dni;
-            log.info("🌐 [UserService] Consultando API: {}", apiUrl);
-            
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(apiUrl))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NTkiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJjb25zdWx0b3IifQ.NaoAXramusCzks7mRCzWFWcMiBaSA0d8rNBgw-OVeYg")
-                    .GET()
-                    .build();
-            
-            HttpResponse<String> response = client.send(request, 
-                    HttpResponse.BodyHandlers.ofString());
-            
-            log.info("📡 [UserService] Respuesta API status: {}", response.statusCode());
-            
-            if (response.statusCode() == 200) {
-                String responseBody = response.body();
-                log.info("📋 [UserService] Respuesta API: {}", responseBody);
-                
-                try {
-                    // Parsear JSON con ObjectMapper
-                    JsonNode rootNode = objectMapper.readTree(responseBody);
-                    
-                    // Verificar si la respuesta es exitosa
-                    boolean success = rootNode.has("success") && rootNode.get("success").asBoolean();
-                    if (!success) {
-                        String message = rootNode.has("message") ? rootNode.get("message").asText() : "Error en la consulta";
-                        log.error("❌ [UserService] API retornó success=false: {}", message);
-                        return ResponseEntity.ok(DniResponseDto.builder()
-                            .success(false)
-                            .dni(dni)
-                            .error(message)
-                            .build());
-                    }
-                    
-                    // Extraer datos del objeto "data"
-                    JsonNode dataNode = rootNode.get("data");
-                    if (dataNode == null || dataNode.isNull()) {
-                        log.error("❌ [UserService] No se encontró el objeto 'data' en la respuesta");
-                        return ResponseEntity.ok(DniResponseDto.builder()
-                            .success(false)
-                            .dni(dni)
-                            .error("No se encontraron datos en la respuesta")
-                            .build());
-                    }
-                    
-                    String nombres = dataNode.has("nombres") ? dataNode.get("nombres").asText() : "";
-                    String apellidoPaterno = dataNode.has("apellido_paterno") ? dataNode.get("apellido_paterno").asText() : "";
-                    String apellidoMaterno = dataNode.has("apellido_materno") ? dataNode.get("apellido_materno").asText() : "";
-                    
-                    return ResponseEntity.ok(DniResponseDto.builder()
-                        .success(true)
-                        .nombres(nombres)
-                        .apellidoPaterno(apellidoPaterno)
-                        .apellidoMaterno(apellidoMaterno)
-                        .build());
-                        
-                } catch (Exception e) {
-                    log.error("❌ [UserService] Error parseando respuesta JSON: {}", e.getMessage());
-                    return ResponseEntity.ok(DniResponseDto.builder()
-                        .success(false)
-                        .dni(dni)
-                        .error("Error parseando respuesta: " + e.getMessage())
-                        .build());
-                }
-                
-            } else {
-                log.error("❌ [UserService] Error en API DNI: status {}", response.statusCode());
-                return ResponseEntity.status(response.statusCode()).body(DniResponseDto.builder()
-                    .success(false)
-                    .dni(dni)
-                    .error("Error consultando DNI: status " + response.statusCode())
-                    .build());
-            }
-            
-        } catch (Exception e) {
-            log.error("💥 [UserService] Error consultando DNI {}: {}", dni, e.getMessage());
-            return ResponseEntity.internalServerError().body(DniResponseDto.builder()
-                .success(false)
-                .dni(dni)
-                .error("Error interno: " + e.getMessage())
-                .build());
-        }
-    }
-    
-    
-}
 
+    // ── Helpers ──
+
+    private User findUserOrThrow(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Usuario no encontrado"));
+    }
+
+    private AreaMaps loadAreaMaps() {
+        List<Area> allAreas = areaRepository.findAll();
+        return new AreaMaps(
+                allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a)),
+                allAreas.stream()
+                        .filter(a -> a.getManagerId() != null)
+                        .collect(Collectors.groupingBy(Area::getManagerId)));
+    }
+
+    private static String orEmpty(String value) {
+        return value != null ? value : "";
+    }
+
+    private static boolean isNullOrEmpty(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private static ResponseEntity<ErrorResponseDto> badRequest(String message) {
+        return ResponseEntity.badRequest().body(ErrorResponseDto.builder().message(message).build());
+    }
+
+    private record AreaMaps(Map<Long, Area> byId, Map<Long, List<Area>> byManagerId) {}
+}

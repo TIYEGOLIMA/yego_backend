@@ -113,6 +113,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/marketing-mensajes/**").permitAll() // Marketing mensajes endpoints
                 .requestMatchers("/api/pro-ops/**", "/pro-ops/**").permitAll() // Pro Ops endpoints (con o sin /api si context-path=/api)
                 .requestMatchers("/api/GoBot/**").permitAll() // GoBot API externa endpoints
+                .requestMatchers("/api/yango-external/**").permitAll() // Yango resumen externo (yego_api_externo)
                 .requestMatchers("/ws/**").permitAll() // WebSocket endpoints
                 .requestMatchers("/actuator/**").permitAll() // Actuator endpoints
                 .requestMatchers("/error").permitAll() // Error endpoint

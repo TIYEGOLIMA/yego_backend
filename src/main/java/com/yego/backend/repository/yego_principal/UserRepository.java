@@ -35,14 +35,23 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT DISTINCT u FROM User u JOIN FETCH u.role WHERE u.active = :active ORDER BY u.name ASC")
     List<User> findByActiveWithRole(@Param("active") Boolean active);
 
-    @Query("SELECT DISTINCT u FROM User u JOIN FETCH u.role ORDER BY u.name ASC")
-    List<User> findAllWithRole();
-
     @Query("SELECT DISTINCT u FROM User u JOIN FETCH u.role WHERE u.username LIKE :searchPattern OR u.email LIKE :searchPattern OR u.name LIKE :searchPattern OR u.lastName LIKE :searchPattern ORDER BY u.name ASC")
     List<User> findBySearchWithRole(@Param("searchPattern") String searchPattern);
 
     @Query("SELECT DISTINCT u FROM User u JOIN FETCH u.role WHERE (u.username LIKE :searchPattern OR u.email LIKE :searchPattern OR u.name LIKE :searchPattern OR u.lastName LIKE :searchPattern) AND u.active = :active ORDER BY u.name ASC")
     List<User> findBySearchAndActiveWithRole(@Param("searchPattern") String searchPattern, @Param("active") Boolean active);
+
+    // --- Listados ligeros (solo campos necesarios, sin cargar Role.permissions) ---
+
+    @Query(value = "SELECT u.id, u.username, u.email, u.name, u.last_name, r.name AS role_name, " +
+                   "u.active, u.dni, u.created_at, u.last_login, u.area_id " +
+                   "FROM users u JOIN roles r ON u.role = r.id ORDER BY u.name ASC", nativeQuery = true)
+    List<Object[]> findAllLightweight();
+
+    @Query(value = "SELECT u.id, u.username, u.email, u.name, u.last_name, r.name AS role_name, " +
+                   "u.active, u.dni, u.created_at, u.last_login, u.area_id " +
+                   "FROM users u JOIN roles r ON u.role = r.id WHERE u.active = :active ORDER BY u.name ASC", nativeQuery = true)
+    List<Object[]> findAllLightweightByActive(@Param("active") Boolean active);
 
     // --- Por ID y roles ---
 

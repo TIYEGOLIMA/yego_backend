@@ -13,6 +13,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @Builder
@@ -45,6 +46,10 @@ public class CreateAreaTaskDto {
     private Integer progressPercent;
 
     private Long assignedUserId;
+
+    private List<Long> assignedUserIds;
+
+    private List<String> tags;
 
     private Integer sortOrder;
 }

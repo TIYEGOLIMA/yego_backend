@@ -9,6 +9,7 @@ import com.yego.backend.entity.yego_principal.api.response.UserSimpleDto;
 import com.yego.backend.service.yego_principal.AreaService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,7 +18,7 @@ import java.util.List;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/areas")
+@RequestMapping(value = "/api/areas", produces = MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8")
 @RequiredArgsConstructor
 public class AreaController {
 

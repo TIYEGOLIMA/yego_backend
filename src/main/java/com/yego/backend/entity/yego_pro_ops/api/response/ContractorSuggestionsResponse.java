@@ -30,6 +30,25 @@ public class ContractorSuggestionsResponse {
     public static class ContractorSuggestionItem {
         @JsonProperty("contractor")
         private ContractorSuggestionContractor contractor;
+
+        @JsonProperty("vehicle")
+        private ContractorSuggestionVehicle vehicle;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class ContractorSuggestionVehicle {
+        @JsonProperty("number")
+        private String number;
+
+        @JsonProperty("brand")
+        private String brand;
+
+        @JsonProperty("model")
+        private String model;
     }
 
     @Data
