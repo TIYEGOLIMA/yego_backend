@@ -28,10 +28,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @Service
 public class YangoWeeklyService {
+
+    /** Hilos dedicados para llamadas HTTP a Yango (no bloquear ForkJoinPool.commonPool()). */
+    private static final Executor YANGO_IO = Executors.newFixedThreadPool(6, r -> {
+        Thread t = new Thread(r, "yango-external-io");
+        t.setDaemon(true);
+        return t;
+    });
 
     private static final ZoneId LIMA = ZoneId.of("America/Lima");
     private static final DateTimeFormatter ISO_OFFSET =
@@ -64,13 +73,13 @@ public class YangoWeeklyService {
         String contractorId = resolveContractor(queryText, parkId);
 
         CompletableFuture<YangoIncomeSummary> weeklyIncomeFuture =
-                CompletableFuture.supplyAsync(() -> fetchIncome(contractorId, weeklyPeriod, parkId));
+                CompletableFuture.supplyAsync(() -> fetchIncome(contractorId, weeklyPeriod, parkId), YANGO_IO);
 
         CompletableFuture<YangoIncomeSummary> monthlyIncomeFuture =
-                CompletableFuture.supplyAsync(() -> fetchIncome(contractorId, monthlyPeriod, parkId));
+                CompletableFuture.supplyAsync(() -> fetchIncome(contractorId, monthlyPeriod, parkId), YANGO_IO);
 
         CompletableFuture<GoalsResult> goalsFuture =
-                CompletableFuture.supplyAsync(() -> fetchGoals(contractorId, parkId));
+                CompletableFuture.supplyAsync(() -> fetchGoals(contractorId, parkId), YANGO_IO);
 
         YangoIncomeSummary weeklyIncome = weeklyIncomeFuture.join();
         YangoIncomeSummary monthlyIncome = monthlyIncomeFuture.join();
