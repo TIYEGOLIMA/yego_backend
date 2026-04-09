@@ -37,7 +37,11 @@ public class AuthController {
     public ResponseEntity<?> login(@Valid @RequestBody LoginDto loginDto, 
                                   HttpServletRequest request) {
         LoginTokenResult result = authService.login(loginDto, request);
-        LoginResponseDto body = LoginResponseDto.builder().message(result.message()).build();
+        LoginResponseDto body = LoginResponseDto.builder()
+                .message(result.message())
+                .accessToken(result.accessToken())
+                .user(result.user())
+                .build();
         return ResponseEntity.ok()
                 .header("X-Access-Token", result.accessToken())
                 .body(body);
@@ -55,7 +59,11 @@ public class AuthController {
         
         String token = authHeader.substring(7);
         LoginTokenResult result = authService.refreshToken(token, request);
-        LoginResponseDto body = LoginResponseDto.builder().message(result.message()).build();
+        LoginResponseDto body = LoginResponseDto.builder()
+                .message(result.message())
+                .accessToken(result.accessToken())
+                .user(result.user())
+                .build();
         return ResponseEntity.ok()
                 .header("X-Access-Token", result.accessToken())
                 .body(body);

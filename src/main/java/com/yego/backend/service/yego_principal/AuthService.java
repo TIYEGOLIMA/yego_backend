@@ -19,7 +19,7 @@ public interface AuthService extends UserDetailsService {
     UserResponseDto validateUser(String username, String password, HttpServletRequest request);
     
     /**
-     * Realizar login y generar token (el token se expone en header X-Access-Token, no en JSON).
+     * Realizar login y generar token (token y perfil en JSON y en header X-Access-Token).
      */
     LoginTokenResult login(LoginDto loginDto, HttpServletRequest request);
     

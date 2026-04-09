@@ -35,7 +35,11 @@ public class TicketeraAuthController {
         String token = authHeader.substring(7);
         try {
             LoginTokenResult result = authService.refreshToken(token, request);
-            LoginResponseDto body = LoginResponseDto.builder().message(result.message()).build();
+            LoginResponseDto body = LoginResponseDto.builder()
+                    .message(result.message())
+                    .accessToken(result.accessToken())
+                    .user(result.user())
+                    .build();
             log.info("[TicketeraAuth] Token renovado correctamente");
             return ResponseEntity.ok()
                     .header("X-Access-Token", result.accessToken())

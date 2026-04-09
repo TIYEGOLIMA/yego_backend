@@ -193,7 +193,7 @@ public class AuthServiceImpl implements AuthService {
             
             sessionService.create(sessionDto, userId, request);
 
-            return new LoginTokenResult(newAccessToken, "Token renovado correctamente");
+            return new LoginTokenResult(newAccessToken, "Token renovado correctamente", getUserProfile(userId));
                     
         } catch (Exception e) {
             log.warn("Error renovando token: {}", e.getMessage());
@@ -230,7 +230,7 @@ public class AuthServiceImpl implements AuthService {
         String userAgent = request.getHeader("User-Agent");
         auditService.logLogin(user.getId(), user.getUsername(), clientIp, userAgent);
         
-        return new LoginTokenResult(accessToken, "Inicio de sesión correcto");
+        return new LoginTokenResult(accessToken, "Inicio de sesión correcto", getUserProfile(user.getId()));
     }
     
     @Override
