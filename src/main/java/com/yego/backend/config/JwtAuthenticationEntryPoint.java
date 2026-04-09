@@ -28,9 +28,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         
         log.warn("Acceso no autorizado: {}", authException.getMessage());
         
-        // Crear respuesta JSON de forma segura
         Map<String, String> errorResponse = new HashMap<>();
-        errorResponse.put("error", "No autorizado");
         errorResponse.put("message", authException.getMessage() != null ? authException.getMessage() : "Token inválido o expirado");
         
         response.setContentType("application/json;charset=UTF-8");

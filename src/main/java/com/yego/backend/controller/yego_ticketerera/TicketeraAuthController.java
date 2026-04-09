@@ -1,6 +1,7 @@
 package com.yego.backend.controller.yego_ticketerera;
 
 import com.yego.backend.entity.yego_principal.api.response.LoginResponseDto;
+import com.yego.backend.entity.yego_principal.api.response.LoginTokenResult;
 import com.yego.backend.service.yego_principal.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,11 +34,14 @@ public class TicketeraAuthController {
         
         String token = authHeader.substring(7);
         try {
-            LoginResponseDto response = authService.refreshToken(token, request);
-            log.info("🔄 [Ticketera] Token renovado exitosamente para usuario: {}", response.getUser().getUsername());
-            return ResponseEntity.ok(response);
+            LoginTokenResult result = authService.refreshToken(token, request);
+            LoginResponseDto body = LoginResponseDto.builder().message(result.message()).build();
+            log.info("[TicketeraAuth] Token renovado correctamente");
+            return ResponseEntity.ok()
+                    .header("X-Access-Token", result.accessToken())
+                    .body(body);
         } catch (Exception e) {
-            log.warn("❌ [Ticketera] Error renovando token: {}", e.getMessage());
+            log.warn("[TicketeraAuth] Error al renovar token: {}", e.getMessage());
             return ResponseEntity.status(401).body("Token inválido o expirado");
         }
     }
@@ -58,7 +62,7 @@ public class TicketeraAuthController {
             authService.refreshToken(token, request);
             return ResponseEntity.ok().body("Token válido");
         } catch (Exception e) {
-            log.warn("❌ [Ticketera] Token inválido: {}", e.getMessage());
+            log.warn("[TicketeraAuth] Token inválido: {}", e.getMessage());
             return ResponseEntity.status(401).body("Token inválido o expirado");
         }
     }

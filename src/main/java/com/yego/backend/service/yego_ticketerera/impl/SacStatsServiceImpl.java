@@ -40,14 +40,13 @@ public class SacStatsServiceImpl implements SacStatsService {
     private final QueueAgentRepository queueAgentRepository;
     
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
     private static final DateTimeFormatter ISO_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final ZoneId ZONE_ID = ZoneId.of("America/Lima");
     
     @Override
     @Transactional(readOnly = true)
     public SacStatsResponse obtenerTodasLasEstadisticas(String fechaInicio, String fechaFin) {
-        log.info("📊 Calculando estadísticas generales de SAC (optimizado) - Fecha inicio: {}, Fecha fin: {}", fechaInicio, fechaFin);
+        log.debug("Estadísticas SAC fecha inicio {} fin {}", fechaInicio, fechaFin);
         long startTime = System.currentTimeMillis();
         
         // Parsear fechas si se proporcionan
@@ -62,15 +61,15 @@ public class SacStatsServiceImpl implements SacStatsService {
                 fechaInicioDT = inicio.atStartOfDay().atZone(ZONE_ID).toLocalDateTime();
                 fechaFinDT = fin.atTime(LocalTime.MAX).atZone(ZONE_ID).toLocalDateTime();
                 tieneFiltroFecha = true;
-                log.info("📅 Filtro de fecha aplicado: {} a {}", fechaInicioDT, fechaFinDT);
+                log.debug("Filtro fecha {} a {}", fechaInicioDT, fechaFinDT);
             } catch (DateTimeParseException e) {
-                log.warn("⚠️ Error parseando fechas: {}. Se usarán todos los datos.", e.getMessage());
+                log.warn("Error parseando fechas: {}. Se usan todos los datos.", e.getMessage());
             }
         }
         
         // 1. Obtener usuarios SAC (una sola query)
         List<User> sacUsers = obtenerUsuariosSac();
-        log.info("👥 Usuarios SAC encontrados: {}", sacUsers.size());
+        log.debug("Usuarios SAC: {}", sacUsers.size());
         
         if (sacUsers.isEmpty()) {
             return construirRespuestaVacia();
@@ -101,7 +100,7 @@ public class SacStatsServiceImpl implements SacStatsService {
             averageRating = 0.0;
         }
         
-        log.info("📊 Estadísticas generales - Tickets: {}, Ratings: {}, Promedio: {}", 
+        log.debug("Totales tickets {} ratings {} promedio {}", 
             totalTickets, totalRatings, averageRating);
         
         // 4. Obtener IDs de usuarios para consultas batch
@@ -166,7 +165,7 @@ public class SacStatsServiceImpl implements SacStatsService {
         List<RecentRatingResponse> recentRatingsResponse = convertirARecentRatingsOptimizado(recentRatings);
         
         long endTime = System.currentTimeMillis();
-        log.info("✅ Estadísticas calculadas en {}ms", (endTime - startTime));
+        log.debug("Estadísticas SAC calculadas en {} ms", (endTime - startTime));
         
         return SacStatsResponse.builder()
                 .totalSACs(sacUsers.size())

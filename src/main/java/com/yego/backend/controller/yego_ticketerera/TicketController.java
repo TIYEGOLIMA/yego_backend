@@ -66,7 +66,7 @@ public class TicketController {
             @PathVariable Long ticketId, 
             @PathVariable Long userId,
             @RequestParam Long moduleId) {
-        log.info("Llamando ticket con ID: {} por usuario: {} para módulo: {}", ticketId, userId, moduleId);
+        log.info("[Ticket] Llamar ticket {} por usuario {} en módulo {}", ticketId, userId, moduleId);
         Ticket ticket = ticketService.llamarTicket(ticketId, userId, moduleId);
         return ResponseEntity.ok(ticket);
     }

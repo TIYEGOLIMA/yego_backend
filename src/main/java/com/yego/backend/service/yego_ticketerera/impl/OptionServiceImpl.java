@@ -23,27 +23,27 @@ public class OptionServiceImpl implements OptionService {
     @Override
     @Transactional(readOnly = true)
     public List<Option> obtenerTodasLasOpciones() {
-        log.info("Obteniendo todas las opciones activas");
+        log.debug("Listando opciones activas");
         List<Option> options = optionRepository.findByActiveTrueOrderByPriorityAsc();
-        log.info("Se encontraron {} opciones activas", options.size());
+        log.debug("Opciones activas: {}", options.size());
         return options;
     }
     
     @Override
     @Transactional(readOnly = true)
     public List<Option> obtenerModulosActivos() {
-        log.info("Obteniendo módulos activos (opciones principales)");
+        log.debug("Módulos activos (opciones principales)");
         List<Option> modules = optionRepository.findByParentIdIsNullAndActiveTrueOrderByPriorityAsc();
-        log.info("Se encontraron {} módulos activos", modules.size());
+        log.debug("Módulos activos: {}", modules.size());
         return modules;
     }
     
     @Override
     @Transactional(readOnly = true)
     public List<Option> obtenerSubopciones(Long parentId) {
-        log.info("Obteniendo subopciones para el módulo: {}", parentId);
+        log.debug("Subopciones módulo {}", parentId);
         List<Option> suboptions = optionRepository.findByParentIdAndActiveTrueOrderByPriorityAsc(parentId);
-        log.info("Se encontraron {} subopciones para el módulo {}", suboptions.size(), parentId);
+        log.debug("Subopciones módulo {}: {}", parentId, suboptions.size());
         return suboptions;
     }
 }

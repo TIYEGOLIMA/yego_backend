@@ -31,7 +31,7 @@ public class QueueRatingServiceImpl implements QueueRatingService {
     
     @Override
     public QueueRating crearRating(CrearRatingRequest request) {
-        log.info("📝 [QueueRatingService] Creando rating para ticket: {}, score: {}", 
+        log.info("[QueueRating] Crear rating ticket {} score {}", 
                 request.getTicketId(), request.getScore());
         
         // Verificar que el ticket existe
@@ -53,11 +53,11 @@ public class QueueRatingServiceImpl implements QueueRatingService {
         }
         
         Long agentId = completadoOpt.get().getAgentId();
-        log.info("🔍 [QueueRatingService] Agente encontrado: {} para ticket: {}", agentId, request.getTicketId());
+        log.debug("[QueueRating] Agente {} para ticket {}", agentId, request.getTicketId());
         
         // Usar el timestamp del frontend si viene, si no usar la hora actual (zona horaria de Perú)
         LocalDateTime createdAt = request.getTimestamp() != null ? request.getTimestamp() : LocalDateTime.now(ZoneId.of("America/Lima"));
-        log.info("⏰ [QueueRatingService] Timestamp del rating: {}", createdAt);
+        log.debug("[QueueRating] Timestamp {}", createdAt);
         
         QueueRating rating = QueueRating.builder()
                 .ticketId(request.getTicketId())
@@ -69,14 +69,14 @@ public class QueueRatingServiceImpl implements QueueRatingService {
         
         QueueRating savedRating = queueRatingRepository.save(rating);
         
-        log.info("✅ [QueueRatingService] Rating creado exitosamente con ID: {} para agente: {}", 
+        log.info("[QueueRating] Rating creado id {} agente {}", 
                 savedRating.getId(), agentId);
         return savedRating;
     }
     
     @Override
     public List<QueueRating> obtenerRatingsPorTicket(Long ticketId) {
-        log.info("🔍 [QueueRatingService] Obteniendo ratings para ticket: {}", ticketId);
+        log.debug("[QueueRating] Ratings por ticket {}", ticketId);
         return queueRatingRepository.findByTicketId(ticketId);
     }
 }

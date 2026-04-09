@@ -26,7 +26,7 @@ public class DriverMonthlyStatsScheduler {
     @Scheduled(cron = "0 0 8 1 * *", zone = "America/Lima")
     public void notifyProcessingWindow() {
         YearMonth periodo = YearMonth.now(LIMA_ZONE).minusMonths(1);
-        log.info("🗓️ [DriverMonthlyStatsScheduler] Notificando disponibilidad de procesamiento para {}-{}", periodo.getYear(), periodo.getMonthValue());
+        log.info("[DriverMonthlyStatsScheduler] Notificación de ventana de procesamiento para {}-{}", periodo.getYear(), periodo.getMonthValue());
         notificationHandler.notifyProcessAvailable(periodo);
     }
 }

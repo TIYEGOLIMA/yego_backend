@@ -14,4 +14,10 @@ public interface FlotaService {
      * @return Lista de flotas filtradas
      */
     List<FlotaResponse> obtenerFlotas();
+
+    /**
+     * Todos los partners devueltos por la API externa (sin filtrar por lista de IDs).
+     * Para resolución de nombres por {@code parkId} en otros módulos.
+     */
+    List<FlotaResponse> obtenerTodosLosPartners();
 }

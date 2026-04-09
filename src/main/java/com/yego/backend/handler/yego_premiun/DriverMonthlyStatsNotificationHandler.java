@@ -32,9 +32,9 @@ public class DriverMonthlyStatsNotificationHandler {
             filteredWebSocketService.convertAndSend("/topic/yego-premiun", payload);
             filteredWebSocketService.convertAndSend("/topic/premium-driver", payload);
 
-            log.info("📢 [DriverMonthlyStatsNotification] Notificación enviada: {}", payload);
+            log.info("[DriverMonthlyStatsNotification] Enviada: type={} period={}-{}", payload.get("type"), payload.get("year"), payload.get("month"));
         } catch (Exception ex) {
-            log.error("❌ [DriverMonthlyStatsNotification] Error enviando notificación: {}", ex.getMessage());
+            log.error("[DriverMonthlyStatsNotification] Error al enviar: {}", ex.getMessage());
         }
     }
 }

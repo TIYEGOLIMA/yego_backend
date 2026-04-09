@@ -5,39 +5,14 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 /**
- * DTO de respuesta para login del sistema YEGO Principal
+ * Cuerpo JSON de login/refresh: solo mensaje. El JWT va en el header {@code X-Access-Token}.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class LoginResponseDto {
-    
-    private String accessToken;
-    private LoginUserDto user;
-    
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class LoginUserDto {
-        private Long id;
-        private String username;
-        private String email;
-        private String name;
-        private String role;
-        private String moduleId;
-        private Boolean active;
-        private LocalDateTime lastLogin;
-        /** Si el usuario es jefe de un área (manager_id en tabla areas). Se guarda en localStorage para la UI. */
-        private Boolean esJefe;
-        /** Nombre del área que gestiona (solo si esJefe). */
-        private String nombreArea;
-        /** true si la contraseña tiene más de una semana y debe cambiarse para seguir usando Integral. */
-        private Boolean requirePasswordChange;
-    }
-}
 
+    private String message;
+}

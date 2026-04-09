@@ -42,7 +42,7 @@ public class FilteredWebSocketService {
         // Topics del sistema siempre se envían
         if (normalizedTopic.startsWith("system") || normalizedTopic.startsWith("user/")) {
             messagingTemplate.convertAndSend(destination, payload);
-            log.debug("📤 [FilteredWebSocket] Mensaje enviado a topic de sistema: {}", destination);
+            log.debug("[FilteredWebSocket] Mensaje enviado a topic de sistema: {}", destination);
             return;
         }
         
@@ -51,7 +51,7 @@ public class FilteredWebSocketService {
         if (normalizedTopic.equals("modulos-atencion")) {
             Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("tickets");
             if (sessionsWithAccess.isEmpty()) {
-                log.debug("⏭️ [FilteredWebSocket] No hay sesiones con acceso al módulo 'tickets' - omitiendo envío");
+                log.debug("[FilteredWebSocket] No hay sesiones con acceso al módulo 'tickets' - omitiendo envío");
                 return;
             }
             
@@ -68,7 +68,7 @@ public class FilteredWebSocketService {
             }
             messagingTemplate.convertAndSend("/topic/system", systemPayload);
             
-            log.debug("📤 [FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'tickets': {}", 
+            log.debug("[FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'tickets': {}", 
                 destination, sessionsWithAccess.size(), sessionsWithAccess);
             return;
         }
@@ -77,7 +77,7 @@ public class FilteredWebSocketService {
         if (normalizedTopic.startsWith("garantizado/") || normalizedTopic.startsWith("garantizado")) {
             Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("garantizado");
             if (sessionsWithAccess.isEmpty()) {
-                log.debug("⏭️ [FilteredWebSocket] No hay sesiones con acceso al módulo 'garantizado' - omitiendo envío");
+                log.debug("[FilteredWebSocket] No hay sesiones con acceso al módulo 'garantizado' - omitiendo envío");
                 return;
             }
             
@@ -93,7 +93,7 @@ public class FilteredWebSocketService {
             }
             messagingTemplate.convertAndSend("/topic/system", systemPayload);
             
-            log.debug("📤 [FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'garantizado': {}", 
+            log.debug("[FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'garantizado': {}", 
                 destination, sessionsWithAccess.size(), sessionsWithAccess);
             return;
         }
@@ -102,7 +102,7 @@ public class FilteredWebSocketService {
         if (normalizedTopic.startsWith("pro-ops/") || normalizedTopic.startsWith("pro-ops")) {
             Set<String> sessionsWithAccess = webSocketSessionService.getSessionsWithModuleAccess("pro-ops");
             if (sessionsWithAccess.isEmpty()) {
-                log.debug("⏭️ [FilteredWebSocket] No hay sesiones con acceso al módulo 'pro-ops' - omitiendo envío");
+                log.debug("[FilteredWebSocket] No hay sesiones con acceso al módulo 'pro-ops' - omitiendo envío");
                 return;
             }
             
@@ -118,7 +118,7 @@ public class FilteredWebSocketService {
             }
             messagingTemplate.convertAndSend("/topic/system", systemPayload);
             
-            log.debug("📤 [FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'pro-ops': {}", 
+            log.debug("[FilteredWebSocket] Mensaje enviado a topic {} y /topic/system - {} sesiones con acceso al módulo 'pro-ops': {}", 
                 destination, sessionsWithAccess.size(), sessionsWithAccess);
             return;
         }
@@ -126,28 +126,28 @@ public class FilteredWebSocketService {
         // Para topics de ticketera, SIEMPRE enviar sin verificar sesiones
         // porque SimpleBroker envía a TODAS las sesiones suscritas automáticamente
         if (destination.contains("ticket") || destination.contains("ticketera")) {
-            log.info("📤 [FilteredWebSocket] Enviando mensaje a topic de ticketera {} (SimpleBroker enviará a todas las sesiones suscritas)", destination);
+            log.info("[FilteredWebSocket] Enviando mensaje a topic de ticketera {} (SimpleBroker enviará a todas las sesiones suscritas)", destination);
             messagingTemplate.convertAndSend(destination, payload);
-            log.info("✅ [FilteredWebSocket] Mensaje enviado a topic {}", destination);
+            log.info("[FilteredWebSocket] Mensaje enviado a topic {}", destination);
             return;
         }
         
         // Para otros topics, verificar si hay sesiones suscritas (ya filtradas por acceso)
         Set<String> subscribedSessions = webSocketSessionService.getSessionsSubscribedTo(destination);
         
-        log.info("🔍 [FilteredWebSocket] Verificando sesiones para topic: {} - Sesiones encontradas: {}", destination, subscribedSessions.size());
+        log.info("[FilteredWebSocket] Verificando sesiones para topic: {} - Sesiones encontradas: {}", destination, subscribedSessions.size());
         
         if (subscribedSessions.isEmpty()) {
-            log.warn("🚫 [FilteredWebSocket] No hay sesiones suscritas al topic: {} - NO ENVIANDO MENSAJE", destination);
+            log.warn("[FilteredWebSocket] No hay sesiones suscritas al topic: {} - NO ENVIANDO MENSAJE", destination);
             return;
         }
         
         // Enviar mensaje - solo usuarios con acceso están suscritos
         // Con SimpleBroker, convertAndSend envía a todas las sesiones suscritas al topic
-        log.info("📤 [FilteredWebSocket] Enviando mensaje a topic {} - {} sesiones suscritas: {}", 
+        log.info("[FilteredWebSocket] Enviando mensaje a topic {} - {} sesiones suscritas: {}", 
             destination, subscribedSessions.size(), subscribedSessions);
         messagingTemplate.convertAndSend(destination, payload);
-        log.info("✅ [FilteredWebSocket] Mensaje enviado correctamente a topic {}", destination);
+        log.info("[FilteredWebSocket] Mensaje enviado correctamente a topic {}", destination);
     }
 }
 

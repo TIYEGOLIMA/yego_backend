@@ -21,8 +21,7 @@ import java.util.List;
 public class ModuloAtencionController {
     
     private final ModuloAtencionService moduloAtencionService;
-    
-    //giomar 2025-12-30
+
     @GetMapping("/activos")
     public ResponseEntity<List<ModuloAtencionResponse>> obtenerTodosLosModulosActivos() {
         return ResponseEntity.ok(moduloAtencionService.obtenerTodosLosModulosActivosResponse());
@@ -30,9 +29,9 @@ public class ModuloAtencionController {
     
     @GetMapping("/usuario/{userId}")
     public ResponseEntity<ModuloUsuarioResponse> verificarModuloOListarDisponibles(@PathVariable Long userId) {
-        log.info("🎯 [ModuloAtencionController] Verificando módulo para usuario {} o listando módulos disponibles", userId);
+        log.info("[ModuloAtencion] Verificar módulo o listar disponibles para usuario {}", userId);
         ModuloUsuarioResponse response = moduloAtencionService.verificarModuloOListarDisponibles(userId);
-        log.info("✅ [ModuloAtencionController] Usuario {} - Tiene módulo asignado: {}", userId, response.getTieneModuloAsignado());
+        log.info("[ModuloAtencion] Usuario {} tiene módulo asignado: {}", userId, response.getTieneModuloAsignado());
         return ResponseEntity.ok(response);
     }
 }

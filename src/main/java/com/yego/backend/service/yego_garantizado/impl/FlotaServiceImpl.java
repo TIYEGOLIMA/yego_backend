@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Implementación del servicio de flotas del sistema YEGO Garantizado
@@ -37,41 +38,48 @@ public class FlotaServiceImpl implements FlotaService {
         "2e39f6699c854bc49cc75197431fe25c"  //Yego.
     );
 
-    
-
     @Override
     public List<FlotaResponse> obtenerFlotas() {
+        List<FlotaResponse> filtradas = listAllPartnersFromApi().stream()
+                .filter(f -> YEGO_FLOTA_IDS.contains(f.getId()))
+                .collect(Collectors.toList());
+        log.info("✅ Total de flotas Yego (filtradas): {}", filtradas.size());
+        return filtradas;
+    }
+
+    @Override
+    public List<FlotaResponse> obtenerTodosLosPartners() {
+        return listAllPartnersFromApi();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<FlotaResponse> listAllPartnersFromApi() {
         try {
-            log.info("🔍 Obteniendo flotas desde API externa");
+            log.info("🔍 Obteniendo partners desde API externa (v2/partners)");
             String url = "http://162.55.214.109:6000/v2/partners";
             Map<String, Object> response = restTemplate.postForObject(url, null, Map.class);
-            
+
             List<FlotaResponse> flotas = new ArrayList<>();
-            
+
             if (response != null && response.containsKey("partners")) {
                 List<Map<String, Object>> partners = (List<Map<String, Object>>) response.get("partners");
-                
+
                 for (Map<String, Object> item : partners) {
                     String id = item.get("id").toString();
-                    
-                    // Filtrar solo las flotas de Yego
-                    if (YEGO_FLOTA_IDS.contains(id)) {
-                        FlotaResponse flota = new FlotaResponse();
-                        flota.setId(id);
-                        flota.setName(item.get("name").toString());
-                        flota.setCity(item.get("city") != null ? item.get("city").toString() : null);
-                        flota.setSpecifications((List<String>) item.get("specifications"));
-                        flotas.add(flota);
-                        log.info("✅ Flota agregada: {} - {}", id, flota.getName());
-                    }
+                    FlotaResponse flota = new FlotaResponse();
+                    flota.setId(id);
+                    flota.setName(item.get("name") != null ? item.get("name").toString() : "");
+                    flota.setCity(item.get("city") != null ? item.get("city").toString() : null);
+                    flota.setSpecifications((List<String>) item.get("specifications"));
+                    flotas.add(flota);
                 }
             }
-            
-            log.info("✅ Total de flotas Yego obtenidas: {}", flotas.size());
+
+            log.info("✅ Partners obtenidos desde API: {}", flotas.size());
             return flotas;
-            
+
         } catch (Exception e) {
-            log.error("❌ Error obteniendo flotas: {}", e.getMessage());
+            log.error("❌ Error obteniendo partners: {}", e.getMessage());
             return new ArrayList<>();
         }
     }

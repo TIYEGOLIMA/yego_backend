@@ -29,7 +29,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     
     @Override
     public ResponseEntity<byte[]> exportarAExcel(String fechaInicio, String fechaFin) {
-        log.info("📊 Exportando estadísticas de SAC a Excel - Fecha inicio: {}, Fecha fin: {}", fechaInicio, fechaFin);
+        log.info("Exportando estadísticas de SAC a Excel - Fecha inicio: {}, Fecha fin: {}", fechaInicio, fechaFin);
         
         try {
             // Obtener estadísticas con filtro de fecha (si se proporcionan)
@@ -40,25 +40,25 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
             headers.setContentDispositionFormData("attachment", obtenerNombreArchivoExcel(fechaInicio, fechaFin));
             
-            log.info("✅ Exportación a Excel completada exitosamente");
+            log.info("Exportación a Excel completada exitosamente");
             return ResponseEntity.ok()
                     .headers(headers)
                     .body(excelData.toByteArray());
                     
         } catch (Exception e) {
-            log.error("❌ Error al exportar a Excel: {}", e.getMessage());
+            log.error("Error al exportar a Excel: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
     
     @Override
     public ResponseEntity<byte[]> exportarAImagen(String formato, String fechaInicio, String fechaFin) {
-        log.info("📊 Exportando estadísticas de SAC a imagen: {} - Fecha inicio: {}, Fecha fin: {}", formato, fechaInicio, fechaFin);
+        log.info("Exportando estadísticas de SAC a imagen: {} - Fecha inicio: {}, Fecha fin: {}", formato, fechaInicio, fechaFin);
         
         try {
             // Validar formato
             if (!esFormatoValido(formato)) {
-                log.warn("⚠️ Formato de imagen no válido: {}", formato);
+                log.warn("Formato de imagen no válido: {}", formato);
                 return ResponseEntity.badRequest().build();
             }
             
@@ -71,13 +71,13 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             headers.setContentType(MediaType.parseMediaType(mediaType));
             headers.setContentDispositionFormData("attachment", obtenerNombreArchivoImagen(formato, fechaInicio, fechaFin));
             
-            log.info("✅ Exportación a imagen completada exitosamente");
+            log.info("Exportación a imagen completada exitosamente");
             return ResponseEntity.ok()
                     .headers(headers)
                     .body(imageData.toByteArray());
                     
         } catch (Exception e) {
-            log.error("❌ Error al exportar a imagen: {}", e.getMessage());
+            log.error("Error al exportar a imagen: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -90,7 +90,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     }
     
     private ByteArrayOutputStream generarExcel(SacStatsResponse stats, String fechaInicio, String fechaFin) {
-        log.info("📊 Exportando estadísticas de SAC a Excel");
+        log.info("Exportando estadísticas de SAC a Excel");
         
         try (Workbook workbook = new XSSFWorkbook()) {
             // Crear hoja principal
@@ -143,17 +143,17 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
             workbook.write(outputStream);
             
-            log.info("✅ Exportación a Excel completada exitosamente");
+            log.info("Exportación a Excel completada exitosamente");
             return outputStream;
             
         } catch (IOException e) {
-            log.error("❌ Error al exportar a Excel: {}", e.getMessage());
+            log.error("Error al exportar a Excel: {}", e.getMessage());
             throw new RuntimeException("Error al generar archivo Excel", e);
         }
     }
     
     private ByteArrayOutputStream generarImagen(SacStatsResponse stats, String formato, String fechaInicio, String fechaFin) {
-        log.info("📊 Exportando estadísticas de SAC a imagen: {}", formato);
+        log.info("Exportando estadísticas de SAC a imagen: {}", formato);
         
         try {
             BufferedImage image = crearImagenEstadisticas(stats, fechaInicio, fechaFin);
@@ -167,11 +167,11 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
                 throw new IllegalArgumentException("Formato de imagen no soportado: " + formato);
             }
             
-            log.info("✅ Exportación a imagen completada exitosamente");
+            log.info("Exportación a imagen completada exitosamente");
             return outputStream;
             
         } catch (IOException e) {
-            log.error("❌ Error al exportar a imagen: {}", e.getMessage());
+            log.error("Error al exportar a imagen: {}", e.getMessage());
             throw new RuntimeException("Error al generar imagen", e);
         }
     }

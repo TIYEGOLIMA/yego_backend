@@ -30,7 +30,7 @@ public class WebSocketController {
         Authentication auth = (Authentication) headerAccessor.getUser();
         String username = auth != null ? auth.getName() : "anonymous";
         
-        log.info("📨 [WebSocket] Sistema desde {}: {}", username, message);
+        log.info("[WebSocket] Sistema desde {}: {}", username, message);
         
         message.put("timestamp", LocalDateTime.now().toString());
         message.put("from", username);
@@ -48,7 +48,7 @@ public class WebSocketController {
         Authentication auth = (Authentication) headerAccessor.getUser();
         String username = auth != null ? auth.getName() : "anonymous";
         
-        log.info("🎫 [WebSocket] Ticketera desde {}: {}", username, event);
+        log.info("[WebSocket] Ticketera desde {}: {}", username, event);
         
         event.put("timestamp", LocalDateTime.now().toString());
         event.put("from", username);

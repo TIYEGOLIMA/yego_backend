@@ -49,12 +49,12 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
 
     @Override
     public Optional<Map<String, Object>> buscarPorTelefono(String telefono) {
-        log.info("🔍 [DriverConsultaService] Búsqueda conductor: '{}'", telefono);
+        log.info("[DriverConsultaService] Búsqueda conductor: '{}'", telefono);
         
         // Verificar cache primero
         CacheEntry cached = cache.get(telefono);
         if (cached != null && !cached.isExpired()) {
-            log.info("🚀 [DriverConsultaService] Resultado desde CACHE para: '{}'", telefono);
+            log.info("[DriverConsultaService] Resultado desde CACHE para: '{}'", telefono);
             return cached.result;
         }
         
@@ -64,7 +64,7 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
         try {
             // Consulta optimizada con índices y sin SUBSTRING en tiempo real
             String sql = "SELECT full_name, phone FROM drivers WHERE phone = ?";
-            log.info("💾 [DriverConsultaService] Consultando BD para: '{}'", telefono);
+            log.info("[DriverConsultaService] Consultando BD para: '{}'", telefono);
             
             Map<String, Object> conductor = jdbcTemplate.queryForMap(sql, telefono);
             
@@ -75,34 +75,34 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
             }
             conductor.put("phone", phoneDisplay);
             
-            log.info("✅ [DriverConsultaService] Conductor encontrado: {}", conductor.get("full_name"));
+            log.info("[DriverConsultaService] Conductor encontrado: {}", conductor.get("full_name"));
             
             Optional<Map<String, Object>> result = Optional.of(conductor);
             cache.put(telefono, new CacheEntry(result));
             return result;
             
         } catch (EmptyResultDataAccessException e) {
-            log.warn("❌ [DriverConsultaService] No encontrado: '{}'", telefono);
+            log.warn("[DriverConsultaService] No encontrado: '{}'", telefono);
             
             Optional<Map<String, Object>> result = Optional.empty();
             cache.put(telefono, new CacheEntry(result));
             return result;
             
         } catch (Exception e) {
-            log.error("💥 [DriverConsultaService] Error BD: {}", e.getMessage());
+            log.error("[DriverConsultaService] Error BD: {}", e.getMessage());
             return Optional.empty();
         }
     }
 
     @Override
     public Map<String, Object> consultarYRegistrarPorDni(String dni, String phone) {
-        log.info("🆔 [DriverConsultaService] Consultando DNI y registrando conductor");
-        log.info("📄 [DriverConsultaService] DNI: '{}', Teléfono: '{}'", dni, phone);
+        log.info("[DriverConsultaService] Consultando DNI y registrando conductor");
+        log.info("[DriverConsultaService] DNI: '{}', Teléfono: '{}'", dni, phone);
         
         try {
             // Consultar API del DNI (Factiliza)
             String apiUrl = "https://api.factiliza.com/pe/v1/dni/info/" + dni;
-            log.info("🌐 [DriverConsultaService] Consultando API: {}", apiUrl);
+            log.info("[DriverConsultaService] Consultando API: {}", apiUrl);
             
             java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
@@ -115,8 +115,8 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
             java.net.http.HttpResponse<String> response = client.send(request, 
                     java.net.http.HttpResponse.BodyHandlers.ofString());
             
-            log.info("📡 [DriverConsultaService] Respuesta API status: {}", response.statusCode());
-            log.info("📋 [DriverConsultaService] Respuesta API body: {}", response.body());
+            log.info("[DriverConsultaService] Respuesta API status: {}", response.statusCode());
+            log.info("[DriverConsultaService] Respuesta API body: {}", response.body());
             
             if (response.statusCode() == 200) {
                 // Parsear la respuesta JSON con ObjectMapper
@@ -129,14 +129,14 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
                     boolean success = rootNode.has("success") && rootNode.get("success").asBoolean();
                     if (!success) {
                         String message = rootNode.has("message") ? rootNode.get("message").asText() : "Error en la consulta";
-                        log.error("❌ [DriverConsultaService] API retornó success=false: {}", message);
+                        log.error("[DriverConsultaService] API retornó success=false: {}", message);
                         throw new RuntimeException("Error consultando DNI: " + message);
                     }
                     
                     // Extraer datos del objeto "data"
                     JsonNode dataNode = rootNode.get("data");
                     if (dataNode == null || dataNode.isNull()) {
-                        log.error("❌ [DriverConsultaService] No se encontró el objeto 'data' en la respuesta");
+                        log.error("[DriverConsultaService] No se encontró el objeto 'data' en la respuesta");
                         throw new RuntimeException("No se encontraron datos en la respuesta");
                     }
                     
@@ -144,33 +144,31 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
                     String apellidoPaterno = dataNode.has("apellido_paterno") ? dataNode.get("apellido_paterno").asText() : "";
                     String apellidoMaterno = dataNode.has("apellido_materno") ? dataNode.get("apellido_materno").asText() : "";
                 
-                log.info("👤 [DriverConsultaService] Nombres: '{}'", nombres);
-                log.info("👤 [DriverConsultaService] Apellido Paterno: '{}'", apellidoPaterno);
-                log.info("👤 [DriverConsultaService] Apellido Materno: '{}'", apellidoMaterno);
+                log.info("[DriverConsultaService] Nombres: '{}'", nombres);
+                log.info("[DriverConsultaService] Apellido Paterno: '{}'", apellidoPaterno);
+                log.info("[DriverConsultaService] Apellido Materno: '{}'", apellidoMaterno);
                 
                 // Combinar para first_name, last_name y full_name
                 String firstName = nombres;
                 String lastName = apellidoPaterno + (apellidoMaterno != null && !apellidoMaterno.isEmpty() ? " " + apellidoMaterno : "");
                 
-                log.info("✅ [DriverConsultaService] Procesado - First: '{}', Last: '{}'", firstName, lastName);
+                log.info("[DriverConsultaService] Procesado - First: '{}', Last: '{}'", firstName, lastName);
                 
                 // Registrar conductor con los datos obtenidos
                 return registrarNuevoConductor(firstName, lastName, phone);
                     
                 } catch (Exception e) {
-                    log.error("❌ [DriverConsultaService] Error parseando respuesta JSON: {}", e.getMessage());
+                    log.error("[DriverConsultaService] Error parseando respuesta JSON: {}", e.getMessage());
                     throw new RuntimeException("Error parseando respuesta DNI: " + e.getMessage());
                 }
                 
             } else {
-                log.error("❌ [DriverConsultaService] Error en API DNI: status {}", response.statusCode());
+                log.error("[DriverConsultaService] Error en API DNI: status {}", response.statusCode());
                 throw new RuntimeException("Error consultando DNI: status " + response.statusCode());
             }
             
         } catch (Exception e) {
-            log.error("💥 [DriverConsultaService] Error consultando DNI: {}", e.getMessage());
-            log.error("📋 [DriverConsultaService] Stack trace:", e);
-            e.printStackTrace();
+            log.error("[DriverConsultaService] Error consultando DNI", e);
             throw new RuntimeException("Error consultando DNI: " + e.getMessage());
         }
     }
@@ -179,19 +177,19 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
 
     @Override
     public Map<String, Object> registrarNuevoConductor(String firstName, String lastName, String phone) {
-        log.info("🆕 [DriverConsultaService] Registrando nuevo conductor");
-        log.info("👤 [DriverConsultaService] Nombre: '{}', Apellido: '{}'", firstName, lastName);
-        log.info("📱 [DriverConsultaService] Teléfono recibido: '{}'", phone);
+        log.info("[DriverConsultaService] Registrando nuevo conductor");
+        log.info("[DriverConsultaService] Nombre: '{}', Apellido: '{}'", firstName, lastName);
+        log.info("[DriverConsultaService] Teléfono recibido: '{}'", phone);
         
         try {
             // Agregar +51 si no lo tiene
             String phoneCompleto;
             if (phone.startsWith("+51")) {
                 phoneCompleto = phone;
-                log.info("📱 [DriverConsultaService] Teléfono ya tiene +51: '{}'", phoneCompleto);
+                log.info("[DriverConsultaService] Teléfono ya tiene +51: '{}'", phoneCompleto);
             } else {
                 phoneCompleto = "+51" + phone;
-                log.info("📱 [DriverConsultaService] Agregando +51 al teléfono: '{}'", phoneCompleto);
+                log.info("[DriverConsultaService] Agregando +51 al teléfono: '{}'", phoneCompleto);
             }
             
             // Generar driver_id aleatorio de 32 caracteres
@@ -200,21 +198,21 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
             LocalDate hireDateLocal = LocalDate.now();
             Date hireDate = Date.valueOf(hireDateLocal); // Convertir a java.sql.Date para PostgreSQL
             
-            log.info("🆔 [DriverConsultaService] Driver ID generado: '{}'", driverId);
-            log.info("👥 [DriverConsultaService] Nombre completo: '{}'", fullName);
-            log.info("📅 [DriverConsultaService] Fecha contratación: '{}'", hireDate);
+            log.info("[DriverConsultaService] Driver ID generado: '{}'", driverId);
+            log.info("[DriverConsultaService] Nombre completo: '{}'", fullName);
+            log.info("[DriverConsultaService] Fecha contratación: '{}'", hireDate);
             
             String sql = "INSERT INTO drivers (driver_id, first_name, last_name, full_name, phone, work_status, hire_date, created_at) " +
                         "VALUES (?, ?, ?, ?, ?, 'working', ?, NOW())";
             
-            log.info("💾 [DriverConsultaService] Ejecutando INSERT con parámetros preparados");
+            log.info("[DriverConsultaService] Ejecutando INSERT con parámetros preparados");
             
             int filasAfectadas = jdbcTemplate.update(sql, driverId, firstName, lastName, fullName, phoneCompleto, hireDate);
-            log.info("✅ [DriverConsultaService] Conductor registrado exitosamente. Filas afectadas: {}", filasAfectadas);
+            log.info("[DriverConsultaService] Conductor registrado exitosamente. Filas afectadas: {}", filasAfectadas);
             
             // Limpiar cache inmediatamente para que la consulta funcione al instante
             cache.remove(phoneCompleto);
-            log.info("🧹 [DriverConsultaService] Cache limpiado para teléfono: '{}'", phoneCompleto);
+            log.info("[DriverConsultaService] Cache limpiado para teléfono: '{}'", phoneCompleto);
             
             // Devolver los datos del conductor recién creado (teléfono sin +51 para frontend)
             String phoneSinPrefijo = phoneCompleto.startsWith("+51") ? phoneCompleto.substring(3) : phoneCompleto;
@@ -229,12 +227,11 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
                 "hire_date", hireDate.toString() // Convertir a String para el frontend
             );
             
-            log.info("📋 [DriverConsultaService] Datos del nuevo conductor: {}", nuevoConductor);
+            log.info("[DriverConsultaService] Datos del nuevo conductor: {}", nuevoConductor);
             return nuevoConductor;
             
         } catch (Exception e) {
-            log.error("💥 [DriverConsultaService] Error registrando conductor: {}", e.getMessage());
-            log.error("📋 [DriverConsultaService] Stack trace:", e);
+            log.error("[DriverConsultaService] Error registrando conductor", e);
             throw new RuntimeException("Error registrando conductor: " + e.getMessage());
         }
     }
@@ -243,22 +240,22 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
     public void limpiarCache() {
         int sizeBefore = cache.size();
         cache.clear();
-        log.info("🧹 [DriverConsultaService] Cache limpiado. Entradas eliminadas: {}", sizeBefore);
+        log.info("[DriverConsultaService] Cache limpiado. Entradas eliminadas: {}", sizeBefore);
     }
     
     // Métodos simplificados para el controlador (sin lógica de negocio en el controlador)
     
     @Override
     public ResponseEntity<Map<String, Object>> buscarConductorConRespuestaCompleta(String phoneDigits) {
-        log.info("🔒 [DriverController] Procesando: '{}'", phoneDigits);
+        log.info("[DriverConsultaService] Procesando: '{}'", phoneDigits);
         
         Optional<Map<String, Object>> conductor = buscarPorTelefono(phoneDigits);
         
         if (conductor.isPresent()) {
-            log.info("✅ [DriverController] Encontrado: {}", conductor.get().get("full_name"));
+            log.info("[DriverConsultaService] Encontrado: {}", conductor.get().get("full_name"));
             return ResponseEntity.ok(conductor.get());
         } else {
-            log.warn("❌ [DriverController] No encontrado: '{}'", phoneDigits);
+            log.warn("[DriverConsultaService] No encontrado: '{}'", phoneDigits);
             
             // Validar formato antes de sugerir registro por DNI
             if (phoneDigits.matches("^\\+519\\d{8}$") && phoneDigits.length() == 12) {
@@ -282,48 +279,48 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
     
     @Override
     public ResponseEntity<Map<String, Object>> registrarConductorManualConRespuesta(Map<String, String> datos) {
-        log.info("🆕 [DriverController] Registrando conductor manualmente");
-        log.info("📋 [DriverController] Datos recibidos: {}", datos);
+        log.info("[DriverConsultaService] Registrando conductor manualmente");
+        log.info("[DriverConsultaService] Datos recibidos: {}", datos);
         
         String firstName = datos.get("firstName");
         String lastName = datos.get("lastName");
         String phone = datos.get("phone");
         
-        log.info("👤 [DriverController] Nombre: '{}', Apellido: '{}', Teléfono: '{}'", firstName, lastName, phone);
+        log.info("[DriverConsultaService] Nombre: '{}', Apellido: '{}', Teléfono: '{}'", firstName, lastName, phone);
         
         try {
             Map<String, Object> nuevoConductor = registrarNuevoConductor(firstName, lastName, phone);
-            log.info("✅ [DriverController] Conductor registrado exitosamente (manual)");
+            log.info("[DriverConsultaService] Conductor registrado exitosamente (manual)");
             return ResponseEntity.ok(nuevoConductor);
         } catch (Exception e) {
-            log.error("❌ [DriverController] Error registrando conductor manual: {}", e.getMessage());
+            log.error("[DriverConsultaService] Error registrando conductor manual: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
     
     @Override
     public ResponseEntity<Map<String, Object>> registrarConductorPorDniConRespuesta(Map<String, String> datos) {
-        log.info("🆔 [DriverController] Registrando conductor por DNI");
-        log.info("📋 [DriverController] Datos recibidos: {}", datos);
+        log.info("[DriverConsultaService] Registrando conductor por DNI");
+        log.info("[DriverConsultaService] Datos recibidos: {}", datos);
         
         String dni = datos.get("dni");
         String phone = datos.get("phone");
         
-        log.info("📄 [DriverController] DNI: '{}', Teléfono: '{}'", dni, phone);
+        log.info("[DriverConsultaService] DNI: '{}', Teléfono: '{}'", dni, phone);
         
         try {
             Map<String, Object> nuevoConductor = consultarYRegistrarPorDni(dni, phone);
-            log.info("✅ [DriverController] Conductor registrado exitosamente desde DNI");
+            log.info("[DriverConsultaService] Conductor registrado exitosamente desde DNI");
             return ResponseEntity.ok(nuevoConductor);
         } catch (Exception e) {
-            log.error("❌ [DriverController] Error registrando conductor por DNI: {}", e.getMessage());
+            log.error("[DriverConsultaService] Error registrando conductor por DNI: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
     
     @Override
     public ResponseEntity<Map<String, Object>> limpiarCacheConRespuesta() {
-        log.info("🧹 [DriverController] Limpiando cache de conductores");
+        log.info("[DriverConsultaService] Limpiando cache de conductores");
         limpiarCache();
         return ResponseEntity.ok(Map.of("message", "Cache limpiado correctamente"));
     }

@@ -31,7 +31,7 @@ public class DriverActiveList {
     @Column(name = "id")
     private Long id;
 
-    @Column(name = "driver_id", nullable = false, unique = true)
+    @Column(name = "driver_id", nullable = false)
     private String driverId;
 
     @Column(name = "park_id", nullable = false)

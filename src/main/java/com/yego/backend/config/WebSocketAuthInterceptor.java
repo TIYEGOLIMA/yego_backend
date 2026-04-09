@@ -78,7 +78,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             String authHeader = accessor.getFirstNativeHeader("Authorization");
             
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.warn("🚫 [WebSocket] Conexión rechazada: Token de autenticación requerido");
+            log.warn("[WebSocket] Conexión rechazada: Token de autenticación requerido");
             throw new org.springframework.messaging.MessageDeliveryException("Token de autenticación requerido");
         }
         
@@ -86,7 +86,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                 
                 try {
             if (!validateToken(token)) {
-                log.warn("⚠️ [WebSocket] Token JWT inválido");
+                log.warn("[WebSocket] Token JWT inválido");
                 throw new org.springframework.messaging.MessageDeliveryException("Token JWT inválido");
             }
             
@@ -119,33 +119,33 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                     String sessionId = accessor.getSessionId();
                     if (sessionId != null) {
                         webSocketSessionService.saveUserModules(sessionId, userModules, userId);
-                        log.debug("✅ [WebSocket] Usuario autenticado: {} (ID: {}) con rol: {} - Módulos: {}", 
+                        log.debug("[WebSocket] Usuario autenticado: {} (ID: {}) con rol: {} - Módulos: {}", 
                             username, userId, role, userModules.size());
                     }
                 } catch (IllegalStateException e) {
                     // Límite de conexiones alcanzado
-                    log.error("❌ [WebSocket] Límite de conexiones alcanzado para usuario {}: {}", userId, e.getMessage());
+                    log.error("[WebSocket] Límite de conexiones alcanzado para usuario {}: {}", userId, e.getMessage());
                     throw new org.springframework.messaging.MessageDeliveryException("Límite de conexiones alcanzado. Intente más tarde.");
                 } catch (RuntimeException e) {
                     // Usuario no encontrado o inactivo - RECHAZAR conexión INMEDIATAMENTE
                     if (e.getMessage() != null && e.getMessage().contains("Usuario no encontrado")) {
-                        log.error("🚫 [WebSocket] CONEXIÓN BLOQUEADA: Usuario {} (ID: {}) no existe en la BD. Token válido pero usuario eliminado. Rechazando conexión.", username, userId);
+                        log.error("[WebSocket] CONEXIÓN BLOQUEADA: Usuario {} (ID: {}) no existe en la BD. Token válido pero usuario eliminado. Rechazando conexión.", username, userId);
                         // Limpiar autenticación que ya se estableció
                         SecurityContextHolder.clearContext();
                         throw new org.springframework.messaging.MessageDeliveryException("Usuario no encontrado o inactivo. Por favor, inicie sesión nuevamente.");
                     }
                     // Otros errores - solo loggear warning pero permitir conexión
-                    log.warn("⚠️ [WebSocket] Error obteniendo módulos del usuario {}: {}", userId, e.getMessage());
+                    log.warn("[WebSocket] Error obteniendo módulos del usuario {}: {}", userId, e.getMessage());
                 } catch (Exception e) {
                     // Otros errores - solo loggear warning pero permitir conexión
-                    log.warn("⚠️ [WebSocket] Error obteniendo módulos del usuario {}: {}", userId, e.getMessage());
+                    log.warn("[WebSocket] Error obteniendo módulos del usuario {}: {}", userId, e.getMessage());
                 }
             }
             
         } catch (org.springframework.messaging.MessageDeliveryException e) {
             throw e;
         } catch (Exception e) {
-            log.warn("⚠️ [WebSocket] Error validando token: {}", e.getMessage());
+            log.warn("[WebSocket] Error validando token: {}", e.getMessage());
             throw new org.springframework.messaging.MessageDeliveryException("Error validando token: " + e.getMessage());
         }
         
@@ -192,23 +192,23 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         // Permitir que usuarios TABLET y TABLET2 se suscriban a topics de ticketera sin verificar módulo
         // Esto es necesario porque las tabletas de rating no tienen el módulo "Tickets" en su lista
         if ((userRole != null && (userRole.equals("TABLET1") || userRole.equals("TABLET2") || userRole.equals("TV"))) 
-            && (normalizedTopic.startsWith("ticket") || normalizedTopic.startsWith("ticketera") 
-                || normalizedTopic.startsWith("modulos-atencion"))) {
+            && (normalizedTopic.contains("ticket") || normalizedTopic.startsWith("ticketera") 
+                || normalizedTopic.startsWith("modulos-atencion") || normalizedTopic.equals("pong"))) {
             webSocketSessionService.addSubscription(sessionId, destination);
-            log.debug("✅ [WebSocket] Suscripción permitida para TABLET: sesión {} (usuario {}) → {}", sessionId, userId, destination);
+            log.debug("[WebSocket] Suscripción permitida para TABLET: sesión {} (usuario {}) → {}", sessionId, userId, destination);
             return message;
         }
         
         // Verificar acceso para topics de módulos específicos
         if (userModules == null || userModules.isEmpty() || 
             !webSocketModuleMappingService.hasAccessToTopic(destination, userModules)) {
-            log.warn("🚫 [WebSocket] Suscripción bloqueada: sesión {} (usuario {}, rol {}) → {}", 
+            log.warn("[WebSocket] Suscripción bloqueada: sesión {} (usuario {}, rol {}) → {}", 
                 sessionId, userId, userRole, destination);
             return null;
         }
         
         webSocketSessionService.addSubscription(sessionId, destination);
-        log.debug("✅ [WebSocket] Suscripción permitida: sesión {} (usuario {}) → {}", sessionId, userId, destination);
+        log.debug("[WebSocket] Suscripción permitida: sesión {} (usuario {}) → {}", sessionId, userId, destination);
         return message;
     }
     
@@ -216,7 +216,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         String sessionId = accessor.getSessionId();
         if (sessionId != null) {
             webSocketSessionService.removeSession(sessionId);
-            log.debug("🔌 [WebSocket] Sesión {} desconectada y limpiada", sessionId);
+            log.debug("[WebSocket] Sesión {} desconectada y limpiada", sessionId);
         }
         return message;
     }

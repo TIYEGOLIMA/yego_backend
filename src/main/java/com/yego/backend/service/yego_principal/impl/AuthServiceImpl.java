@@ -139,7 +139,7 @@ public class AuthServiceImpl implements AuthService {
     }
     
     @Override
-    public LoginResponseDto refreshToken(String token, HttpServletRequest request) {
+    public LoginTokenResult refreshToken(String token, HttpServletRequest request) {
         try {
             // Decodificar el token para obtener información del usuario
             Claims claims = getJwtParser()
@@ -192,29 +192,8 @@ public class AuthServiceImpl implements AuthService {
                     .build();
             
             sessionService.create(sessionDto, userId, request);
-            
-            List<Area> areasComoJefe = areaRepository.findByManagerId(userId);
-            boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
-            String nombreArea = esJefe ? areasComoJefe.stream().map(Area::getName).collect(Collectors.joining(", ")) : null;
 
-            // Construir respuesta
-            LoginResponseDto.LoginUserDto loginUser = LoginResponseDto.LoginUserDto.builder()
-                    .id(userDto.getId())
-                    .username(userDto.getUsername())
-                    .email(userDto.getEmail())
-                    .name(userDto.getName())
-                    .role(userDto.getRoleName())
-                    .moduleId(userDto.getModuleId() != null ? userDto.getModuleId().toString() : null)
-                    .active(userDto.getActive())
-                    .lastLogin(LocalDateTime.now())
-                    .esJefe(esJefe)
-                    .nombreArea(nombreArea)
-                    .build();
-            
-            return LoginResponseDto.builder()
-                    .accessToken(newAccessToken)
-                    .user(loginUser)
-                    .build();
+            return new LoginTokenResult(newAccessToken, "Token renovado correctamente");
                     
         } catch (Exception e) {
             log.warn("Error renovando token: {}", e.getMessage());
@@ -224,7 +203,7 @@ public class AuthServiceImpl implements AuthService {
     
     @Override
     @Transactional
-    public LoginResponseDto login(LoginDto loginDto, HttpServletRequest request) {
+    public LoginTokenResult login(LoginDto loginDto, HttpServletRequest request) {
         UserResponseDto user = validateUser(loginDto.getUsername(), loginDto.getPassword(), request);
         
         if (user == null) {
@@ -251,31 +230,7 @@ public class AuthServiceImpl implements AuthService {
         String userAgent = request.getHeader("User-Agent");
         auditService.logLogin(user.getId(), user.getUsername(), clientIp, userAgent);
         
-        // Si es jefe de una o más áreas (manager_id), incluir para localStorage y cuenta
-        List<Area> areasComoJefe = areaRepository.findByManagerId(user.getId());
-        boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
-        String nombreArea = esJefe ? areasComoJefe.stream().map(Area::getName).collect(Collectors.joining(", ")) : null;
-
-        // Construir respuesta (incluir si debe cambiar contraseña por política semanal; excluir usuarios sin política)
-        boolean requirePasswordChange = shouldRequirePasswordChange(user.getId(), user.getPasswordChangedAt());
-        LoginResponseDto.LoginUserDto loginUser = LoginResponseDto.LoginUserDto.builder()
-                .id(user.getId())
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .name(user.getName())
-                .role(user.getRoleName())
-                .moduleId(user.getModuleId() != null ? user.getModuleId().toString() : null)
-                .active(user.getActive())
-                .lastLogin(LocalDateTime.now())
-                .esJefe(esJefe)
-                .nombreArea(nombreArea)
-                .requirePasswordChange(requirePasswordChange)
-                .build();
-        
-        return LoginResponseDto.builder()
-                .accessToken(accessToken)
-                .user(loginUser)
-                .build();
+        return new LoginTokenResult(accessToken, "Inicio de sesión correcto");
     }
     
     @Override

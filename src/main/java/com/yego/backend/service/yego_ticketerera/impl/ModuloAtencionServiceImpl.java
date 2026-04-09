@@ -1,14 +1,11 @@
 package com.yego.backend.service.yego_ticketerera.impl;
 
 import com.yego.backend.entity.yego_ticketerera.entities.ModuloAtencion;
-import com.yego.backend.entity.yego_ticketerera.entities.QueueAgent;
 import com.yego.backend.entity.yego_ticketerera.api.response.ModuloAtencionResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.ModuloUsuarioResponse;
-import com.yego.backend.entity.yego_ticketerera.api.response.RecuperarModuloResponse;
 import com.yego.backend.handler.yego_ticketerera.TicketNotificationHandler;
 import com.yego.backend.repository.yego_ticketerera.ModuloAtencionRepository;
 import com.yego.backend.service.yego_ticketerera.ModuloAtencionService;
-import com.yego.backend.repository.yego_ticketerera.QueueAgentRepository;
 import com.yego.backend.service.yego_ticketerera.QueueAgentService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
@@ -28,56 +25,25 @@ public class ModuloAtencionServiceImpl implements ModuloAtencionService {
     private final ModuloAtencionRepository moduloAtencionRepository;
     private final QueueAgentService queueAgentService;
     private final TicketNotificationHandler ticketNotificationHandler;
-    private final QueueAgentRepository queueAgentRepository;
     
     public ModuloAtencionServiceImpl(
             ModuloAtencionRepository moduloAtencionRepository,
             @Lazy QueueAgentService queueAgentService,
-            TicketNotificationHandler ticketNotificationHandler,
-            QueueAgentRepository queueAgentRepository) {
+            TicketNotificationHandler ticketNotificationHandler) {
         this.moduloAtencionRepository = moduloAtencionRepository;
         this.queueAgentService = queueAgentService;
         this.ticketNotificationHandler = ticketNotificationHandler;
-        this.queueAgentRepository = queueAgentRepository;
     }
     
-    @Override
-    @Transactional(readOnly = true)
-    public List<ModuloAtencion> obtenerTodosLosModulosActivos() {
-        log.info("Obteniendo todos los módulos de atención ocupados (isActive = true)");
-        
-        List<QueueAgent> agentesOcupados = 
-            queueAgentRepository.findByStatusAndIsActiveTrue("OCUPADO");
-        
-        // Extraer los moduleIds de los agentes ocupados
-        List<Long> moduleIdsOcupados = agentesOcupados.stream()
-            .map(QueueAgent::getModuleId)
-            .distinct()
-            .toList();
-        
-        // Obtener los ModuloAtencion correspondientes que tengan isActive = true
-        List<ModuloAtencion> modules = moduleIdsOcupados.stream()
-            .map(moduloAtencionRepository::findById)
-            .filter(Optional::isPresent)
-            .map(Optional::get)
-            .filter(modulo -> modulo.getIsActive() == true)
-            .sorted((a, b) -> a.getName().compareToIgnoreCase(b.getName()))
-            .toList();
-        
-        log.info("Se encontraron {} módulos de atención ocupados (isActive = true)", modules.size());
-        return modules;
-    }
-    
-    //giomar 2025-12-30
     @Override
     @Transactional(readOnly = true)
     public List<ModuloAtencionResponse> obtenerTodosLosModulosActivosResponse() {
-        log.info("Obteniendo todos los módulos de atención activos como response");
+        log.debug("Módulos de atención disponibles (response)");
         List<ModuloAtencion> modules = moduloAtencionRepository.findByIsActiveFalseOrderByNameAsc();
         List<ModuloAtencionResponse> modulosResponse = modules.stream()
                 .map(ModuloAtencionResponse::fromModuloAtencion)
                 .toList();
-        log.info("Se encontraron {} módulos de atención activos", modulosResponse.size());
+        log.debug("Módulos disponibles: {}", modulosResponse.size());
         return modulosResponse;
     }
     
@@ -99,21 +65,21 @@ public class ModuloAtencionServiceImpl implements ModuloAtencionService {
     @Override
     @Transactional(readOnly = true)
     public ModuloUsuarioResponse verificarModuloOListarDisponibles(Long userId) {
-        log.info("Verificando módulo asignado para usuario {} o listando módulos disponibles", userId);
+        log.debug("Módulo para usuario {} o lista disponibles", userId);
         
         // Verificar si el usuario tiene módulo asignado
         var moduloAsignadoOpt = queueAgentService.recuperarModuloAsignado(userId);
         
         ModuloUsuarioResponse response;
         if (moduloAsignadoOpt.isPresent()) {
-            log.info("Usuario {} tiene módulo {} asignado", userId, moduloAsignadoOpt.get().getModuleId());
+            log.debug("Usuario {} módulo {} asignado", userId, moduloAsignadoOpt.get().getModuleId());
             response = ModuloUsuarioResponse.builder()
                     .tieneModuloAsignado(true)
                     .moduloAsignado(moduloAsignadoOpt.get())
                     .modulosDisponibles(null)
                     .build();
         } else {
-            log.info("Usuario {} no tiene módulo asignado. Devolviendo lista de módulos ocupados y disponibles", userId);
+            log.debug("Usuario {} sin módulo; listando ocupados y disponibles", userId);
             
             // Obtener módulos disponibles (isActive = false)
             List<ModuloAtencion> modulesDisponibles = moduloAtencionRepository.findByIsActiveFalseOrderByNameAsc();
@@ -136,9 +102,9 @@ public class ModuloAtencionServiceImpl implements ModuloAtencionService {
         try {
             var modulosEstado = queueAgentService.obtenerModulosDisponiblesYOcupados();
             ticketNotificationHandler.enviarModulosActualizados(modulosEstado);
-            log.info("✅ Notificación WebSocket enviada con módulos disponibles y ocupados para usuario {}", userId);
+            log.debug("WebSocket módulos actualizados para usuario {}", userId);
         } catch (Exception e) {
-            log.error("❌ Error al enviar notificación WebSocket: {}", e.getMessage(), e);
+            log.error("Error enviando WebSocket módulos: {}", e.getMessage(), e);
         }
         
         return response;

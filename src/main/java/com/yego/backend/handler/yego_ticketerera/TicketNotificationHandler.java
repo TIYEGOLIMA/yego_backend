@@ -29,7 +29,7 @@ public class TicketNotificationHandler {
      * Enviar nuevo ticket creado
      */
     public void enviarNuevoTicket(Ticket ticket) {
-        log.info("📤 [TicketNotificationHandler] Enviando nuevo ticket por WebSocket: {}", ticket.getTicketNumber());
+        log.info("[TicketNotificationHandler] Enviando nuevo ticket por WebSocket: {}", ticket.getTicketNumber());
         
         // Obtener información completa del ticket
         TicketWebSocketResponse ticketCompleto = obtenerInformacionCompletaTicket(ticket);
@@ -42,7 +42,7 @@ public class TicketNotificationHandler {
      * Enviar ticket llamado
      */
     public void enviarTicketLlamado(TicketWithCategoryResponse ticketCompleto) {
-        log.info("📤 [TicketNotificationHandler] Enviando ticket llamado por WebSocket: {}", ticketCompleto.getTicketNumber());
+        log.info("[TicketNotificationHandler] Enviando ticket llamado por WebSocket: {}", ticketCompleto.getTicketNumber());
         filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
         filteredWebSocketService.convertAndSend("/topic/ticket-called", ticketCompleto);
     }
@@ -51,7 +51,7 @@ public class TicketNotificationHandler {
      * Enviar ticket iniciado
      */
     public void enviarTicketIniciado(TicketWithCategoryResponse ticketCompleto) {
-        log.info("📤 [TicketNotificationHandler] Enviando ticket iniciado por WebSocket: {}", ticketCompleto.getTicketNumber());
+        log.info("[TicketNotificationHandler] Enviando ticket iniciado por WebSocket: {}", ticketCompleto.getTicketNumber());
         filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
         filteredWebSocketService.convertAndSend("/topic/ticket-started", ticketCompleto);
     }
@@ -60,7 +60,7 @@ public class TicketNotificationHandler {
      * Enviar ticket completado
      */
     public void enviarTicketCompletado(TicketWithCategoryResponse ticketCompleto) {
-        log.info("📤 [TicketNotificationHandler] Enviando ticket completado por WebSocket: {}", ticketCompleto.getTicketNumber());
+        log.info("[TicketNotificationHandler] Enviando ticket completado por WebSocket: {}", ticketCompleto.getTicketNumber());
         filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
         filteredWebSocketService.convertAndSend("/topic/ticket-completed", ticketCompleto);
     }
@@ -69,7 +69,7 @@ public class TicketNotificationHandler {
      * Enviar ticket cancelado
      */
     public void enviarTicketCancelado(Ticket ticket) {
-        log.info("📤 [TicketNotificationHandler] Enviando ticket cancelado por WebSocket: {}", ticket.getTicketNumber());
+        log.info("[TicketNotificationHandler] Enviando ticket cancelado por WebSocket: {}", ticket.getTicketNumber());
         filteredWebSocketService.convertAndSend("/topic/tickets", ticket);
         filteredWebSocketService.convertAndSend("/topic/ticket-cancelled", ticket);
     }
@@ -85,7 +85,7 @@ public class TicketNotificationHandler {
         );
         
         filteredWebSocketService.convertAndSend("/topic/ticketera", notification);
-        log.info("📤 [TicketNotificationHandler] Ticketera: {} - Enviado a /topic/ticketera", event);
+        log.info("[TicketNotificationHandler] Ticketera: {} - Enviado a /topic/ticketera", event);
     }
     
     /**
@@ -99,10 +99,10 @@ public class TicketNotificationHandler {
             notification.put("modulosOcupados", modulosEstado.getModulosOcupados());
             notification.put("timestamp", java.time.LocalDateTime.now().toString());
             
-            log.info("📤 [TicketNotificationHandler] Enviando módulos actualizados - Disponibles: {}, Ocupados: {}", 
+            log.info("[TicketNotificationHandler] Enviando módulos actualizados - Disponibles: {}, Ocupados: {}", 
                 modulosEstado.getModulosDisponibles().size(), 
                 modulosEstado.getModulosOcupados().size());
-            log.debug("📦 [TicketNotificationHandler] Contenido del mensaje: type={}, modulosDisponibles={}, modulosOcupados={}", 
+            log.debug("[TicketNotificationHandler] Contenido del mensaje: type={}, modulosDisponibles={}, modulosOcupados={}", 
                 notification.get("type"), 
                 modulosEstado.getModulosDisponibles().size(), 
                 modulosEstado.getModulosOcupados().size());
@@ -110,9 +110,9 @@ public class TicketNotificationHandler {
             // Enviar a /topic/modulos-atencion - esto afecta a TODOS los usuarios en sesión con acceso a "tickets"
             filteredWebSocketService.convertAndSend("/topic/modulos-atencion", notification);
             
-            log.info("✅ [TicketNotificationHandler] Notificación WebSocket enviada correctamente a /topic/modulos-atencion");
+            log.info("[TicketNotificationHandler] Notificación WebSocket enviada correctamente a /topic/modulos-atencion");
         } catch (Exception e) {
-            log.error("❌ [TicketNotificationHandler] Error enviando módulos actualizados por WebSocket: {}", e.getMessage(), e);
+            log.error("[TicketNotificationHandler] Error enviando módulos actualizados por WebSocket: {}", e.getMessage(), e);
         }
     }
     
@@ -175,11 +175,11 @@ public class TicketNotificationHandler {
                 .driverName(driverName)
                 .build();
             
-            log.info("✅ [TicketNotificationHandler] Información completa del ticket {} obtenida", ticket.getTicketNumber());
+            log.info("[TicketNotificationHandler] Información completa del ticket {} obtenida", ticket.getTicketNumber());
             return response;
             
         } catch (Exception e) {
-            log.error("❌ [TicketNotificationHandler] Error obteniendo información completa del ticket {}: {}", ticket.getTicketNumber(), e.getMessage());
+            log.error("[TicketNotificationHandler] Error obteniendo información completa del ticket {}: {}", ticket.getTicketNumber(), e.getMessage());
             
             // Fallback: respuesta básica sin información adicional
             return TicketWebSocketResponse.builder()
@@ -214,7 +214,7 @@ public class TicketNotificationHandler {
             String fullName = jdbcTemplate.queryForObject(sql, String.class, licenseNumber);
             return (fullName != null && !fullName.isEmpty()) ? fullName : "";
         } catch (Exception e) {
-            log.warn("⚠️ [TicketNotificationHandler] No se pudo obtener nombre del conductor para licenseNumber: {}", licenseNumber);
+            log.warn("[TicketNotificationHandler] No se pudo obtener nombre del conductor para licenseNumber: {}", licenseNumber);
             return "";
         }
     }

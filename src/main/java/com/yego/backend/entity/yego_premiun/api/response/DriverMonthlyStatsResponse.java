@@ -13,6 +13,8 @@ public class DriverMonthlyStatsResponse {
 
     Long id;
     String driverId;
+    /** ID del parque/flota (mismo que en API partners); para filtros y listas. */
+    String parkId;
     String parkName;
     Integer month;
     Integer year;

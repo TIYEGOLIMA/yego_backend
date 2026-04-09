@@ -16,14 +16,4 @@ public interface QueueTicketHistoryRepository extends JpaRepository<QueueTicketH
      * Buscar historial por ticket ID
      */
     List<QueueTicketHistory> findByTicketIdOrderByCreatedAtDesc(Long ticketId);
-    
-    /**
-     * Buscar historial por agente ID
-     */
-    List<QueueTicketHistory> findByAgentIdOrderByCreatedAtDesc(Long agentId);
-    
-    /**
-     * Buscar historial por ticket y estado
-     */
-    List<QueueTicketHistory> findByTicketIdAndNewStatus(Long ticketId, String newStatus);
 }

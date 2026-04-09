@@ -25,14 +25,14 @@ public class SacStatsController {
     public ResponseEntity<SacStatsResponse> obtenerTodasLasEstadisticas(
             @RequestParam(required = false) String fechaInicio,
             @RequestParam(required = false) String fechaFin) {
-        log.info("📊 [SacStats] Obteniendo estadísticas de SAC - Fecha inicio: {}, Fecha fin: {}", fechaInicio, fechaFin);
+        log.info("[SacStats] Estadísticas SAC - fechaInicio: {}, fechaFin: {}", fechaInicio, fechaFin);
         SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin);
         return ResponseEntity.ok(stats);
     }
         
     @GetMapping("/all")
     public ResponseEntity<SacStatsResponse> obtenerTodasLasEstadisticasSinFiltro() {
-        log.info("📊 [SacStats] Obteniendo TODAS las estadísticas de SAC (sin filtro de fecha)");
+        log.info("[SacStats] Estadísticas SAC sin filtro de fecha");
         SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(null, null);
         return ResponseEntity.ok(stats);
     }
@@ -41,7 +41,7 @@ public class SacStatsController {
     public ResponseEntity<byte[]> exportarAExcel(
             @RequestParam(required = false) String fechaInicio,
             @RequestParam(required = false) String fechaFin) {
-        log.info("📊 [SacStats] Exportando estadísticas a Excel - Fecha inicio: {}, Fecha fin: {}", fechaInicio, fechaFin);
+        log.info("[SacStats] Exportar Excel - fechaInicio: {}, fechaFin: {}", fechaInicio, fechaFin);
         return sacStatsExportService.exportarAExcel(fechaInicio, fechaFin);
     }
     
@@ -50,7 +50,7 @@ public class SacStatsController {
             @PathVariable String formato,
             @RequestParam(required = false) String fechaInicio,
             @RequestParam(required = false) String fechaFin) {
-        log.info("📊 [SacStats] Exportando estadísticas a imagen: {} - Fecha inicio: {}, Fecha fin: {}", formato, fechaInicio, fechaFin);
+        log.info("[SacStats] Exportar imagen {} - fechaInicio: {}, fechaFin: {}", formato, fechaInicio, fechaFin);
         return sacStatsExportService.exportarAImagen(formato, fechaInicio, fechaFin);
     }
 }

@@ -66,6 +66,7 @@ public class YangoWeeklyService {
                 : YangoClient.DEFAULT_PARK_ID;
 
         String queryText = resolveQueryText(req);
+        rejectNameOnlyLookup(queryText);
         LocalDate anchor = resolveAnchor(req);
         PeriodRange weeklyPeriod = resolveWeeklyPeriod(anchor);
         PeriodRange monthlyPeriod = resolveLastMonthPeriod(anchor);
@@ -201,6 +202,28 @@ public class YangoWeeklyService {
     private record GoalsResult(List<JsonNode> active, List<JsonNode> previous) {}
 
     // ── helpers ──
+
+    /**
+     * No permitir búsqueda solo por nombre/apellidos (texto sin dígitos ni otros identificadores).
+     */
+    private static void rejectNameOnlyLookup(String queryText) {
+        String t = queryText.trim();
+        if (t.length() < 2) {
+            throw new YangoWeeklyException(
+                    HttpStatus.BAD_REQUEST,
+                    "NAME_LOOKUP_NOT_ALLOWED",
+                    "No se permite buscar por nombre. Indica DNI, licencia, teléfono o ID de conductor.");
+        }
+        if (t.chars().anyMatch(Character::isDigit)) {
+            return;
+        }
+        if (t.matches("^[\\p{L}\\s'.-]+$")) {
+            throw new YangoWeeklyException(
+                    HttpStatus.BAD_REQUEST,
+                    "NAME_LOOKUP_NOT_ALLOWED",
+                    "No se permite buscar por nombre. Indica DNI, licencia, teléfono o ID de conductor.");
+        }
+    }
 
     static String resolveQueryText(YangoSummaryRequest req) {
         if (req.getText() == null || req.getText().isBlank()) {

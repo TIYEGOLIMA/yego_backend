@@ -228,12 +228,6 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     @Transactional(readOnly = true)
-    public Optional<Ticket> obtenerUltimoTicketLlamado() {
-        return ticketRepository.findLastCalledTicket();
-    }
-    
-    @Override
-    @Transactional(readOnly = true)
     public long contarTicketsPorEstado(TicketStatus status) {
         long currentTime = System.currentTimeMillis();
         
@@ -254,21 +248,21 @@ public class TicketServiceImpl implements TicketService {
     @Override
     @Transactional(readOnly = true)
     public List<Ticket> obtenerTicketsEnEsperaPorModulo(Long moduleId) {
-        log.info("Obteniendo tickets en espera para el módulo: {}", moduleId);
+        log.debug("Tickets en espera para módulo {}", moduleId);
         return ticketRepository.findWaitingTicketsByModuleOrdered(moduleId, TicketStatus.WAITING);
     }
     
     @Override
     @Transactional(readOnly = true)
     public long contarTicketsPorModuloYEstado(Long moduleId, TicketStatus status) {
-        log.info("Contando tickets del módulo {} con estado: {}", moduleId, status);
+        log.debug("Conteo tickets módulo {} estado {}", moduleId, status);
         return ticketRepository.countByModuleIdAndStatus(moduleId, status);
     }
     
     @Override
     @Transactional
     public Ticket obtenerOAsignarTicketParaAgente(Long agentId) {
-        log.info("🎯 Buscando ticket para agente: {}", agentId);
+        log.debug("Buscando ticket para agente {}", agentId);
         
         // 1. Verificar si el agente ya tiene un ticket asignado
         List<Ticket.TicketStatus> estadosActivos = Arrays.asList(
@@ -282,7 +276,7 @@ public class TicketServiceImpl implements TicketService {
                 .findFirst();
         
         if (ticketExistente.isPresent()) {
-            log.info("✅ Agente {} ya tiene ticket asignado: {}", agentId, ticketExistente.get().getTicketNumber());
+            log.debug("Agente {} ya tiene ticket asignado {}", agentId, ticketExistente.get().getTicketNumber());
             return ticketExistente.get();
         }
         
@@ -299,13 +293,13 @@ public class TicketServiceImpl implements TicketService {
             
             Ticket ticketAsignado = ticketRepository.save(ticket);
             
-            log.info("🚀 Ticket {} asignado automáticamente al agente {}", 
+            log.info("Ticket {} asignado automáticamente al agente {}",
                 ticket.getTicketNumber(), agentId);
             return ticketAsignado;
         }
         
         // 3. No hay tickets disponibles
-        log.info("📭 No hay tickets disponibles para asignar al agente {}", agentId);
+        log.debug("Sin tickets disponibles para agente {}", agentId);
         return null;
     }
     
@@ -425,49 +419,49 @@ public class TicketServiceImpl implements TicketService {
     
     @Override
     public List<TicketWithCategoryResponse> obtenerTodosLosTicketsConCategorias() {
-        log.info("Obteniendo todos los tickets con categorías");
+        log.debug("Listando todos los tickets con categorías");
         List<Ticket> tickets = obtenerTickets();
         return convertirTicketsConCategorias(tickets);
     }
     
     @Override
     public List<TicketWithCategoryResponse> obtenerTicketsEnEsperaConCategorias() {
-        log.info("Obteniendo tickets en espera con categorías");
+        log.debug("Listando tickets en espera con categorías");
         List<Ticket> tickets = obtenerTicketsPorEstado(Ticket.TicketStatus.WAITING);
         return convertirTicketsConCategorias(tickets);
     }
     
     @Override
     public List<TicketWithCategoryResponse> obtenerTicketsLlamadosConCategorias() {
-        log.info("Obteniendo tickets llamados con categorías");
+        log.debug("Listando tickets llamados con categorías");
         List<Ticket> tickets = obtenerTicketsPorEstado(Ticket.TicketStatus.CALLED);
         return convertirTicketsConCategorias(tickets);
     }
     
     @Override
     public List<TicketWithCategoryResponse> obtenerTicketsEnProgresoConCategorias() {
-        log.info("Obteniendo tickets en progreso con categorías");
+        log.debug("Listando tickets en progreso con categorías");
         List<Ticket> tickets = obtenerTicketsPorEstado(Ticket.TicketStatus.IN_PROGRESS);
         return convertirTicketsConCategorias(tickets);
     }
     
     @Override
     public List<TicketWithCategoryResponse> obtenerTicketsCompletadosConCategorias() {
-        log.info("Obteniendo tickets completados con categorías");
+        log.debug("Listando tickets completados con categorías");
         List<Ticket> tickets = obtenerTicketsPorEstado(Ticket.TicketStatus.COMPLETED);
         return convertirTicketsConCategorias(tickets);
     }
     
     @Override
     public long contarTicketsPorEstado(String status) {
-        log.info("Contando tickets por estado: {}", status);
+        log.debug("Conteo tickets por estado {}", status);
         Ticket.TicketStatus ticketStatus = Ticket.TicketStatus.valueOf(status.toUpperCase());
         return contarTicketsPorEstado(ticketStatus);
     }
     
     @Override
     public long contarTicketsPorModuloYEstado(Long moduleId, String status) {
-        log.info("Contando tickets del módulo {} con estado: {}", moduleId, status);
+        log.debug("Conteo tickets módulo {} estado {}", moduleId, status);
         Ticket.TicketStatus ticketStatus = Ticket.TicketStatus.valueOf(status.toUpperCase());
         return contarTicketsPorModuloYEstado(moduleId, ticketStatus);
     }

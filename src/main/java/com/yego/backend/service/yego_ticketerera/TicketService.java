@@ -28,8 +28,6 @@ public interface TicketService {
     
     Ticket iniciarAtencion(Long ticketId, Long agentId);
     
-    Optional<Ticket> obtenerUltimoTicketLlamado();
-    
     long contarTicketsPorEstado(TicketStatus status);
     
     // Método simplificado para el controlador

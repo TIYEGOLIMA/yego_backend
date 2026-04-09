@@ -23,21 +23,21 @@ public class ModuloOpcionesController {
     
     @GetMapping
    public ResponseEntity<List<Option>> obtenerTodasLasOpciones() {
-        log.info("Endpoint: Obtener todas las opciones");
+        log.info("[ModuloOpciones] Listar todas las opciones");
         List<Option> options = optionService.obtenerTodasLasOpciones();
         return ResponseEntity.ok(options);
     }
     
     @GetMapping("/options")
     public ResponseEntity<List<Option>> obtenerModulosActivos() {
-        log.info("Endpoint: Obtener módulos activos");
+        log.info("[ModuloOpciones] Listar módulos activos");
         List<Option> modules = optionService.obtenerModulosActivos();
         return ResponseEntity.ok(modules);
     }
     
     @GetMapping("/{parentId}/suboptions")
     public ResponseEntity<List<Option>> obtenerSubopciones(@PathVariable Long parentId) {
-        log.info("Endpoint: Obtener subopciones del módulo {}", parentId);
+        log.info("[ModuloOpciones] Subopciones del módulo {}", parentId);
         List<Option> suboptions = optionService.obtenerSubopciones(parentId);
         return ResponseEntity.ok(suboptions);
     }

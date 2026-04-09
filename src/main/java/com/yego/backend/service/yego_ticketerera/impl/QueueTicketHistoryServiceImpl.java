@@ -29,7 +29,7 @@ public class QueueTicketHistoryServiceImpl implements QueueTicketHistoryService 
             String newStatus,
             String notes) {
         
-        log.info("📝 Registrando cambio de estado para ticket {}: {} -> {}", 
+        log.info("Historial ticket {}: {} -> {}", 
                  ticketId, previousStatus, newStatus);
         
         QueueTicketHistory history = QueueTicketHistory.builder()
@@ -42,7 +42,7 @@ public class QueueTicketHistoryServiceImpl implements QueueTicketHistoryService 
         // No es necesario setear createdAt porque @PrePersist lo hace automáticamente
         
         QueueTicketHistory savedHistory = queueTicketHistoryRepository.save(history);
-        log.info("✅ Historial registrado con ID: {}", savedHistory.getId());
+        log.info("Historial registrado id {}", savedHistory.getId());
         
         return savedHistory;
     }
@@ -52,12 +52,5 @@ public class QueueTicketHistoryServiceImpl implements QueueTicketHistoryService 
     public List<QueueTicketHistory> obtenerHistorialPorTicket(Long ticketId) {
         log.debug("Obteniendo historial para ticket: {}", ticketId);
         return queueTicketHistoryRepository.findByTicketIdOrderByCreatedAtDesc(ticketId);
-    }
-    
-    @Override
-    @Transactional(readOnly = true)
-    public List<QueueTicketHistory> obtenerHistorialPorAgente(Long agentId) {
-        log.debug("Obteniendo historial para agente: {}", agentId);
-        return queueTicketHistoryRepository.findByAgentIdOrderByCreatedAtDesc(agentId);
     }
 }

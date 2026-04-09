@@ -5,7 +5,6 @@ import com.yego.backend.entity.yego_ticketerera.api.request.CrearRatingRequest;
 import com.yego.backend.service.yego_ticketerera.QueueRatingService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -17,7 +16,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/ticketera/ratings")
 @RequiredArgsConstructor
-@Slf4j
 @CrossOrigin(origins = "*")
 public class QueueRatingController {
     

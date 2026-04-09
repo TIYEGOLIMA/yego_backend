@@ -24,9 +24,4 @@ public interface QueueTicketHistoryService {
      * Obtener historial de un ticket
      */
     List<QueueTicketHistory> obtenerHistorialPorTicket(Long ticketId);
-    
-    /**
-     * Obtener historial de un agente
-     */
-    List<QueueTicketHistory> obtenerHistorialPorAgente(Long agentId);
 }

@@ -19,6 +19,10 @@ public class FlotaController {
 
     private final FlotaService flotaService;
 
+    /**
+     * Obtiene todas las flotas de la API externa
+     * pero filtradas por los IDs de las flotas de Yego
+     */
     @GetMapping("/todas")
     public ResponseEntity<List<FlotaResponse>> obtenerTodasLasFlotas() {
         log.info("⚙️ [FlotaController] Recibida solicitud para obtener todas las flotas");
@@ -29,6 +33,22 @@ public class FlotaController {
             return ResponseEntity.ok(flotas);
         } catch (Exception e) {
             log.error("❌ [FlotaController] Error obteniendo flotas: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /**
+     * Todos los partners de la API externa (mapa id → nombre), p. ej. selectores en Yego Premiun.
+     */
+    @GetMapping("/partners")
+    public ResponseEntity<List<FlotaResponse>> obtenerTodosLosPartners() {
+        log.info("⚙️ [FlotaController] Listado completo de partners (API externa)");
+        try {
+            List<FlotaResponse> flotas = flotaService.obtenerTodosLosPartners();
+            log.info("✅ [FlotaController] {} partners", flotas.size());
+            return ResponseEntity.ok(flotas);
+        } catch (Exception e) {
+            log.error("❌ [FlotaController] Error obteniendo partners: {}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }

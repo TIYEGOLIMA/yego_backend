@@ -39,7 +39,6 @@ public class QueueAgentServiceImpl implements QueueAgentService {
     private final TicketNotificationHandler ticketNotificationHandler;
     
     // ========== MÉTODOS DE NEGOCIO PRINCIPALES ==========
-    //giomar 2025-12-30
     @Override
     @Transactional
     public ResponseEntity<Map<String, Object>> liberarModuloDelUsuario(Long userId) {
@@ -71,7 +70,6 @@ public class QueueAgentServiceImpl implements QueueAgentService {
         }
     }
     
-    //giomar 2025-12-30
     @Override
     @Transactional
     public ResponseEntity<Map<String, Object>> liberarModuloPorModuleId(Long moduleId) {
@@ -105,11 +103,10 @@ public class QueueAgentServiceImpl implements QueueAgentService {
     
     // ========== MÉTODOS DE CONSULTA ==========
     
-    //giomar 2025-12-30
     @Override
     @Transactional(readOnly = true)
     public ModulosEstadoResponse obtenerModulosDisponiblesYOcupados() {
-        log.info("Obteniendo módulos disponibles y ocupados");
+        log.debug("Módulos disponibles y ocupados");
         
         // Obtener módulos disponibles (isActive = false)
         List<ModuloAtencionResponse> modulosDisponibles = moduloAtencionService.obtenerTodosLosModulosActivosResponse();
@@ -140,7 +137,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
                         .build())
                 .toList();
         
-        log.info("Módulos disponibles: {}, Módulos ocupados: {}", modulosDisponibles.size(), modulosOcupados.size());
+        log.debug("Módulos disponibles: {}, ocupados: {}", modulosDisponibles.size(), modulosOcupados.size());
         
         return ModulosEstadoResponse.builder()
                 .modulosDisponibles(modulosDisponibles)
@@ -151,25 +148,24 @@ public class QueueAgentServiceImpl implements QueueAgentService {
     @Override
     @Transactional(readOnly = true)
     public Optional<Long> obtenerQueueAgentIdPorUsuario(Long userId) {
-        log.info("Obteniendo queue_agent ID para usuario {}", userId);
+        log.debug("QueueAgent ID para usuario {}", userId);
         
         return queueAgentRepository.findByUserIdAndIsActiveTrue(userId)
                 .filter(agent -> "OCUPADO".equals(agent.getStatus()))
                 .map(agent -> {
-                    log.info("QueueAgent ID {} encontrado para usuario {} con estado OCUPADO", agent.getId(), userId);
+                    log.debug("QueueAgent {} para usuario {} (OCUPADO)", agent.getId(), userId);
                     return agent.getId();
                 });
     }
     
-    // GIOMAR 2025-12-30
     @Override
     @Transactional(readOnly = true)
     public Optional<RecuperarModuloResponse> recuperarModuloAsignado(Long userId) {
-        log.info("Recuperando módulo asignado para usuario: {}", userId);
+        log.debug("Módulo asignado para usuario {}", userId);
         
         return queueAgentRepository.findByUserIdAndIsActiveTrue(userId)
                 .map(queueAgent -> {
-                    log.info("Usuario {} tiene módulo {} asignado (status: {}, isActive: {})", 
+                    log.debug("Usuario {} módulo {} (status {}, isActive {})",
                             userId, queueAgent.getModuleId(), queueAgent.getStatus(), queueAgent.getIsActive());
                     
                     return RecuperarModuloResponse.builder()
@@ -183,7 +179,6 @@ public class QueueAgentServiceImpl implements QueueAgentService {
     
     // ========== MÉTODOS PARA EL CONTROLADOR ==========
     
-    //giomar 2025-12-30
     @Override
     @Transactional
     public ResponseEntity<AsignarModuloResponse> asignarModuloAUsuario(Map<String, Object> request) {
@@ -198,7 +193,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
             // Verificar si el módulo ya está ocupado
             Optional<QueueAgent> moduloOcupado = queueAgentRepository.findByModuleIdAndIsActiveTrue(moduleId);
             if (moduloOcupado.isPresent() && "OCUPADO".equals(moduloOcupado.get().getStatus())) {
-                log.warn("⚠️ [QueueAgent] El módulo de atención ya está ocupado");
+                log.warn("[QueueAgent] Módulo de atención ya ocupado");
                 return ResponseEntity.status(409).build();
             }
             
@@ -244,10 +239,10 @@ public class QueueAgentServiceImpl implements QueueAgentService {
             return ResponseEntity.ok(response);
             
         } catch (IllegalArgumentException e) {
-            log.warn("⚠️ [QueueAgent] Argumento inválido: {}", e.getMessage());
+            log.warn("[QueueAgent] Argumento inválido: {}", e.getMessage());
             return ResponseEntity.badRequest().build();
         } catch (Exception e) {
-            log.error("❌ [QueueAgent] Error asignando módulo: {}", e.getMessage(), e);
+            log.error("[QueueAgent] Error asignando módulo: {}", e.getMessage(), e);
             return ResponseEntity.status(500).build();
         }
     }
@@ -267,9 +262,9 @@ public class QueueAgentServiceImpl implements QueueAgentService {
         Long userId;
         try {
             userId = Long.parseLong(userIdString);
-            log.debug("✅ [QueueAgent] Usuario autenticado con ID: {}", userId);
+            log.debug("[QueueAgent] Usuario autenticado ID {}", userId);
         } catch (NumberFormatException e) {
-            log.warn("❌ [QueueAgent] ID de usuario inválido: {}", userIdString);
+            log.warn("[QueueAgent] ID de usuario inválido: {}", userIdString);
             return ResponseEntity.status(401).build();
         }
         

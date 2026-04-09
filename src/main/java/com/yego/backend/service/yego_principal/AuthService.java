@@ -19,14 +19,14 @@ public interface AuthService extends UserDetailsService {
     UserResponseDto validateUser(String username, String password, HttpServletRequest request);
     
     /**
-     * Realizar login y generar token
+     * Realizar login y generar token (el token se expone en header X-Access-Token, no en JSON).
      */
-    LoginResponseDto login(LoginDto loginDto, HttpServletRequest request);
+    LoginTokenResult login(LoginDto loginDto, HttpServletRequest request);
     
     /**
      * Renovar token JWT
      */
-    LoginResponseDto refreshToken(String token, HttpServletRequest request);
+    LoginTokenResult refreshToken(String token, HttpServletRequest request);
     
     /**
      * Registrar nuevo usuario

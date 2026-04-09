@@ -13,11 +13,7 @@ import java.util.Optional;
 @Repository
 public interface QueueAgentRepository extends JpaRepository<QueueAgent, Long> {
     
-    // Buscar por usuario activo
     Optional<QueueAgent> findByUserIdAndIsActiveTrue(Long userId);
-    
-    // Buscar TODOS los registros por usuario activo (para manejar duplicados)
-    List<QueueAgent> findAllByUserIdAndIsActiveTrue(Long userId);
     
     // Buscar por módulo de atención activo
     Optional<QueueAgent> findByModuleIdAndIsActiveTrue(Long moduleId);
