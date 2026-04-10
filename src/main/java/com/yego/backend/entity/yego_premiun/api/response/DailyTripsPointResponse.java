@@ -17,6 +17,6 @@ public class DailyTripsPointResponse {
     /** Día del mes (viajes completados ese día). */
     private LocalDate date;
     private Integer tripsCount;
-    /** Suma de {@code precio_yango_pro} del día en soles (según {@code yego.premiun.yango-pro-divisor} respecto a la columna en BD). */
+    /** Suma de {@code precio_yango_pro} del día en soles (según {@code yego.premium.yango-pro-divisor} respecto a la columna en BD). */
     private BigDecimal precioYangoProSoles;
 }

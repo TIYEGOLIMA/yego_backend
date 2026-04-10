@@ -117,7 +117,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/asistencia/**").permitAll() // Asistencia (marcación, historial, exportar, etc.)
                 .requestMatchers("/api/ticketera/**").permitAll() // Ticketera endpoints
                 .requestMatchers("/api/health").permitAll() // Health check
-                .requestMatchers("/api/yego-premiun/**").permitAll() // Driver active stats endpoints
+                .requestMatchers("/api/yego-premium/**").permitAll() // Driver active stats endpoints
                 .requestMatchers("/api/marketing-mensajes/**").permitAll() // Marketing mensajes endpoints
                 .requestMatchers("/api/pro-ops/**", "/pro-ops/**").permitAll() // Pro Ops endpoints (con o sin /api si context-path=/api)
                 .requestMatchers("/api/GoBot/**").permitAll() // GoBot API externa endpoints

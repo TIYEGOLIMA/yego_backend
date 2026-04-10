@@ -38,7 +38,7 @@ public class FlotaController {
     }
 
     /**
-     * Todos los partners de la API externa (mapa id → nombre), p. ej. selectores en Yego Premiun.
+     * Todos los partners de la API externa (mapa id → nombre), p. ej. selectores en Yego Premium.
      */
     @GetMapping("/partners")
     public ResponseEntity<List<FlotaResponse>> obtenerTodosLosPartners() {

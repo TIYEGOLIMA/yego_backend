@@ -91,8 +91,8 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
             SELECT
                 c.driver_id, c.park_id, c.trips, c.month, c.year,
                 CASE
-                    WHEN c.trips >= 400 THEN 'premiun oro'
-                    WHEN c.trips >= (CASE LEAST(c.months_since, 3) WHEN 1 THEN 50 WHEN 2 THEN 100 ELSE 200 END) THEN 'premiun plata'
+                    WHEN c.trips >= 400 THEN 'premium oro'
+                    WHEN c.trips >= (CASE LEAST(c.months_since, 3) WHEN 1 THEN 50 WHEN 2 THEN 100 ELSE 200 END) THEN 'premium plata'
                 END,
                 c.trips, c.count_all, c.count_accepted,
                 c.cancel_client, c.cancel_driver, c.count_all,
@@ -139,7 +139,7 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
         );
 
         long elapsed = System.currentTimeMillis() - t0;
-        log.info("[DriverMonthlyStatsService] {} conductores premiun insertados en {}ms", inserted, elapsed);
+        log.info("[DriverMonthlyStatsService] {} conductores premium insertados en {}ms", inserted, elapsed);
 
         if (inserted == 0) {
             return Collections.emptyList();
@@ -221,13 +221,13 @@ public class DriverMonthlyStatsServiceImpl implements DriverMonthlyStatsService 
         long meses = hireMonth.until(periodo, ChronoUnit.MONTHS) + 1;
         int trips = Optional.ofNullable(activo.getTrips()).orElse(0);
 
-        if ("premiun oro".equalsIgnoreCase(activo.getCategory())) {
-            return String.format("Mes %d desde vinculación, %d viajes ≥ 400 → premiun oro", meses, trips);
+        if ("premium oro".equalsIgnoreCase(activo.getCategory())) {
+            return String.format("Mes %d desde vinculación, %d viajes ≥ 400 → premium oro", meses, trips);
         }
 
         long mesEvaluado = Math.min(meses, 3);
         int umbral = mesEvaluado == 1 ? 50 : mesEvaluado == 2 ? 100 : 200;
         return String.format("Mes %d desde vinculación, %d viajes (mínimo %d) → %s",
-                meses, trips, umbral, Optional.ofNullable(activo.getCategory()).orElse("premiun plata"));
+                meses, trips, umbral, Optional.ofNullable(activo.getCategory()).orElse("premium plata"));
     }
 }

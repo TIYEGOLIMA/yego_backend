@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/yego-premiun")
+@RequestMapping("/api/yego-premium")
 @RequiredArgsConstructor
 @Slf4j
 public class DriverMonthlyStatsController {
@@ -44,7 +44,7 @@ public class DriverMonthlyStatsController {
     }
 
     /**
-     * Viajes completados en {@code trips_{year}} para un conductor en un mes (misma ventana que el procesamiento premiun).
+     * Viajes completados en {@code trips_{year}} para un conductor en un mes (misma ventana que el procesamiento premium).
      */
     @GetMapping("/driver-trips/month")
     public ResponseEntity<DriverTripsMonthResponse> viajesCompletadosPorMes(

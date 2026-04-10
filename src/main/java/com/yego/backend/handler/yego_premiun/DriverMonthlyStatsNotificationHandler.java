@@ -22,14 +22,14 @@ public class DriverMonthlyStatsNotificationHandler {
     public void notifyProcessAvailable(YearMonth period) {
         try {
             Map<String, Object> payload = Map.of(
-                    "type", "PREMIUN_PROCESS_AVAILABLE",
+                    "type", "PREMIUM_PROCESS_AVAILABLE",
                     "message", String.format("Procesa las estadísticas del periodo %s %d", period.getMonth(), period.getYear()),
                     "year", period.getYear(),
                     "month", period.getMonthValue(),
                     "timestamp", LocalDateTime.now().format(TIMESTAMP_FORMATTER)
             );
 
-            filteredWebSocketService.convertAndSend("/topic/yego-premiun", payload);
+            filteredWebSocketService.convertAndSend("/topic/yego-premium", payload);
             filteredWebSocketService.convertAndSend("/topic/premium-driver", payload);
 
             log.info("[DriverMonthlyStatsNotification] Enviada: type={} period={}-{}", payload.get("type"), payload.get("year"), payload.get("month"));

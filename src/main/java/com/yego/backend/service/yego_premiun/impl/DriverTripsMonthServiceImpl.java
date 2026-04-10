@@ -39,7 +39,7 @@ public class DriverTripsMonthServiceImpl implements DriverTripsMonthService {
      * Divisor aplicado a {@code SUM(precio_yango_pro)}. En BD, {@code precio_yango_pro} suele ser {@code numeric} ya en soles → 1.
      * Usar 100 solo si la columna almacena centavos (legacy).
      */
-    @Value("${yego.premiun.yango-pro-divisor:1}")
+    @Value("${yego.premium.yango-pro-divisor:1}")
     private BigDecimal yangoProDivisor;
 
     private static final String TRIPS_SQL = """
