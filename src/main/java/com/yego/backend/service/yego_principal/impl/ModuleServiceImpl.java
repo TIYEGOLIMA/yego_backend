@@ -336,11 +336,10 @@ public class ModuleServiceImpl implements ModuleService {
                     })
                     .collect(Collectors.toList());
             
-            // Si no hay coincidencias exactas pero hay permisos configurados,
-            // devolvemos todos los módulos activos (el admin puede ajustar esto después)
             if (allowedModules.isEmpty() && !moduleNamesFromPermissions.isEmpty()) {
-                log.info("⚠️ [ModuleService] No se encontraron coincidencias exactas, devolviendo todos los módulos activos para usuario {}", userId);
-                return obtenerActivos();
+                log.warn("⚠️ [ModuleService] No se encontraron coincidencias para los permisos {} del rol {} (usuario {}). " +
+                        "Verifica que los nombres de permisos coincidan con los módulos en BD.",
+                        moduleNamesFromPermissions, user.getRole().getName(), userId);
             }
             
             log.debug("✅ [ModuleService] Encontrados {} módulos permitidos para usuario {}", allowedModules.size(), userId);

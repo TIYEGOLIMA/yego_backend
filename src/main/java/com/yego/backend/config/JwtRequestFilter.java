@@ -45,6 +45,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, 
                                     FilterChain chain) throws ServletException, IOException {
         
+        // Preflight CORS: no JWT; debe llegar al CorsFilter sin tocar la respuesta
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            chain.doFilter(request, response);
+            return;
+        }
+        
         String username = null;
         String jwtToken = null;
         

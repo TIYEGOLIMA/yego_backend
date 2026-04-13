@@ -8,6 +8,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -63,16 +64,17 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // Permitir localhost para desarrollo
-        configuration.setAllowedOrigins(Arrays.asList(
-            "http://localhost:3030",
-            "http://localhost:5173",
-            "http://localhost:5174",
+        // Patrones: cubren cualquier puerto en localhost y en el host de Control Tower (evita fallos CORS por :80 vs sin puerto).
+        configuration.setAllowedOriginPatterns(Arrays.asList(
+            "http://localhost:*",
+            "http://127.0.0.1:*",
             "https://integral.yego.pro",
             "https://api-int.yego.pro",
             "https://neto.yego.pro",
             "https://siscoca.yego.pro",
-            "https://ct4.yego.pro"
+            "https://ct4.yego.pro",
+            "http://5.161.86.63",
+            "http://5.161.86.63:*"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
@@ -100,6 +102,7 @@ public class SecurityConfig {
             .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/refresh").permitAll()
                 .requestMatchers("/api/users/listado").permitAll() // Listado usuarios sin token
                 .requestMatchers("/api/ticketera/auth/refresh").permitAll() // Alias ticketera auth
