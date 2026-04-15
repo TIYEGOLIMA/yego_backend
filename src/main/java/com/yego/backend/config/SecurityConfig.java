@@ -74,7 +74,9 @@ public class SecurityConfig {
             "https://siscoca.yego.pro",
             "https://ct4.yego.pro",
             "http://5.161.86.63",
-            "http://5.161.86.63:*"
+            "http://5.161.86.63:*",
+            "https://5.161.86.63",
+            "https://5.161.86.63:*"
         ));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));

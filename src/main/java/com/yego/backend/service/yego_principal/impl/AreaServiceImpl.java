@@ -21,12 +21,16 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AreaServiceImpl implements AreaService {
+
+    /** IDs de usuarios que no deben listarse en combos de áreas (responsable / colaboradores). */
+    private static final Set<Long> EXCLUDED_AREA_USER_IDS = Set.of(1L, 4L, 5L, 6L);
 
     private final AreaRepository areaRepository;
     private final UserRepository userRepository;
@@ -128,6 +132,7 @@ public class AreaServiceImpl implements AreaService {
     @Transactional(readOnly = true)
     public List<UserSimpleDto> findUsersForResponsable(Long areaIdEnEdicion) {
         return userRepository.findActiveUsersForResponsableDropdown().stream()
+                .filter(row -> !EXCLUDED_AREA_USER_IDS.contains(((Number) row[0]).longValue()))
                 .map(row -> {
                     Long id = ((Number) row[0]).longValue();
                     String name = row[1] != null ? (String) row[1] : "";

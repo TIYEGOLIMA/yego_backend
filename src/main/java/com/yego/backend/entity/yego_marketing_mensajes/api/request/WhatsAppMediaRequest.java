@@ -5,12 +5,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Request para enviar mensaje con media a WhatsApp
- * 
- * @author Sistema Yego
- * @version 1.0
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

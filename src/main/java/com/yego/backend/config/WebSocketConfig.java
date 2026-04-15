@@ -48,7 +48,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         "https://ct4.yego.pro",
         "http://5.161.86.63",
         "http://5.161.86.63:5173",
-        "http://5.161.86.63:3030"
+        "http://5.161.86.63:3030",
+        "https://5.161.86.63",
+        "https://5.161.86.63:5173",
+        "https://5.161.86.63:3030"
     );
 
     @Override

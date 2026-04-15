@@ -4,13 +4,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * Response para grupos de WhatsApp
- * Contiene solo los campos necesarios: id, subject
- * 
- * @author Sistema Yego
- * @version 1.0
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

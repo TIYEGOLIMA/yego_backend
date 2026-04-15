@@ -7,12 +7,6 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Respuesta de mensaje de marketing
- * 
- * @author Sistema Yego
- * @version 1.0
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

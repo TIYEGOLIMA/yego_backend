@@ -15,18 +15,22 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
+import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 @Slf4j
@@ -37,12 +41,23 @@ public class AttendanceServiceImpl implements AttendanceService {
     /** IDs de usuarios que no deben aparecer en la lista de asistencia ni en el Excel de exportación (principal, prueba, tablet, etc.). */
     private static final Set<Long> USER_IDS_EXCLUIDOS_LISTA_ASISTENCIA = Set.of(1L, 4L, 5L, 6L, 21L, 7L, 27L, 37L);
 
+    private static final ZoneId ZONA_PERU = ZoneId.of("America/Lima");
+
+    /** Nombre de enum/tipo en BD → clave del frontend (entrada, salida_refrigerio, …). */
+    private static final Map<String, String> TIPO_ASISTENCIA_A_FRONT = Map.of(
+        "ENTRY", "entrada",
+        "EXIT_BREAK", "salida_refrigerio",
+        "RETURN_BREAK", "regreso_refrigerio",
+        "EXIT", "salida"
+    );
+
+    private static final DateTimeFormatter FMT_FECHA_DMY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter FMT_FECHA_HORA_DMY = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
+
     private final AttendanceRepository attendanceRepository;
     private final AreaRepository areaRepository;
     private final MessageService messageService;
     private final AttendanceNotificationHandler attendanceNotificationHandler;
-
-    // ===== MÉTODOS PRINCIPALES DE MARCACIÓN =====
 
     @Override
     public Map<String, Object> processAttendanceMarkingWithIpValidation(Long userId, Map<String, Object> attendanceData, String clientIp) {
@@ -78,8 +93,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     public String validateAttendanceSequence(Long userId, String attendanceType) {
         log.info("🔍 [AttendanceService] Validando secuencia de marcación para usuario: {}", userId);
-        // Usar zona horaria de Perú (America/Lima) como en otras partes del sistema
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Lima"));
+        LocalDate today = LocalDate.now(ZONA_PERU);
         log.info("🔍 [AttendanceService] Buscando último registro para usuario: {} en fecha: {}", userId, today);
         
         Optional<AttendanceRecord> lastRecord;
@@ -227,46 +241,19 @@ public class AttendanceServiceImpl implements AttendanceService {
         );
     }
 
-    // ===== MÉTODOS DE CONSULTA BÁSICA =====
-
     @Override
     public List<Map<String, Object>> getTodayAttendances(Long userId) {
         log.info("📅 [AttendanceService] Obteniendo marcaciones del día para usuario: {}", userId);
-        
-        // Debug: Mostrar diferentes zonas horarias
-        LocalDate todayServer = LocalDate.now();
-        LocalDate todayPeru = LocalDate.now(java.time.ZoneId.of("America/Lima"));
-        log.info("📅 [AttendanceService] Fecha servidor: {}, Fecha Perú: {}", todayServer, todayPeru);
-        
-        // Usar zona horaria de Perú (America/Lima) como en otras partes del sistema
-        LocalDate today = todayPeru;
-        log.info("📅 [AttendanceService] Fecha de consulta final: {}", today);
-        
+        LocalDate today = LocalDate.now(ZONA_PERU);
         List<AttendanceRecord> records = attendanceRepository.findByUserIdAndRecordedDateOrderByRecordedAtAsc(userId, today);
         log.info("📅 [AttendanceService] Registros encontrados en BD: {}", records.size());
-        
-        // Debug: Mostrar fechas de los registros encontrados
-        for (AttendanceRecord record : records) {
-            log.info("📅 [AttendanceService] Registro encontrado - ID: {}, Fecha: {}, Tipo: {}", 
-                record.getId(), record.getRecordedDate(), record.getAttendanceType());
-        }
-
-        Map<String, String> tipoMap = Map.of(
-            "ENTRY", "entrada",
-            "EXIT_BREAK", "salida_refrigerio",
-            "RETURN_BREAK", "regreso_refrigerio",
-            "EXIT", "salida"
-        );
 
         List<Map<String, Object>> marcaciones = new ArrayList<>();
         for (AttendanceRecord record : records) {
-            log.info("📅 [AttendanceService] Procesando registro ID: {}, Tipo: {}, Fecha: {}", 
-                record.getId(), record.getAttendanceType(), record.getRecordedDate());
-            
             Map<String, Object> marcacion = new HashMap<>();
             marcacion.put("id", record.getId());
             marcacion.put("empleadoId", userId);
-            marcacion.put("tipo", tipoMap.get(record.getAttendanceType().name()));
+            marcacion.put("tipo", TIPO_ASISTENCIA_A_FRONT.get(record.getAttendanceType().name()));
             marcacion.put("fecha", record.getRecordedDate().toString());
             marcacion.put("hora", record.getRecordedTime().toString());
             marcacion.put("timestamp", record.getRecordedAt().toString());
@@ -281,23 +268,15 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     public Map<String, Object> getEmployeeStatistics(Long userId) {
         log.info("📊 [AttendanceService] Obteniendo estadísticas para usuario: {}", userId);
-        // Usar zona horaria de Perú (America/Lima) como en otras partes del sistema
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Lima"));
+        LocalDate today = LocalDate.now(ZONA_PERU);
         List<AttendanceRecord> records = attendanceRepository.findByUserIdAndRecordedDateOrderByRecordedAtAsc(userId, today);
-
-        Map<String, String> tipoMap = Map.of(
-            "ENTRY", "entrada",
-            "EXIT_BREAK", "salida_refrigerio",
-            "RETURN_BREAK", "regreso_refrigerio",
-            "EXIT", "salida"
-        );
 
         List<Map<String, Object>> marcaciones = new ArrayList<>();
         for (AttendanceRecord record : records) {
             Map<String, Object> marcacion = new HashMap<>();
             marcacion.put("id", record.getId());
             marcacion.put("empleadoId", userId);
-            marcacion.put("tipo", tipoMap.get(record.getAttendanceType().name()));
+            marcacion.put("tipo", TIPO_ASISTENCIA_A_FRONT.get(record.getAttendanceType().name()));
             marcacion.put("fecha", record.getRecordedDate().toString());
             marcacion.put("hora", record.getRecordedTime().toString());
             marcacion.put("timestamp", record.getRecordedAt().toString());
@@ -356,8 +335,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         return estadisticas;
     }
 
-    // ===== MÉTODOS DE VALIDACIÓN =====
-
     @Override
     public boolean isAuthorizedIp(String ip) {
         log.info("🌐 [AttendanceService] Verificando IP autorizada: {}", ip);
@@ -402,8 +379,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     public boolean canMarkEntry(Long userId) {
         log.info("🔍 [AttendanceService] Verificando si usuario {} puede marcar entrada", userId);
-        // Usar zona horaria de Perú (America/Lima) como en otras partes del sistema
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Lima"));
+        LocalDate today = LocalDate.now(ZONA_PERU);
         List<AttendanceRecord> records = attendanceRepository.findByUserIdAndRecordedDateOrderByRecordedAtDesc(userId, today);
         Optional<AttendanceRecord> lastRecord = records.isEmpty() ? Optional.empty() : Optional.of(records.get(0));
         
@@ -416,8 +392,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     public boolean canMarkExit(Long userId) {
         log.info("🔍 [AttendanceService] Verificando si usuario {} puede marcar salida", userId);
-        // Usar zona horaria de Perú (America/Lima) como en otras partes del sistema
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Lima"));
+        LocalDate today = LocalDate.now(ZONA_PERU);
         List<AttendanceRecord> records = attendanceRepository.findByUserIdAndRecordedDateOrderByRecordedAtDesc(userId, today);
         Optional<AttendanceRecord> lastRecord = records.isEmpty() ? Optional.empty() : Optional.of(records.get(0));
         
@@ -430,8 +405,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     @Override
     public boolean isUserCurrentlyWorking(Long userId) {
         log.info("🔍 [AttendanceService] Verificando si usuario {} está trabajando actualmente", userId);
-        // Usar zona horaria de Perú (America/Lima) como en otras partes del sistema
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Lima"));
+        LocalDate today = LocalDate.now(ZONA_PERU);
         List<AttendanceRecord> records = attendanceRepository.findByUserIdAndRecordedDateOrderByRecordedAtDesc(userId, today);
         Optional<AttendanceRecord> lastRecord = records.isEmpty() ? Optional.empty() : Optional.of(records.get(0));
         
@@ -446,8 +420,7 @@ public class AttendanceServiceImpl implements AttendanceService {
 
     @Override
     public boolean isUserOnBreak(Long userId) {
-        // Usar zona horaria de Perú (America/Lima) como en otras partes del sistema
-        LocalDate today = LocalDate.now(java.time.ZoneId.of("America/Lima"));
+        LocalDate today = LocalDate.now(ZONA_PERU);
         List<AttendanceRecord> records = attendanceRepository.findByUserIdAndRecordedDateOrderByRecordedAtDesc(userId, today);
         Optional<AttendanceRecord> lastRecord = records.isEmpty() ? Optional.empty() : Optional.of(records.get(0));
         boolean onBreak = lastRecord.isPresent() && lastRecord.get().getAttendanceType() == AttendanceType.EXIT_BREAK;
@@ -456,8 +429,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         return onBreak;
     }
 
-    // ===== MÉTODOS DE ESTADÍSTICAS =====
-
     @Override
     public List<Map<String, Object>> getAttendanceRecordsByDateRange(Long userId, LocalDate startDate, LocalDate endDate) {
         log.info("📅 [AttendanceService] Obteniendo marcaciones por rango para usuario: {} desde {} hasta {}", userId, startDate, endDate);
@@ -465,22 +436,12 @@ public class AttendanceServiceImpl implements AttendanceService {
         List<AttendanceRecord> records = attendanceRepository.findByUserIdAndDateRange(userId, startDate, endDate);
         log.info("📅 [AttendanceService] Registros encontrados en rango: {}", records.size());
 
-        Map<String, String> tipoMap = Map.of(
-            "ENTRY", "entrada",
-            "EXIT_BREAK", "salida_refrigerio",
-            "RETURN_BREAK", "regreso_refrigerio",
-            "EXIT", "salida"
-        );
-
         List<Map<String, Object>> marcaciones = new ArrayList<>();
         for (AttendanceRecord record : records) {
-            log.info("📅 [AttendanceService] Procesando registro ID: {}, Tipo: {}, Fecha: {}", 
-                record.getId(), record.getAttendanceType(), record.getRecordedDate());
-            
             Map<String, Object> marcacion = new HashMap<>();
             marcacion.put("id", record.getId());
             marcacion.put("empleadoId", userId);
-            marcacion.put("tipo", tipoMap.get(record.getAttendanceType().name()));
+            marcacion.put("tipo", TIPO_ASISTENCIA_A_FRONT.get(record.getAttendanceType().name()));
             marcacion.put("fecha", record.getRecordedDate().toString());
             marcacion.put("hora", record.getRecordedTime().toString());
             marcacion.put("timestamp", record.getRecordedAt().toString());
@@ -494,8 +455,6 @@ public class AttendanceServiceImpl implements AttendanceService {
         log.info("✅ [AttendanceService] Encontradas {} marcaciones en el rango especificado", marcaciones.size());
         return marcaciones;
     }
-
-    // ===== MÉTODOS AUXILIARES =====
 
     private String getClientIp() {
         return "127.0.0.1";
@@ -523,24 +482,11 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public List<Map<String, Object>> getAttendanceRecordsByRole(Long userId, String userRole, LocalDate fecha) {
-        log.info("👥 [AttendanceService] Obteniendo marcaciones por rol para usuario: {} (rol: {}) en fecha: {}", userId, userRole, fecha);
-        
-        List<Object[]> recordsWithNames;
-        
-        // Para el historial de asistencia, siempre devolver solo las marcaciones del usuario específico
-        log.info("👤 [AttendanceService] Obteniendo marcaciones del usuario específico: {}", userId);
-        recordsWithNames = attendanceRepository.findByUserIdAndDateWithUserNames(userId, fecha);
-        
-        log.info("📊 [AttendanceService] Registros encontrados por rol: {}", recordsWithNames.size());
-        
-        // Mapear a formato de respuesta
-        Map<String, String> tipoMap = Map.of(
-            "ENTRY", "entrada",
-            "EXIT_BREAK", "salida_refrigerio", 
-            "RETURN_BREAK", "regreso_refrigerio",
-            "EXIT", "salida"
-        );
-        
+        log.info("👥 [AttendanceService] Historial usuario {} en fecha {} (rol solicitante: {})", userId, fecha, userRole);
+
+        List<Object[]> recordsWithNames = attendanceRepository.findByUserIdAndDateWithUserNames(userId, fecha);
+        log.info("📊 [AttendanceService] Registros encontrados: {}", recordsWithNames.size());
+
         List<Map<String, Object>> marcaciones = new ArrayList<>();
         for (Object[] recordData : recordsWithNames) {
             log.info("🔍 [AttendanceService] Procesando registro con {} columnas", recordData.length);
@@ -597,7 +543,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             marcacion.put("id", id);
             marcacion.put("empleadoId", empleadoId);
             marcacion.put("nombreCompleto", fullName);
-            marcacion.put("tipo", tipoMap.get(attendanceType));
+            marcacion.put("tipo", TIPO_ASISTENCIA_A_FRONT.get(attendanceType));
             marcacion.put("fecha", recordedDate.toString());
             marcacion.put("hora", recordedTime.toString());
             marcacion.put("timestamp", recordedAt.toString());
@@ -606,7 +552,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             marcaciones.add(marcacion);
             } catch (Exception e) {
                 log.error("❌ [AttendanceService] Error al procesar registro: {}", e.getMessage(), e);
-                log.error("❌ [AttendanceService] Datos del registro: {}", java.util.Arrays.toString(recordData));
+                log.error("❌ [AttendanceService] Datos del registro: {}", Arrays.toString(recordData));
                 // Continuar con el siguiente registro en lugar de fallar completamente
                 continue;
             }
@@ -620,7 +566,7 @@ public class AttendanceServiceImpl implements AttendanceService {
     public List<Map<String, Object>> getAttendanceRecordsByRole(Long userId, String userRole, String fechaParam) {
         LocalDate fecha = (fechaParam != null && !fechaParam.isBlank())
             ? LocalDate.parse(fechaParam)
-            : LocalDate.now(ZoneId.of("America/Lima"));
+            : LocalDate.now(ZONA_PERU);
         return getAttendanceRecordsByRole(userId, userRole, fecha);
     }
 
@@ -657,8 +603,7 @@ public class AttendanceServiceImpl implements AttendanceService {
             return mapearUsuariosParaLista(usersData);
         }
 
-        // Jefe de una o más áreas: unir colaboradores de todas sus áreas (sin duplicados por id)
-        java.util.Set<Long> idsVistos = new java.util.HashSet<>();
+        Set<Long> idsVistos = new HashSet<>();
         List<Object[]> todosLosRows = new ArrayList<>();
         for (Area area : areasComoJefe) {
             List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
@@ -763,7 +708,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                         userIdsPermitidos = null;
                         log.info("🔓 [AttendanceService] Jefe del área Administración con rol Administración - exportando todas las marcaciones");
                     } else {
-                        java.util.Set<Long> idsSet = new java.util.HashSet<>();
+                        Set<Long> idsSet = new HashSet<>();
                         idsSet.add(userIdGenerador);
                         for (Area area : areasComoJefe) {
                             List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
@@ -771,7 +716,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                                 idsSet.add(((Number) row[0]).longValue());
                             }
                         }
-                        userIdsPermitidos = new java.util.ArrayList<>(idsSet);
+                        userIdsPermitidos = new ArrayList<>(idsSet);
                         log.info("👔 [AttendanceService] Exportación filtrada por {} área(s) del jefe - {} usuarios (colaboradores + jefe)", areasComoJefe.size(), userIdsPermitidos.size());
                     }
                 } else {
@@ -855,13 +800,13 @@ public class AttendanceServiceImpl implements AttendanceService {
             titleRow.setHeightInPoints(25); // Altura del título
             
             // Fusionar celdas para el título
-            sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 6));
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 6));
             
             // Información del reporte en formato compacto (3 filas, múltiples columnas)
             LocalDateTime fechaGeneracion = LocalDateTime.now();
-            String fechaGeneracionStr = fechaGeneracion.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
-            String fechaConsultaInicioStr = fechaConsultaInicio.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-            String fechaConsultaFinStr = fechaConsultaFin.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+            String fechaGeneracionStr = fechaGeneracion.format(FMT_FECHA_HORA_DMY);
+            String fechaConsultaInicioStr = fechaConsultaInicio.format(FMT_FECHA_DMY);
+            String fechaConsultaFinStr = fechaConsultaFin.format(FMT_FECHA_DMY);
             
             // Fila 1 de información compacta
             Row infoRow1 = sheet.createRow(rowNum++);
@@ -966,7 +911,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                     row.createCell(2).setCellValue(email);
                     row.createCell(3).setCellValue(roleName);
                     row.createCell(4).setCellValue(tipoMarcacion);
-                    row.createCell(5).setCellValue(recordedDate.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+                    row.createCell(5).setCellValue(recordedDate.format(FMT_FECHA_DMY));
                     row.createCell(6).setCellValue(recordedTime.toString());
                     
                 } catch (Exception e) {

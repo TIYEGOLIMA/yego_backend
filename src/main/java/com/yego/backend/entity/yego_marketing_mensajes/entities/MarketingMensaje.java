@@ -8,20 +8,16 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
-/**
- * Entidad para la tabla yego_marketing_mensajes
- * Maneja los mensajes de marketing del sistema
- * 
- * @author Sistema Yego
- * @version 1.0
- */
 @Entity
 @Table(name = "module_marketing_messages")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class MarketingMensaje {
+
+    private static final ZoneId ZONE_LIMA = ZoneId.of("America/Lima");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -79,8 +75,9 @@ public class MarketingMensaje {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now(java.time.ZoneId.of("America/Lima"));
-        updatedAt = LocalDateTime.now(java.time.ZoneId.of("America/Lima"));
+        LocalDateTime now = LocalDateTime.now(ZONE_LIMA);
+        createdAt = now;
+        updatedAt = now;
         if (activo == null) {
             activo = true;
         }
@@ -88,7 +85,7 @@ public class MarketingMensaje {
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now(java.time.ZoneId.of("America/Lima"));
+        updatedAt = LocalDateTime.now(ZONE_LIMA);
     }
 }
 

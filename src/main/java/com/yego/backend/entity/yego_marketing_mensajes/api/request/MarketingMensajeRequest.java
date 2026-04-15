@@ -7,12 +7,6 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-/**
- * Request para crear o actualizar un mensaje de marketing
- * 
- * @author Sistema Yego
- * @version 1.0
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

@@ -39,6 +39,7 @@ public interface AttendanceRepository extends JpaRepository<AttendanceRecord, Lo
                    "FROM users u " +
                    "LEFT JOIN roles r ON u.role = r.id " +
                    "LEFT JOIN areas a ON u.area_id = a.id " +
+                   "WHERE u.active = true " +
                    "ORDER BY u.name ASC", nativeQuery = true)
     List<Object[]> findAllUsers();
 
