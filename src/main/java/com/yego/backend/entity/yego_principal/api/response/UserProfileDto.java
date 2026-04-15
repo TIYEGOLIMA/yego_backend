@@ -24,11 +24,10 @@ public class UserProfileDto {
     private String moduleId;
     private Boolean active;
     private LocalDateTime lastLogin;
-    /** Si el usuario es jefe de un área (manager_id en tabla areas). */
     private Boolean esJefe;
-    /** Nombre del área que gestiona (solo si esJefe). */
     private String nombreArea;
-    /** true si la contraseña tiene más de una semana y debe cambiarse para seguir usando Integral. */
+    private Boolean esSupervisor;
+    private String nombreAreaSupervisor;
     private Boolean requirePasswordChange;
 }
 

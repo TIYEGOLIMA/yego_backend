@@ -20,5 +20,7 @@ public class UpdateAreaDto {
 
     private Long managerId;
 
+    private Long supervisorId;
+
     private Boolean activo;
 }

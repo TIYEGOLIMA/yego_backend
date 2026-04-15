@@ -22,6 +22,8 @@ public class CreateAreaDto {
 
     private Long managerId;
 
+    private Long supervisorId;
+
     @Builder.Default
     private Boolean activo = true;
 }

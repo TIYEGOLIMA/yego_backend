@@ -23,6 +23,8 @@ public class UsuarioResumenDto {
     private String rol;
     @JsonProperty("esJefe")
     private Boolean esJefe;
+    @JsonProperty("esSupervisor")
+    private Boolean esSupervisor;
     @JsonProperty("area")
     private String area;
     @JsonProperty("nombre")

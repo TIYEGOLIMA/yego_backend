@@ -45,6 +45,7 @@ public class AreaServiceImpl implements AreaService {
                 .name(dto.getName())
                 .description(dto.getDescription())
                 .managerId(dto.getManagerId())
+                .supervisorId(dto.getSupervisorId())
                 .activo(dto.getActivo() != null ? dto.getActivo() : true)
                 .build();
         Area saved = areaRepository.save(area);
@@ -58,14 +59,17 @@ public class AreaServiceImpl implements AreaService {
         List<Area> areas = areaRepository.findAllOrderByNameAsc();
         if (areas.isEmpty()) return Collections.emptyList();
         List<Long> managerIds = areas.stream().map(Area::getManagerId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        List<Long> supervisorIds = areas.stream().map(Area::getSupervisorId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        List<Long> allUserIds = new java.util.ArrayList<>(managerIds);
+        supervisorIds.stream().filter(id -> !allUserIds.contains(id)).forEach(allUserIds::add);
         List<Long> areaIds = areas.stream().map(Area::getId).collect(Collectors.toList());
-        Map<Long, User> managerById = managerIds.isEmpty() ? Collections.emptyMap()
-                : userRepository.findByIdInWithRole(managerIds).stream().collect(Collectors.toMap(User::getId, u -> u));
+        Map<Long, User> usersById = allUserIds.isEmpty() ? Collections.emptyMap()
+                : userRepository.findByIdInWithRole(allUserIds).stream().collect(Collectors.toMap(User::getId, u -> u));
         Map<Long, Long> countByAreaId = areaIds.isEmpty() ? Collections.emptyMap()
                 : userRepository.countByAreaIdIn(areaIds).stream()
                         .collect(Collectors.toMap(row -> (Long) row[0], row -> ((Number) row[1]).longValue()));
         return areas.stream()
-                .map(a -> mapToResponseDto(a, managerById, countByAreaId))
+                .map(a -> mapToResponseDto(a, usersById, countByAreaId))
                 .collect(Collectors.toList());
     }
 
@@ -98,6 +102,9 @@ public class AreaServiceImpl implements AreaService {
         if (dto.getActivo() != null) area.setActivo(dto.getActivo());
         if (dto.getManagerId() != null) {
             area.setManagerId(dto.getManagerId());
+        }
+        if (dto.getSupervisorId() != null) {
+            area.setSupervisorId(dto.getSupervisorId());
         }
         areaRepository.save(area);
         return findOne(id);
@@ -164,15 +171,9 @@ public class AreaServiceImpl implements AreaService {
                 .collect(Collectors.toList());
     }
 
-    /** Usa mapas pre-cargados para evitar N+1. */
-    private AreaResponseDto mapToResponseDto(Area area, Map<Long, User> managerById, Map<Long, Long> countByAreaId) {
-        String managerName = null;
-        if (area.getManagerId() != null) {
-            User manager = managerById.get(area.getManagerId());
-            if (manager != null) {
-                managerName = ((manager.getName() != null ? manager.getName() : "") + " " + (manager.getLastName() != null ? manager.getLastName() : "")).trim();
-            }
-        }
+    private AreaResponseDto mapToResponseDto(Area area, Map<Long, User> usersById, Map<Long, Long> countByAreaId) {
+        String managerName = resolveUserFullName(area.getManagerId(), usersById);
+        String supervisorName = resolveUserFullName(area.getSupervisorId(), usersById);
         Long colaboradoresCount = countByAreaId.getOrDefault(area.getId(), 0L);
         return AreaResponseDto.builder()
                 .id(area.getId())
@@ -180,6 +181,8 @@ public class AreaServiceImpl implements AreaService {
                 .description(area.getDescription())
                 .managerId(area.getManagerId())
                 .managerName(managerName)
+                .supervisorId(area.getSupervisorId())
+                .supervisorName(supervisorName)
                 .activo(area.getActivo())
                 .colaboradoresCount(colaboradoresCount)
                 .createdAt(area.getCreatedAt())
@@ -188,11 +191,20 @@ public class AreaServiceImpl implements AreaService {
     }
 
     private AreaResponseDto mapToResponseDto(Area area) {
-        List<Long> managerIds = area.getManagerId() != null ? List.of(area.getManagerId()) : Collections.emptyList();
-        Map<Long, User> managerById = managerIds.isEmpty() ? Collections.emptyMap()
-                : userRepository.findByIdInWithRole(managerIds).stream().collect(Collectors.toMap(User::getId, u -> u));
+        java.util.ArrayList<Long> userIds = new java.util.ArrayList<>();
+        if (area.getManagerId() != null) userIds.add(area.getManagerId());
+        if (area.getSupervisorId() != null && !userIds.contains(area.getSupervisorId())) userIds.add(area.getSupervisorId());
+        Map<Long, User> usersById = userIds.isEmpty() ? Collections.emptyMap()
+                : userRepository.findByIdInWithRole(userIds).stream().collect(Collectors.toMap(User::getId, u -> u));
         Map<Long, Long> countByAreaId = userRepository.countByAreaIdIn(List.of(area.getId())).stream()
                 .collect(Collectors.toMap(row -> (Long) row[0], row -> ((Number) row[1]).longValue()));
-        return mapToResponseDto(area, managerById, countByAreaId);
+        return mapToResponseDto(area, usersById, countByAreaId);
+    }
+
+    private static String resolveUserFullName(Long userId, Map<Long, User> usersById) {
+        if (userId == null) return null;
+        User user = usersById.get(userId);
+        if (user == null) return null;
+        return ((user.getName() != null ? user.getName() : "") + " " + (user.getLastName() != null ? user.getLastName() : "")).trim();
     }
 }

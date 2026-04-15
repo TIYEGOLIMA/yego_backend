@@ -17,6 +17,8 @@ public class AreaResponseDto {
     private String description;
     private Long managerId;
     private String managerName;
+    private Long supervisorId;
+    private String supervisorName;
     private Boolean activo;
     private Long colaboradoresCount;
     private LocalDateTime createdAt;

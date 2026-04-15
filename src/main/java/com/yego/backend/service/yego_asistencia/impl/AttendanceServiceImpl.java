@@ -587,25 +587,39 @@ public class AttendanceServiceImpl implements AttendanceService {
         }
 
         List<Area> areasComoJefe = areaRepository.findByManagerId(userId);
-        if (areasComoJefe == null || areasComoJefe.isEmpty()) {
-            log.info("👤 [AttendanceService] Usuario no es jefe de ningún área - lista vacía");
+        List<Area> areasComoSupervisor = areaRepository.findBySupervisorId(userId);
+
+        Set<Long> areaIdsVistos = new HashSet<>();
+        List<Area> todasLasAreas = new ArrayList<>();
+        if (areasComoJefe != null) {
+            for (Area a : areasComoJefe) {
+                if (areaIdsVistos.add(a.getId())) todasLasAreas.add(a);
+            }
+        }
+        if (areasComoSupervisor != null) {
+            for (Area a : areasComoSupervisor) {
+                if (areaIdsVistos.add(a.getId())) todasLasAreas.add(a);
+            }
+        }
+
+        if (todasLasAreas.isEmpty()) {
+            log.info("👤 [AttendanceService] Usuario no es jefe ni supervisor de ningún área - lista vacía");
             return new ArrayList<>();
         }
 
-        // Caso especial: jefe del área "Administración" Y rol "Administración" → ve todos los usuarios
         boolean rolEsAdministracion = userRole != null
                 && ("Administración".equalsIgnoreCase(userRole.trim()) || "Administracion".equalsIgnoreCase(userRole.trim()));
-        boolean algunaAreaEsAdministracion = areasComoJefe.stream().anyMatch(a ->
+        boolean algunaAreaEsAdministracion = todasLasAreas.stream().anyMatch(a ->
                 a.getName() != null && ("Administración".equalsIgnoreCase(a.getName().trim()) || "Administracion".equalsIgnoreCase(a.getName().trim())));
         if (algunaAreaEsAdministracion && rolEsAdministracion) {
-            log.info("🔓 [AttendanceService] Jefe del área Administración con rol Administración - listando todos los usuarios");
+            log.info("🔓 [AttendanceService] Jefe/Supervisor del área Administración con rol Administración - listando todos los usuarios");
             List<Object[]> usersData = attendanceRepository.findAllUsers();
             return mapearUsuariosParaLista(usersData);
         }
 
         Set<Long> idsVistos = new HashSet<>();
         List<Object[]> todosLosRows = new ArrayList<>();
-        for (Area area : areasComoJefe) {
+        for (Area area : todasLasAreas) {
             List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
             for (Object[] row : usersData) {
                 Long id = ((Number) row[0]).longValue();
@@ -614,7 +628,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 }
             }
         }
-        log.info("👔 [AttendanceService] Usuario es jefe de {} área(s) - listando {} colaboradores en total", areasComoJefe.size(), todosLosRows.size());
+        log.info("👔 [AttendanceService] Usuario es jefe/supervisor de {} área(s) - listando {} colaboradores en total", todasLasAreas.size(), todosLosRows.size());
         return mapearUsuariosParaLista(todosLosRows);
     }
 
@@ -699,29 +713,43 @@ public class AttendanceServiceImpl implements AttendanceService {
             List<Long> userIdsPermitidos = null;
             if (userIdGenerador != null && !"ADMIN".equalsIgnoreCase(rolUsuarioGenerador) && !"SUPERADMIN".equalsIgnoreCase(rolUsuarioGenerador)) {
                 List<Area> areasComoJefe = areaRepository.findByManagerId(userIdGenerador);
-                if (areasComoJefe != null && !areasComoJefe.isEmpty()) {
+                List<Area> areasComoSupervisor = areaRepository.findBySupervisorId(userIdGenerador);
+
+                Set<Long> areaIdsVistos = new HashSet<>();
+                List<Area> todasLasAreasExport = new ArrayList<>();
+                if (areasComoJefe != null) {
+                    for (Area a : areasComoJefe) {
+                        if (areaIdsVistos.add(a.getId())) todasLasAreasExport.add(a);
+                    }
+                }
+                if (areasComoSupervisor != null) {
+                    for (Area a : areasComoSupervisor) {
+                        if (areaIdsVistos.add(a.getId())) todasLasAreasExport.add(a);
+                    }
+                }
+
+                if (!todasLasAreasExport.isEmpty()) {
                     boolean rolEsAdministracionExport = rolUsuarioGenerador != null
                             && ("Administración".equalsIgnoreCase(rolUsuarioGenerador.trim()) || "Administracion".equalsIgnoreCase(rolUsuarioGenerador.trim()));
-                    boolean algunaAreaEsAdministracionExport = areasComoJefe.stream().anyMatch(a ->
+                    boolean algunaAreaEsAdministracionExport = todasLasAreasExport.stream().anyMatch(a ->
                             a.getName() != null && ("Administración".equalsIgnoreCase(a.getName().trim()) || "Administracion".equalsIgnoreCase(a.getName().trim())));
                     if (algunaAreaEsAdministracionExport && rolEsAdministracionExport) {
                         userIdsPermitidos = null;
-                        log.info("🔓 [AttendanceService] Jefe del área Administración con rol Administración - exportando todas las marcaciones");
+                        log.info("🔓 [AttendanceService] Jefe/Supervisor del área Administración con rol Administración - exportando todas las marcaciones");
                     } else {
                         Set<Long> idsSet = new HashSet<>();
                         idsSet.add(userIdGenerador);
-                        for (Area area : areasComoJefe) {
+                        for (Area area : todasLasAreasExport) {
                             List<Object[]> usersData = attendanceRepository.findUsersByAreaId(area.getId());
                             for (Object[] row : usersData) {
                                 idsSet.add(((Number) row[0]).longValue());
                             }
                         }
                         userIdsPermitidos = new ArrayList<>(idsSet);
-                        log.info("👔 [AttendanceService] Exportación filtrada por {} área(s) del jefe - {} usuarios (colaboradores + jefe)", areasComoJefe.size(), userIdsPermitidos.size());
+                        log.info("👔 [AttendanceService] Exportación filtrada por {} área(s) del jefe/supervisor - {} usuarios", todasLasAreasExport.size(), userIdsPermitidos.size());
                     }
                 } else {
-                    // No es jefe: no puede exportar
-                    log.info("👤 [AttendanceService] Usuario no es jefe de área - sin permiso para exportar");
+                    log.info("👤 [AttendanceService] Usuario no es jefe ni supervisor de área - sin permiso para exportar");
                     throw new ExportacionNoPermitidaException();
                 }
             }

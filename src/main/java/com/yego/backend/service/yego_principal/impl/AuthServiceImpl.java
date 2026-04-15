@@ -337,6 +337,10 @@ public class AuthServiceImpl implements AuthService {
         boolean esJefe = areasComoJefe != null && !areasComoJefe.isEmpty();
         String nombreArea = esJefe ? areasComoJefe.stream().map(Area::getName).collect(Collectors.joining(", ")) : null;
 
+        List<Area> areasComoSupervisor = areaRepository.findBySupervisorId(userId);
+        boolean esSupervisor = areasComoSupervisor != null && !areasComoSupervisor.isEmpty();
+        String nombreAreaSupervisor = esSupervisor ? areasComoSupervisor.stream().map(Area::getName).collect(Collectors.joining(", ")) : null;
+
         return UserProfileDto.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -348,6 +352,8 @@ public class AuthServiceImpl implements AuthService {
                 .lastLogin(user.getLastLogin())
                 .esJefe(esJefe)
                 .nombreArea(nombreArea)
+                .esSupervisor(esSupervisor)
+                .nombreAreaSupervisor(nombreAreaSupervisor)
                 .requirePasswordChange(shouldRequirePasswordChange(user.getId(), user.getPasswordChangedAt()))
                 .build();
     }

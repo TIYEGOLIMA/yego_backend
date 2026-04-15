@@ -33,6 +33,9 @@ public class Area {
     @Column(name = "manager_id")
     private Long managerId;
 
+    @Column(name = "supervisor_id")
+    private Long supervisorId;
+
     @Column(name = "activo", nullable = false)
     @Builder.Default
     private Boolean activo = true;

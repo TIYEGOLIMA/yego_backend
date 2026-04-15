@@ -27,7 +27,7 @@ public class UserResponseCompleteDto {
     private LocalDateTime lastLogin;
     private Long areaId;
     private String areaNombre;
-    /** true si el usuario es responsable (jefe) de ese área */
     private Boolean areaEsResponsable;
+    private Boolean areaEsSupervisor;
 }
 

@@ -25,6 +25,8 @@ public interface AreaRepository extends JpaRepository<Area, Long> {
 
     List<Area> findByManagerId(Long managerId);
 
+    List<Area> findBySupervisorId(Long supervisorId);
+
     /** IDs de usuario que ya son responsables de algún área (para excluirlos del combo, salvo el del área en edición). */
     @Query("SELECT DISTINCT a.managerId FROM Area a WHERE a.managerId IS NOT NULL")
     List<Long> findDistinctManagerIds();

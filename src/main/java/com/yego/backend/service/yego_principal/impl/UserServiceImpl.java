@@ -169,6 +169,15 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponseDto updateArea(Long id, Long areaId) {
         User user = findUserOrThrow(id);
+        if (areaId != null && areaId != 0) {
+            Area area = areaRepository.findById(areaId).orElse(null);
+            if (area != null && area.getSupervisorId() != null && area.getSupervisorId().equals(id)) {
+                throw new IllegalStateException("El usuario es supervisor de esta área y no puede ser agregado como colaborador");
+            }
+            if (area != null && area.getManagerId() != null && area.getManagerId().equals(id)) {
+                throw new IllegalStateException("El usuario es responsable de esta área y no puede ser agregado como colaborador");
+            }
+        }
         user.setAreaId(areaId == null || areaId == 0 ? null : areaId);
         User saved = userRepository.save(user);
         userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", saved.getId(), saved.getUsername());
@@ -418,27 +427,38 @@ public class UserServiceImpl implements UserService {
 
         String areaNombre = null;
         boolean esResponsable = false;
+        boolean esSupervisor = false;
 
         if (areaId != null) {
             Area area = areaMaps.byId.get(areaId);
             if (area != null) {
                 areaNombre = area.getName();
                 esResponsable = area.getManagerId() != null && area.getManagerId().equals(id);
+                if (!esResponsable) {
+                    esSupervisor = area.getSupervisorId() != null && area.getSupervisorId().equals(id);
+                }
             }
         }
         if (areaNombre == null) {
-            List<Area> areas = areaMaps.byManagerId.get(id);
-            if (areas != null && !areas.isEmpty()) {
-                areaId = areas.get(0).getId();
-                areaNombre = areas.stream().map(Area::getName).collect(Collectors.joining(", "));
+            List<Area> areasJefe = areaMaps.byManagerId.get(id);
+            if (areasJefe != null && !areasJefe.isEmpty()) {
+                areaId = areasJefe.get(0).getId();
+                areaNombre = areasJefe.stream().map(Area::getName).collect(Collectors.joining(", "));
                 esResponsable = true;
+            } else {
+                List<Area> areasSup = areaMaps.bySupervisorId.get(id);
+                if (areasSup != null && !areasSup.isEmpty()) {
+                    areaId = areasSup.get(0).getId();
+                    areaNombre = areasSup.stream().map(Area::getName).collect(Collectors.joining(", "));
+                    esSupervisor = true;
+                }
             }
         }
 
         return UserResponseCompleteDto.builder()
                 .id(id).username(username).email(email).name(name).lastName(lastName)
                 .role(roleName).dni(dni).active(active).createdAt(createdAt).lastLogin(lastLogin)
-                .areaId(areaId).areaNombre(areaNombre).areaEsResponsable(esResponsable)
+                .areaId(areaId).areaNombre(areaNombre).areaEsResponsable(esResponsable).areaEsSupervisor(esSupervisor)
                 .build();
     }
 
@@ -446,20 +466,31 @@ public class UserServiceImpl implements UserService {
         Long areaId = user.getAreaId();
         String areaNombre = null;
         boolean esResponsable = false;
+        boolean esSupervisor = false;
 
         if (areaId != null) {
             Area area = areaMaps.byId.get(areaId);
             if (area != null) {
                 areaNombre = area.getName();
                 esResponsable = area.getManagerId() != null && area.getManagerId().equals(user.getId());
+                if (!esResponsable) {
+                    esSupervisor = area.getSupervisorId() != null && area.getSupervisorId().equals(user.getId());
+                }
             }
         }
         if (areaNombre == null) {
-            List<Area> areas = areaMaps.byManagerId.get(user.getId());
-            if (areas != null && !areas.isEmpty()) {
-                areaId = areas.get(0).getId();
-                areaNombre = areas.stream().map(Area::getName).collect(Collectors.joining(", "));
+            List<Area> areasJefe = areaMaps.byManagerId.get(user.getId());
+            if (areasJefe != null && !areasJefe.isEmpty()) {
+                areaId = areasJefe.get(0).getId();
+                areaNombre = areasJefe.stream().map(Area::getName).collect(Collectors.joining(", "));
                 esResponsable = true;
+            } else {
+                List<Area> areasSup = areaMaps.bySupervisorId.get(user.getId());
+                if (areasSup != null && !areasSup.isEmpty()) {
+                    areaId = areasSup.get(0).getId();
+                    areaNombre = areasSup.stream().map(Area::getName).collect(Collectors.joining(", "));
+                    esSupervisor = true;
+                }
             }
         }
 
@@ -477,6 +508,7 @@ public class UserServiceImpl implements UserService {
                 .areaId(areaId)
                 .areaNombre(areaNombre)
                 .areaEsResponsable(esResponsable)
+                .areaEsSupervisor(esSupervisor)
                 .build();
     }
 
@@ -492,11 +524,18 @@ public class UserServiceImpl implements UserService {
                 areaNombre = areas.stream().map(Area::getName).collect(Collectors.joining(", "));
             }
         }
+        if (areaNombre == null) {
+            List<Area> areasSup = areaMaps.bySupervisorId.get(u.getId());
+            if (areasSup != null && !areasSup.isEmpty()) {
+                areaNombre = areasSup.stream().map(Area::getName).collect(Collectors.joining(", "));
+            }
+        }
         return UsuarioResumenDto.builder()
                 .id(u.getId())
                 .username(u.getUsername())
                 .rol(orEmpty(u.getRoleName()))
                 .esJefe(areaMaps.byManagerId.containsKey(u.getId()))
+                .esSupervisor(areaMaps.bySupervisorId.containsKey(u.getId()))
                 .area(orEmpty(areaNombre))
                 .nombre(orEmpty(u.getName()))
                 .apellido(orEmpty(u.getLastName()))
@@ -541,7 +580,10 @@ public class UserServiceImpl implements UserService {
                 allAreas.stream().collect(Collectors.toMap(Area::getId, a -> a)),
                 allAreas.stream()
                         .filter(a -> a.getManagerId() != null)
-                        .collect(Collectors.groupingBy(Area::getManagerId)));
+                        .collect(Collectors.groupingBy(Area::getManagerId)),
+                allAreas.stream()
+                        .filter(a -> a.getSupervisorId() != null)
+                        .collect(Collectors.groupingBy(Area::getSupervisorId)));
     }
 
     private static String orEmpty(String value) {
@@ -556,5 +598,5 @@ public class UserServiceImpl implements UserService {
         return ResponseEntity.badRequest().body(ErrorResponseDto.builder().message(message).build());
     }
 
-    private record AreaMaps(Map<Long, Area> byId, Map<Long, List<Area>> byManagerId) {}
+    private record AreaMaps(Map<Long, Area> byId, Map<Long, List<Area>> byManagerId, Map<Long, List<Area>> bySupervisorId) {}
 }
