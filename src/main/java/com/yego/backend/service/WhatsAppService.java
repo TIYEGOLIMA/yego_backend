@@ -1,5 +1,6 @@
 package com.yego.backend.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_marketing_mensajes.api.request.WhatsAppMediaRequest;
 import com.yego.backend.entity.yego_marketing_mensajes.api.request.WhatsAppTextRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -27,8 +28,9 @@ import java.util.Map;
 public class WhatsAppService {
 
     private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
     
-    @Value("${whatsapp.api.key:f81bd660c7c2a537b63fc1ecda476ae6}")
+    @Value("${whatsapp.api.key:F6898E0C248E-4610-8C7C-61DAF4876CED}")
     private String apiKey;
     
     @Value("${whatsapp.api.base.url:https://wsp.yego.pro}")
@@ -38,8 +40,9 @@ public class WhatsAppService {
     private static final List<String> EXTENSIONES_VIDEO = Arrays.asList(".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv", ".wmv", ".3gp", ".m4v");
     private static final List<String> EXTENSIONES_DOCUMENTO = Arrays.asList(".pdf", ".doc", ".docx", ".xls", ".xlsx", ".txt");
 
-    public WhatsAppService(RestTemplate restTemplate) {
+    public WhatsAppService(RestTemplate restTemplate, ObjectMapper objectMapper) {
         this.restTemplate = restTemplate;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -47,11 +50,16 @@ public class WhatsAppService {
      */
     public boolean enviarTexto(String grupoId, String mensaje) {
         try {
-            log.info("📤 [WhatsAppService] Enviando texto a grupo: {}", grupoId);
+            log.info("📤 [WhatsAppService] Enviando texto a grupo: {} | mensaje (length={}): '{}'", 
+                    grupoId, mensaje != null ? mensaje.length() : "null", mensaje);
             
             WhatsAppTextRequest request = new WhatsAppTextRequest();
             request.setNumber(grupoId);
-            request.setTextMessage(new WhatsAppTextRequest.TextMessage(mensaje));
+            request.setText(mensaje != null ? mensaje : "");
+            
+            try {
+                log.info("📋 [WhatsAppService] JSON a enviar: {}", objectMapper.writeValueAsString(request));
+            } catch (Exception ignored) {}
             
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     baseUrl + "/message/sendText/" + TEAM,
