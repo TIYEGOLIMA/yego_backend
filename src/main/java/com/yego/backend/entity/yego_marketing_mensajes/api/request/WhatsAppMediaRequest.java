@@ -9,17 +9,16 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class WhatsAppMediaRequest {
-    
-    private String number;
-    
-    @JsonProperty("mediatype")
-    private String mediatype; // image, document, video, audio
-    
-    private String caption;
-    
-    private String media; // URL en base64
-    
-    @JsonProperty("fileName")
-    private String filename; // Nombre del archivo (requerido para base64) - La API espera "fileName" en camelCase
-}
 
+    private String number;
+
+    @JsonProperty("mediatype")
+    private String mediatype;
+
+    private String caption;
+
+    private String media;
+
+    @JsonProperty("fileName")
+    private String filename;
+}

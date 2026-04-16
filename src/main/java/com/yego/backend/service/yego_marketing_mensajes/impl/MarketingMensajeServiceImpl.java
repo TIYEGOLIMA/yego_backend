@@ -389,6 +389,13 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         }
     }
 
+    @Override
+    public void invalidarCacheGrupos() {
+        this.gruposCache = null;
+        this.gruposCacheExpiry = 0;
+        log.info("🔄 [MarketingMensajeService] Caché de grupos invalidada");
+    }
+
     // ── Métodos privados auxiliares ──────────────────────────────────────
 
     private String subirArchivoSiPresente(MultipartFile archivo) {

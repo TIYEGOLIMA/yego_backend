@@ -34,4 +34,6 @@ public interface MarketingMensajeService {
     byte[] exportarTodosMensajesExcel(String searchTerm, String modo, String tipo, String canales, String fechaDesde, String fechaHasta);
 
     byte[] exportarTodosMensajesPdf(String searchTerm, String modo, String tipo, String canales, String fechaDesde, String fechaHasta);
+
+    void invalidarCacheGrupos();
 }

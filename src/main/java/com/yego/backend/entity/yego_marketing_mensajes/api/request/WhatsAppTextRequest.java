@@ -8,8 +8,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class WhatsAppTextRequest {
-    
+
     private String number;
     private String text;
 }
-

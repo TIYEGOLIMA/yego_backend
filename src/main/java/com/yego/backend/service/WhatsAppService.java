@@ -5,6 +5,7 @@ import com.yego.backend.entity.yego_marketing_mensajes.api.request.WhatsAppMedia
 import com.yego.backend.entity.yego_marketing_mensajes.api.request.WhatsAppTextRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationContext;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -12,10 +13,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Servicio para enviar mensajes a WhatsApp
@@ -29,6 +27,7 @@ public class WhatsAppService {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final ApplicationContext applicationContext;
     
     @Value("${whatsapp.api.key:F6898E0C248E-4610-8C7C-61DAF4876CED}")
     private String apiKey;
@@ -37,12 +36,14 @@ public class WhatsAppService {
     private String baseUrl;
     
     private static final String TEAM = "TEAM_PERU";
+    private static final String ERROR_GRUPO_INVALIDO = "[object Object]";
     private static final List<String> EXTENSIONES_VIDEO = Arrays.asList(".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv", ".wmv", ".3gp", ".m4v");
     private static final List<String> EXTENSIONES_DOCUMENTO = Arrays.asList(".pdf", ".doc", ".docx", ".xls", ".xlsx", ".txt");
 
-    public WhatsAppService(RestTemplate restTemplate, ObjectMapper objectMapper) {
+    public WhatsAppService(RestTemplate restTemplate, ObjectMapper objectMapper, ApplicationContext applicationContext) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
+        this.applicationContext = applicationContext;
     }
 
     /**
@@ -50,12 +51,13 @@ public class WhatsAppService {
      */
     public boolean enviarTexto(String grupoId, String mensaje) {
         try {
+            String textoLimpio = sanitizarTexto(mensaje);
             log.info("📤 [WhatsAppService] Enviando texto a grupo: {} | mensaje (length={}): '{}'", 
-                    grupoId, mensaje != null ? mensaje.length() : "null", mensaje);
+                    grupoId, textoLimpio != null ? textoLimpio.length() : "null", textoLimpio);
             
             WhatsAppTextRequest request = new WhatsAppTextRequest();
             request.setNumber(grupoId);
-            request.setText(mensaje != null ? mensaje : "");
+            request.setText(textoLimpio != null ? textoLimpio : "");
             
             try {
                 log.info("📋 [WhatsAppService] JSON a enviar: {}", objectMapper.writeValueAsString(request));
@@ -104,11 +106,13 @@ public class WhatsAppService {
             
             String filename = obtenerFilenameValido(nombreArchivo, mediaUrl, mediatype);
             
+            String captionLimpio = sanitizarTexto(caption);
+            
             WhatsAppMediaRequest request = new WhatsAppMediaRequest();
             request.setNumber(grupoId);
             request.setMediatype(mediatype);
-            request.setCaption(caption != null ? caption : "");
-            request.setMedia(mediaUrl); // Enviar URL directamente
+            request.setCaption(captionLimpio != null ? captionLimpio : "");
+            request.setMedia(mediaUrl);
             request.setFilename(filename);
             
             log.info("📋 [WhatsAppService] Enviando - mediatype: '{}', filename: '{}', url: {}", 
@@ -167,6 +171,7 @@ public class WhatsAppService {
         
         int enviados = 0;
         int fallidos = 0;
+        boolean grupoInvalidoDetectado = false;
         
         for (String grupoId : grupos) {
             boolean exito;
@@ -178,10 +183,13 @@ public class WhatsAppService {
                 exito = enviarTexto(grupoId, mensaje);
             }
             
-            if (exito) enviados++;
-            else fallidos++;
+            if (exito) {
+                enviados++;
+            } else {
+                fallidos++;
+                grupoInvalidoDetectado = true;
+            }
             
-            // Pausa entre envíos
             try {
                 Thread.sleep(500);
             } catch (InterruptedException e) {
@@ -192,6 +200,10 @@ public class WhatsAppService {
         
         log.info("✅ [WhatsAppService] Resumen: {} enviados, {} fallidos de {} grupos", 
                 enviados, fallidos, grupos.size());
+
+        if (grupoInvalidoDetectado && fallidos > 0) {
+            dispararSincronizacionGrupos();
+        }
     }
     
     public void enviarAMultiplesGrupos(List<String> grupos, String mensaje, String mediaUrl) {
@@ -435,12 +447,56 @@ public class WhatsAppService {
     }
 
     /**
-     * Crea un HttpEntity con headers comunes
+     * Obtiene todos los grupos de la instancia desde Evolution API.
+     * @return lista de mapas con datos de cada grupo, o lista vacía si falla
      */
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> obtenerGruposDesdeApi() {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("apikey", apiKey);
+
+            ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                    baseUrl + "/group/fetchAllGroups/" + TEAM + "?getParticipants=false",
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    new ParameterizedTypeReference<List<Map<String, Object>>>() {}
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                log.info("✅ [WhatsAppService] Grupos obtenidos desde API: {}", response.getBody().size());
+                return response.getBody();
+            }
+        } catch (Exception e) {
+            log.error("❌ [WhatsAppService] Error obteniendo grupos desde API: {}", e.getMessage());
+        }
+        return Collections.emptyList();
+    }
+
+    /**
+     * Dispara la sincronización de grupos en background cuando se detectan errores de envío.
+     * Usa ApplicationContext para resolver la dependencia de forma lazy y evitar ciclos.
+     */
+    private void dispararSincronizacionGrupos() {
+        try {
+            var syncScheduler = applicationContext.getBean(
+                    com.yego.backend.scheduler.yego_marketing_mensajes.WhatsAppGroupSyncScheduler.class);
+            log.info("🔄 [WhatsAppService] Disparando sincronización de grupos por errores de envío");
+            syncScheduler.sincronizarPorError();
+        } catch (Exception e) {
+            log.error("❌ [WhatsAppService] Error al disparar sincronización de grupos: {}", e.getMessage());
+        }
+    }
+
+    private String sanitizarTexto(String texto) {
+        if (texto == null) return null;
+        return texto.replace("\r\n", "\n").replace("\r", "\n");
+    }
+
     private <T> HttpEntity<T> crearHttpEntity(T body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        headers.set("Apikey", apiKey);
+        headers.set("apikey", apiKey);
         return new HttpEntity<>(body, headers);
     }
 }
