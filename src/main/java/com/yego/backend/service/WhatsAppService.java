@@ -51,7 +51,7 @@ public class WhatsAppService {
             
             WhatsAppTextRequest request = new WhatsAppTextRequest();
             request.setNumber(grupoId);
-            request.setText(mensaje);
+            request.setTextMessage(new WhatsAppTextRequest.TextMessage(mensaje));
             
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     baseUrl + "/message/sendText/" + TEAM,

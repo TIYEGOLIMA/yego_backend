@@ -10,6 +10,13 @@ import lombok.NoArgsConstructor;
 public class WhatsAppTextRequest {
     
     private String number;
-    private String text;
+    private TextMessage textMessage;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TextMessage {
+        private String text;
+    }
 }
 
