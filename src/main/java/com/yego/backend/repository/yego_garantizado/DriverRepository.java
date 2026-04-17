@@ -49,7 +49,7 @@ public interface DriverRepository extends JpaRepository<Driver, String> {
      * @param phone número de teléfono a buscar
      * @return Lista de arrays con los campos necesarios, ordenados por park_id no nulo primero, luego park_id y driver_id
      */
-    @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number " +
+    @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number, hire_date " +
                    "FROM drivers WHERE phone = :phone AND work_status = 'working' " +
                    "ORDER BY CASE WHEN park_id IS NOT NULL THEN 0 ELSE 1 END, park_id, driver_id " +
                    "LIMIT 10", nativeQuery = true)
@@ -62,7 +62,7 @@ public interface DriverRepository extends JpaRepository<Driver, String> {
      * @param licenseNumber número de licencia a buscar
      * @return Lista de arrays con los campos necesarios, ordenados por park_id no nulo primero, luego park_id y driver_id
      */
-    @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number " +
+    @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number, hire_date " +
                    "FROM drivers WHERE license_number = :licenseNumber AND work_status = 'working' " +
                    "ORDER BY CASE WHEN park_id IS NOT NULL THEN 0 ELSE 1 END, park_id, driver_id " +
                    "LIMIT 10", nativeQuery = true)
@@ -83,7 +83,7 @@ public interface DriverRepository extends JpaRepository<Driver, String> {
      * @param driverId ID del conductor a buscar
      * @return Lista de arrays de objetos con los campos necesarios, ordenados por park_id no nulo primero, luego por park_id y driver_id
      */
-    @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number " +
+    @Query(value = "SELECT driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number, hire_date " +
                    "FROM drivers WHERE driver_id = :driverId " +
                    "ORDER BY CASE WHEN park_id IS NOT NULL THEN 0 ELSE 1 END, park_id, driver_id " +
                    "LIMIT 10", nativeQuery = true)

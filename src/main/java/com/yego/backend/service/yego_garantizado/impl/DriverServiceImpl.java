@@ -145,7 +145,7 @@ public class DriverServiceImpl implements DriverService {
             return PPendientesResponse.builder()
                     .nombre("").flota("").monto(0.0).pagos(0).license("").surnames("")
                     .idcar("").placa("").iddriver("").telefonop("").idyego(null)
-                    .idflota("").estatus(400).message("Se requiere teléfono o licencia").msystem("").build();
+                    .idflota("").hireDate(null).estatus(400).message("Se requiere teléfono o licencia").msystem("").build();
         }
         
         String valorLimpio = telefono.trim();
@@ -240,14 +240,14 @@ public class DriverServiceImpl implements DriverService {
             return PPendientesResponse.builder()
                     .nombre("").flota("").monto(0.0).pagos(0).license("").surnames("")
                     .idcar("").placa("").iddriver("").telefonop(telefonoParaBuscar != null ? telefonoParaBuscar : "").idyego(null)
-                    .idflota("").estatus(400).message(mensajeError).msystem("").build();
+                    .idflota("").hireDate(null).estatus(400).message(mensajeError).msystem("").build();
         }
         
         if (resultados.isEmpty() && esDriverId) {
             return PPendientesResponse.builder()
                     .nombre("").flota("").monto(0.0).pagos(0).license("").surnames("")
                     .idcar("").placa("").iddriver(driverIdParaBuscar).telefonop("").idyego(null)
-                    .idflota("").estatus(400).message("Conductor no encontrado por driver_id").msystem("").build();
+                    .idflota("").hireDate(null).estatus(400).message("Conductor no encontrado por driver_id").msystem("").build();
         }
         
         // La query ya ordena primero los que tienen park_id no nulo
@@ -308,6 +308,7 @@ public class DriverServiceImpl implements DriverService {
                 .telefonop(telefonoFinal)
                 .idyego(null)
                 .idflota(driver.getParkId() != null ? driver.getParkId() : "")
+                .hireDate(driver.getHireDate())
                 .estatus(200)
                 .message("Se verifica que no tiene cuenta bancaria registrada.\n\n*Estado:* No cuenta con pagos pendientes\n")
                 .msystem("")
@@ -316,7 +317,7 @@ public class DriverServiceImpl implements DriverService {
     
     /**
      * Mapea un array de Object[] a DriverApi
-     * Solo mapea los campos necesarios: driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number
+     * Solo mapea los campos necesarios: driver_id, park_id, first_name, full_name, phone, license_number, car_id, car_number, hire_date
      */
     private DriverApi mapearObjectArrayADriverApi(Object[] row) {
         DriverApi driver = new DriverApi();
@@ -330,6 +331,10 @@ public class DriverServiceImpl implements DriverService {
         driver.setLicenseNumber(row[index++] != null ? row[index-1].toString() : null);
         driver.setCarId(row[index++] != null ? row[index-1].toString() : null);
         driver.setCarNumber(row[index++] != null ? row[index-1].toString() : null);
+        if (row.length > index && row[index] != null) {
+            driver.setHireDate(java.time.LocalDate.parse(row[index].toString()));
+        }
+        index++;
         
         return driver;
     }

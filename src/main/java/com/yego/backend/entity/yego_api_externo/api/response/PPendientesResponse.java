@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
+
 /**
  * Response DTO para el endpoint GoBot/PPendientes
  * Contiene información sobre pagos pendientes de un conductor
@@ -30,6 +32,7 @@ public class PPendientesResponse {
     private String telefonop;
     private Long idyego;
     private String idflota;
+    private LocalDate hireDate;
     private Integer estatus;
     private String message;
     private String msystem;
