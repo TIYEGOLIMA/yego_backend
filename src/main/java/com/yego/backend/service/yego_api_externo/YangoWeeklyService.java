@@ -279,6 +279,7 @@ public class YangoWeeklyService {
 
         return YangoIncomeSummary.builder()
                 .countCompleted(intOr0(orders, "count_completed"))
+                .total(doubleOrNullRounded(balances, "total"))
                 .cashCollected(r2(doubleOr0(balances, "cash_collected")))
                 .nonCashPayment(r2(doubleOr0(balances, "platform_card") + doubleOr0(balances, "partner_cashless")))
                 .corporate(r2(doubleOr0(balances, "platform_corporate")))
@@ -298,6 +299,11 @@ public class YangoWeeklyService {
     private static double doubleOr0(JsonNode parent, String field) {
         if (parent == null || !parent.has(field) || parent.get(field).isNull()) return 0.0;
         return parent.get(field).asDouble(0.0);
+    }
+
+    private static Double doubleOrNullRounded(JsonNode parent, String field) {
+        if (parent == null || !parent.has(field) || parent.get(field).isNull()) return null;
+        return r2(parent.get(field).asDouble(0.0));
     }
 
     record PeriodRange(String dateFrom, String dateTo) {}

@@ -15,6 +15,10 @@ public class YangoIncomeSummary {
     @JsonProperty("count_completed")
     private Integer countCompleted;
 
+    /** Total neto en balances según API de ingresos Yango ({@code balances.total}). */
+    @JsonProperty("total")
+    private Double total;
+
     @JsonProperty("cash_collected")
     private Double cashCollected;
 

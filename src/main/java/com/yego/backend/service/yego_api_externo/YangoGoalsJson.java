@@ -7,7 +7,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Quita {@code id} y {@code payment_info} del objeto de cada goal (nivel raíz del ítem).
+ * Limpia cada ítem de meta y alinea campos: si vienen bajo {@code common}, se copian a la raíz
+ * para el cliente (steps, window, total_rides, multiplier_accounted_income).
  */
 public final class YangoGoalsJson {
 
@@ -26,11 +27,30 @@ public final class YangoGoalsJson {
                 o.remove("requirements");
                 o.remove("is_availible");
                 o.remove("is_available");
-                o.remove("multiplier_accounted_income");
-                o.remove("is_multiplier_goal");
+                hoistFromCommon(o);
+                o.remove("orders");
                 out.add(o);
             }
         }
         return out;
+    }
+
+    private static void hoistFromCommon(ObjectNode o) {
+        JsonNode common = o.get("common");
+        if (common == null || !common.isObject()) {
+            return;
+        }
+        ObjectNode c = (ObjectNode) common;
+        copyIfAbsent(o, c, "multiplier_accounted_income");
+        copyIfAbsent(o, c, "total_rides");
+        copyIfAbsent(o, c, "window");
+        copyIfAbsent(o, c, "steps");
+        copyIfAbsent(o, c, "is_multiplier_goal");
+    }
+
+    private static void copyIfAbsent(ObjectNode target, ObjectNode source, String field) {
+        if (!target.has(field) && source.has(field)) {
+            target.set(field, source.get(field));
+        }
     }
 }
