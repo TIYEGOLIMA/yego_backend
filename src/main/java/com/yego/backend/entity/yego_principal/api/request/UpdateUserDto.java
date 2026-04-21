@@ -35,5 +35,7 @@ public class UpdateUserDto {
     private Boolean active;
 
     private Long areaId;
+
+    private Long sedeId;
 }
 

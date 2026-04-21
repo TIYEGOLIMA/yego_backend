@@ -8,4 +8,6 @@ import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse;
 public interface SacStatsService {
     
     SacStatsResponse obtenerTodasLasEstadisticas(String fechaInicio, String fechaFin);
+
+    SacStatsResponse obtenerTodasLasEstadisticas(String fechaInicio, String fechaFin, Long sedeId);
 }

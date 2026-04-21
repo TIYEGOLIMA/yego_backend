@@ -41,7 +41,10 @@ public class Ticket {
     private Long agentId; // ID del agente asignado
     
     @Column(name = "license_number")
-    private String licenseNumber; // Número de licencia/teléfono
+    private String licenseNumber;
+
+    @Column(name = "sede_id")
+    private Long sedeId;
     
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

@@ -10,10 +10,9 @@ import java.util.List;
  */
 public interface ModuloAtencionService {
     
-    //giomar 2025-12-30
     List<ModuloAtencionResponse> obtenerTodosLosModulosActivosResponse();
-    
+
     void cambiarEstadoModulo(Long moduleId, boolean activo);
-    
-    ModuloUsuarioResponse verificarModuloOListarDisponibles(Long userId);
+
+    ModuloUsuarioResponse verificarModuloOListarDisponibles(Long userId, Long sedeId);
 }

@@ -8,6 +8,8 @@ import com.yego.backend.entity.yego_principal.entities.Area;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.repository.yego_principal.RoleRepository;
 import com.yego.backend.repository.yego_principal.AreaRepository;
+import com.yego.backend.repository.yego_ticketerera.SedeRepository;
+import com.yego.backend.entity.yego_ticketerera.entities.Sede;
 import com.yego.backend.service.yego_principal.UserService;
 import com.yego.backend.handler.yego_principal.UserNotificationHandler;
 import lombok.RequiredArgsConstructor;
@@ -38,11 +40,14 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final AreaRepository areaRepository;
+    private final SedeRepository sedeRepository;
     private final BCryptPasswordEncoder passwordEncoder;
     private final UserNotificationHandler userNotificationHandler;
     private final ObjectMapper objectMapper;
 
     private static final Set<Long> USER_IDS_EXCLUIDOS_LISTADO = Set.of(1L, 4L, 6L);
+
+    private static final Set<String> ROLES_REQUIEREN_SEDE = Set.of("SAC", "OPERADOR", "SAC_AGENT");
 
     private static final List<String> WEAK_PASSWORDS = Arrays.asList(
             "123456", "admin", "password", "123456789", "qwerty");
@@ -62,6 +67,8 @@ public class UserServiceImpl implements UserService {
         Role role = roleRepository.findById(dto.getRoleId())
                 .orElseThrow(() -> new EntityNotFoundException("Rol con ID " + dto.getRoleId() + " no encontrado"));
 
+        Long sedeId = resolveSedeIdForRole(role.getName(), dto.getSedeId(), true);
+
         User user = User.builder()
                 .username(dto.getUsername())
                 .email(dto.getEmail())
@@ -70,8 +77,8 @@ public class UserServiceImpl implements UserService {
                 .password(passwordEncoder.encode(dto.getPassword()))
                 .role(role)
                 .dni(dto.getDni())
-                .moduleId(dto.getModuleId())
                 .active(true)
+                .sedeId(sedeId)
                 .build();
 
         User saved = userRepository.save(user);
@@ -163,6 +170,18 @@ public class UserServiceImpl implements UserService {
             log.error("[UserService] Error actualizando usuario: {}", e.getMessage());
             return ResponseEntity.badRequest().body(ErrorResponseDto.builder().message(e.getMessage()).build());
         }
+    }
+
+    @Override
+    @Transactional
+    public UserResponseDto updateSede(Long id, Long sedeId) {
+        User user = findUserOrThrow(id);
+        Long resolved = resolveSedeIdForRole(user.getRoleName(), sedeId, true);
+        user.setSedeId(resolved);
+        User saved = userRepository.save(user);
+        userNotificationHandler.enviarActualizacionUsuarios("USER_UPDATED", saved.getId(), saved.getUsername());
+        log.info("[UserService] Sede del usuario actualizada: {} -> sedeId={}", saved.getUsername(), resolved);
+        return mapToResponseDto(saved);
     }
 
     @Override
@@ -386,13 +405,35 @@ public class UserServiceImpl implements UserService {
         }
         if (dto.getActive() != null) user.setActive(dto.getActive());
         if (dto.getAreaId() != null) user.setAreaId(dto.getAreaId().longValue() == 0 ? null : dto.getAreaId());
+        if (dto.getSedeId() != null) {
+            Long sedeId = resolveSedeIdForRole(user.getRoleName(), dto.getSedeId(), false);
+            user.setSedeId(sedeId);
+        }
         return user;
+    }
+
+    private Long resolveSedeIdForRole(String roleName, Long requestedSedeId, boolean requireForCreate) {
+        Long normalized = (requestedSedeId == null || requestedSedeId == 0L) ? null : requestedSedeId;
+
+        if (normalized != null && !sedeRepository.existsById(normalized)) {
+            throw new IllegalArgumentException("La sede con ID " + normalized + " no existe");
+        }
+
+        if (requireForCreate && normalized == null
+                && roleName != null && ROLES_REQUIEREN_SEDE.contains(roleName.toUpperCase())) {
+            throw new IllegalArgumentException("La sede es obligatoria para usuarios con rol " + roleName);
+        }
+        return normalized;
     }
 
     private UserResponseDto mapToResponseDto(User user) {
         Long areaId = user.getAreaId();
         String areaNombre = areaId != null
                 ? areaRepository.findById(areaId).map(Area::getName).orElse(null)
+                : null;
+        Long sedeId = user.getSedeId();
+        String sedeNombre = sedeId != null
+                ? sedeRepository.findById(sedeId).map(Sede::getName).orElse(null)
                 : null;
         return UserResponseDto.builder()
                 .id(user.getId())
@@ -403,12 +444,13 @@ public class UserServiceImpl implements UserService {
                 .dni(orEmpty(user.getDni()))
                 .role(user.getRoleId() != null ? user.getRoleId() : 0L)
                 .roleName(orEmpty(user.getRoleName()))
-                .moduleId(user.getModuleId() != null ? user.getModuleId() : 0L)
                 .active(user.getActive() != null ? user.getActive() : false)
                 .lastLogin(user.getLastLogin())
                 .createdAt(user.getCreatedAt())
                 .areaId(areaId)
                 .areaNombre(areaNombre)
+                .sedeId(sedeId)
+                .sedeNombre(sedeNombre)
                 .build();
     }
 

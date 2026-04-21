@@ -32,33 +32,58 @@ public class TicketController {
     }
     
     @GetMapping("/all")
-    public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTickets() {
-        List<TicketWithCategoryResponse> tickets = ticketService.obtenerTodosLosTicketsConCategorias();
+    public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTickets(
+            @RequestParam(required = false) Long sedeId) {
+        List<TicketWithCategoryResponse> tickets = sedeId != null
+                ? ticketService.obtenerTodosLosTicketsConCategoriasPorSede(sedeId)
+                : ticketService.obtenerTodosLosTicketsConCategorias();
         return ResponseEntity.ok(tickets);
     }
-    
+
     @GetMapping("/waiting")
-    public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsEnEspera() {
-        List<TicketWithCategoryResponse> tickets = ticketService.obtenerTicketsEnEsperaConCategorias();
+    public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsEnEspera(
+            @RequestParam(required = false) Long sedeId) {
+        List<TicketWithCategoryResponse> tickets = sedeId != null
+                ? ticketService.obtenerTicketsPorEstadoYSede("WAITING", sedeId)
+                : ticketService.obtenerTicketsEnEsperaConCategorias();
         return ResponseEntity.ok(tickets);
     }
-    
+
     @GetMapping("/called")
-    public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsLlamados() {
-        List<TicketWithCategoryResponse> tickets = ticketService.obtenerTicketsLlamadosConCategorias();
+    public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsLlamados(
+            @RequestParam(required = false) Long sedeId) {
+        List<TicketWithCategoryResponse> tickets = sedeId != null
+                ? ticketService.obtenerTicketsPorEstadoYSede("CALLED", sedeId)
+                : ticketService.obtenerTicketsLlamadosConCategorias();
         return ResponseEntity.ok(tickets);
     }
-    
+
     @GetMapping("/in-progress")
-    public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsEnProgreso() {
-        List<TicketWithCategoryResponse> tickets = ticketService.obtenerTicketsEnProgresoConCategorias();
+    public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsEnProgreso(
+            @RequestParam(required = false) Long sedeId) {
+        List<TicketWithCategoryResponse> tickets = sedeId != null
+                ? ticketService.obtenerTicketsPorEstadoYSede("IN_PROGRESS", sedeId)
+                : ticketService.obtenerTicketsEnProgresoConCategorias();
         return ResponseEntity.ok(tickets);
     }
-    
+
     @GetMapping("/completed")
-    public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsCompletados() {
-        List<TicketWithCategoryResponse> tickets = ticketService.obtenerTicketsCompletadosConCategorias();
+    public ResponseEntity<List<TicketWithCategoryResponse>> obtenerTicketsCompletados(
+            @RequestParam(required = false) Long sedeId) {
+        List<TicketWithCategoryResponse> tickets = sedeId != null
+                ? ticketService.obtenerTicketsPorEstadoYSede("COMPLETED", sedeId)
+                : ticketService.obtenerTicketsCompletadosConCategorias();
         return ResponseEntity.ok(tickets);
+    }
+
+    @GetMapping("/stats/{status}")
+    public ResponseEntity<Long> contarTicketsPorEstado(
+            @PathVariable String status,
+            @RequestParam(required = false) Long sedeId) {
+        long count = sedeId != null
+                ? ticketService.contarTicketsPorEstadoYSede(status, sedeId)
+                : ticketService.contarTicketsPorEstado(status);
+        return ResponseEntity.ok(count);
     }
     
     @PostMapping("/{ticketId}/call/{userId}")
@@ -87,12 +112,6 @@ public class TicketController {
     public ResponseEntity<Ticket> cancelarTicket(@PathVariable Long ticketId, @PathVariable Long agentId) {
         Ticket ticket = ticketService.cancelarTicket(ticketId, agentId);
         return ResponseEntity.ok(ticket);
-    }
-    
-    @GetMapping("/stats/{status}")
-    public ResponseEntity<Long> contarTicketsPorEstado(@PathVariable String status) {
-        long count = ticketService.contarTicketsPorEstado(status);
-        return ResponseEntity.ok(count);
     }
     
     @GetMapping("/agent/{agentId}/assigned")

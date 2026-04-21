@@ -46,14 +46,25 @@ public class SacStatsServiceImpl implements SacStatsService {
     @Override
     @Transactional(readOnly = true)
     public SacStatsResponse obtenerTodasLasEstadisticas(String fechaInicio, String fechaFin) {
-        log.debug("Estadísticas SAC fecha inicio {} fin {}", fechaInicio, fechaFin);
+        return calcularEstadisticas(fechaInicio, fechaFin, obtenerUsuariosSac(), null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public SacStatsResponse obtenerTodasLasEstadisticas(String fechaInicio, String fechaFin, Long sedeId) {
+        log.debug("Estadísticas SAC por sede {}", sedeId);
+        return calcularEstadisticas(fechaInicio, fechaFin, obtenerUsuariosSac(), sedeId);
+    }
+
+    private SacStatsResponse calcularEstadisticas(String fechaInicio, String fechaFin, List<User> sacUsers, Long sedeId) {
+        log.debug("Estadísticas SAC fecha inicio {} fin {} sedeId {}", fechaInicio, fechaFin, sedeId);
         long startTime = System.currentTimeMillis();
-        
+
         // Parsear fechas si se proporcionan
         LocalDateTime fechaInicioDT = null;
         LocalDateTime fechaFinDT = null;
         boolean tieneFiltroFecha = false;
-        
+
         if (fechaInicio != null && !fechaInicio.isEmpty() && fechaFin != null && !fechaFin.isEmpty()) {
             try {
                 LocalDate inicio = LocalDate.parse(fechaInicio, ISO_DATE_FORMATTER);
@@ -66,9 +77,6 @@ public class SacStatsServiceImpl implements SacStatsService {
                 log.warn("Error parseando fechas: {}. Se usan todos los datos.", e.getMessage());
             }
         }
-        
-        // 1. Obtener usuarios SAC (una sola query)
-        List<User> sacUsers = obtenerUsuariosSac();
         log.debug("Usuarios SAC: {}", sacUsers.size());
         
         if (sacUsers.isEmpty()) {
@@ -81,17 +89,25 @@ public class SacStatsServiceImpl implements SacStatsService {
         Double averageRating;
         
         if (tieneFiltroFecha) {
-            // Contar solo tickets en el rango de fechas
             List<Long> userIds = sacUsers.stream().map(User::getId).collect(Collectors.toList());
             List<Ticket> ticketsEnRango = ticketRepository.findByUserIdInAndCreatedAtBetween(userIds, fechaInicioDT, fechaFinDT);
+            if (sedeId != null) {
+                ticketsEnRango = ticketsEnRango.stream()
+                        .filter(t -> sedeId.equals(t.getSedeId()))
+                        .collect(Collectors.toList());
+            }
             totalTickets = ticketsEnRango.size();
-            
-            // Obtener estadísticas de ratings con filtro de fecha
+
             totalRatings = queueRatingRepository.countByCreatedAtBetween(fechaInicioDT, fechaFinDT);
             averageRating = queueRatingRepository.getAverageRatingByDateRange(fechaInicioDT, fechaFinDT);
         } else {
-            // Sin filtro de fecha, obtener todos los datos
-            totalTickets = ticketRepository.count();
+            if (sedeId != null) {
+                totalTickets = ticketRepository.findAll().stream()
+                        .filter(t -> sedeId.equals(t.getSedeId()))
+                        .count();
+            } else {
+                totalTickets = ticketRepository.count();
+            }
             totalRatings = queueRatingRepository.count();
             averageRating = queueRatingRepository.getAverageRating();
         }
@@ -106,12 +122,17 @@ public class SacStatsServiceImpl implements SacStatsService {
         // 4. Obtener IDs de usuarios para consultas batch
         List<Long> userIds = sacUsers.stream().map(User::getId).collect(Collectors.toList());
         
-        // 5. Obtener todos los tickets de usuarios SAC (con o sin filtro de fecha)
+        // 5. Obtener todos los tickets de usuarios SAC (con o sin filtro de fecha y sede)
         List<Ticket> allSacTickets;
         if (tieneFiltroFecha) {
             allSacTickets = ticketRepository.findByUserIdInAndCreatedAtBetween(userIds, fechaInicioDT, fechaFinDT);
         } else {
             allSacTickets = ticketRepository.findByUserIdIn(userIds);
+        }
+        if (sedeId != null) {
+            allSacTickets = allSacTickets.stream()
+                    .filter(t -> sedeId.equals(t.getSedeId()))
+                    .collect(Collectors.toList());
         }
         Map<Long, List<Ticket>> ticketsByUserId = allSacTickets.stream()
                 .collect(Collectors.groupingBy(Ticket::getUserId));
@@ -167,8 +188,12 @@ public class SacStatsServiceImpl implements SacStatsService {
         long endTime = System.currentTimeMillis();
         log.debug("Estadísticas SAC calculadas en {} ms", (endTime - startTime));
         
+        int totalSacsReportados = sedeId != null
+                ? (int) sacPerformance.stream().filter(sac -> sac.getTotalTickets() > 0).count()
+                : sacUsers.size();
+
         return SacStatsResponse.builder()
-                .totalSACs(sacUsers.size())
+                .totalSACs(totalSacsReportados)
                 .totalTickets((int) totalTickets)
                 .averageRating(Math.round(averageRating * 10.0) / 10.0)
                 .totalRatings((int) totalRatings)

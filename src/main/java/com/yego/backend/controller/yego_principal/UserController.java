@@ -19,101 +19,69 @@ import java.util.List;
 @RequestMapping(value = "/api/users", produces = MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8")
 @RequiredArgsConstructor
 public class UserController {
-    
+
     private final UserService userService;
-    
-    /**
-     * Obtener perfil del usuario actual
-     */
+
     @GetMapping("/profile")
     public ResponseEntity<?> getProfile(Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
-        UserResponseDto user = userService.findOne(userId);
-        return ResponseEntity.ok(user);
+        return ResponseEntity.ok(userService.findOne(userId));
     }
-    
-    /**
-     * Obtener todos los usuarios con paginación
-     */
+
     @GetMapping
     public ResponseEntity<?> findAll(@RequestParam(required = false) Integer page,
                                      @RequestParam(required = false) Integer limit,
                                      @RequestParam(required = false) String search,
                                      @RequestParam(required = false) Boolean active) {
-        Object result = userService.findAll(page, limit, search, active);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(userService.findAll(page, limit, search, active));
     }
 
-    /**
-     * Listado de usuarios: usuario, rol, esJefe, area, nombre, apellido, email. Sin paginación.
-     * Debe estar antes de /{id} para que "listado" no se interprete como id.
-     */
+    /** Debe ir antes de /{id} para no capturar "listado" como id. */
     @GetMapping("/listado")
     public ResponseEntity<List<UsuarioResumenDto>> findAllResumen() {
         return ResponseEntity.ok(userService.findAllResumen());
     }
 
-    /**
-     * Obtener usuario por ID (solo numérico, para no capturar rutas como /listado).
-     */
-    
     @GetMapping("/{id}")
     public ResponseEntity<?> findOne(@PathVariable Long id) {
-        UserResponseDto user = userService.findOne(id);
-        return ResponseEntity.ok(user);
+        return ResponseEntity.ok(userService.findOne(id));
     }
-    
-    /**
-     * Crear nuevo usuario
-     */
+
     @PostMapping("/create")
     public ResponseEntity<?> create(@Valid @RequestBody CreateUserDto createUserDto) {
-        UserResponseDto user = userService.create(createUserDto);
-        return ResponseEntity.status(201).body(user);
+        return ResponseEntity.status(201).body(userService.create(createUserDto));
     }
-    
-    /**
-     * Actualizar usuario
-     */
+
     @PutMapping("/{id}")
-    public ResponseEntity<?> update(@PathVariable Long id, 
-                                   @RequestBody UpdateUserDto updateUserDto) {
+    public ResponseEntity<?> update(@PathVariable Long id,
+                                    @RequestBody UpdateUserDto updateUserDto) {
         return userService.update(id, updateUserDto);
     }
-    
-    /**
-     * Eliminar usuario
-     */
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> remove(@PathVariable Long id) {
         userService.remove(id);
         return ResponseEntity.ok().build();
     }
-    
-    /**
-     * Cambiar estado de usuario
-     */
+
     @PatchMapping("/{id}/estado")
     public ResponseEntity<?> cambiarEstado(@PathVariable Long id,
                                            @Valid @RequestBody CambiarEstadoDto cambiarEstadoDto) {
-        UserResponseDto user = userService.cambiarEstado(id, cambiarEstadoDto.getActivo());
-        return ResponseEntity.ok(user);
+        return ResponseEntity.ok(userService.cambiarEstado(id, cambiarEstadoDto.getActivo()));
     }
 
-    /**
-     * Actualizar solo el área del usuario (asignar o quitar de un área).
-     * Body: { "areaId": <id del área> } o { "areaId": null } / { "areaId": 0 } para quitar.
-     */
     @PatchMapping("/{id}/area")
     public ResponseEntity<?> updateArea(@PathVariable Long id, @RequestBody UpdateUserAreaDto dto) {
         Long areaId = dto != null ? dto.getAreaId() : null;
-        UserResponseDto user = userService.updateArea(id, areaId);
-        return ResponseEntity.ok(user);
+        return ResponseEntity.ok(userService.updateArea(id, areaId));
     }
 
-    /**
-     * Consultar DNI
-     */
+    @PatchMapping("/{id}/sede")
+    public ResponseEntity<?> updateSede(@PathVariable Long id, @RequestBody UpdateUserSedeDto dto) {
+        Long sedeId = dto != null ? dto.getSedeId() : null;
+        return ResponseEntity.ok(userService.updateSede(id, sedeId));
+    }
+
     @GetMapping("/dni/{dni}")
     public ResponseEntity<DniResponseDto> consultarDni(@PathVariable String dni) {
         return userService.consultarDni(dni);

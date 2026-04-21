@@ -53,7 +53,8 @@ public class TicketServiceImpl implements TicketService {
         Ticket ticket = Ticket.builder()
                 .optionId(request.getOptionId())
                 .licenseNumber(request.getLicenseNumber())
-                .userId(null) // Se asigna cuando el agente toma el ticket
+                .sedeId(request.getSedeId())
+                .userId(null)
                 .moduleId(null)
                 .status(TicketStatus.WAITING)
                 .priority(1)
@@ -464,5 +465,30 @@ public class TicketServiceImpl implements TicketService {
         log.debug("Conteo tickets módulo {} estado {}", moduleId, status);
         Ticket.TicketStatus ticketStatus = Ticket.TicketStatus.valueOf(status.toUpperCase());
         return contarTicketsPorModuloYEstado(moduleId, ticketStatus);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TicketWithCategoryResponse> obtenerTodosLosTicketsConCategoriasPorSede(Long sedeId) {
+        log.debug("Listando todos los tickets activos por sede {}", sedeId);
+        List<Ticket> tickets = ticketRepository.findActiveTicketsBySede(sedeId);
+        return convertirTicketsConCategorias(tickets);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<TicketWithCategoryResponse> obtenerTicketsPorEstadoYSede(String status, Long sedeId) {
+        log.debug("Listando tickets estado {} sede {}", status, sedeId);
+        Ticket.TicketStatus ticketStatus = Ticket.TicketStatus.valueOf(status.toUpperCase());
+        List<Ticket> tickets = ticketRepository.findBySedeIdAndStatusOrderByCreatedAtAsc(sedeId, ticketStatus);
+        return convertirTicketsConCategorias(tickets);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long contarTicketsPorEstadoYSede(String status, Long sedeId) {
+        log.debug("Conteo tickets estado {} sede {}", status, sedeId);
+        Ticket.TicketStatus ticketStatus = Ticket.TicketStatus.valueOf(status.toUpperCase());
+        return ticketRepository.countBySedeIdAndStatus(sedeId, ticketStatus);
     }
 }

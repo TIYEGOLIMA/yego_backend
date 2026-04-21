@@ -24,9 +24,12 @@ public class SacStatsController {
     @GetMapping
     public ResponseEntity<SacStatsResponse> obtenerTodasLasEstadisticas(
             @RequestParam(required = false) String fechaInicio,
-            @RequestParam(required = false) String fechaFin) {
-        log.info("[SacStats] Estadísticas SAC - fechaInicio: {}, fechaFin: {}", fechaInicio, fechaFin);
-        SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin);
+            @RequestParam(required = false) String fechaFin,
+            @RequestParam(required = false) Long sedeId) {
+        log.info("[SacStats] Estadísticas SAC - fechaInicio: {}, fechaFin: {}, sedeId: {}", fechaInicio, fechaFin, sedeId);
+        SacStatsResponse stats = sedeId != null
+                ? sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin, sedeId)
+                : sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin);
         return ResponseEntity.ok(stats);
     }
         

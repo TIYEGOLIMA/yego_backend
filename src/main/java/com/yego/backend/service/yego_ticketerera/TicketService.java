@@ -58,4 +58,11 @@ public interface TicketService {
     List<TicketWithCategoryResponse> obtenerTicketsEnProgresoConCategorias();
     
     List<TicketWithCategoryResponse> obtenerTicketsCompletadosConCategorias();
+
+    // Métodos filtrados por sede
+    List<TicketWithCategoryResponse> obtenerTodosLosTicketsConCategoriasPorSede(Long sedeId);
+
+    List<TicketWithCategoryResponse> obtenerTicketsPorEstadoYSede(String status, Long sedeId);
+
+    long contarTicketsPorEstadoYSede(String status, Long sedeId);
 }

@@ -10,10 +10,6 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
-/**
- * Entidad JPA para usuarios del sistema YEGO Principal
- * Equivalente a User entity de TypeORM
- */
 @Entity
 @Table(name = "users")
 @Data
@@ -55,14 +51,14 @@ public class User {
     @Column(name = "username", nullable = false, unique = true, length = 255)
     private String username;
     
-    @Column(name = "module_id")
-    private Long moduleId;
-
     @Column(name = "dni", length = 8, nullable = false, unique = true)
     private String dni;
 
     @Column(name = "area_id")
     private Long areaId;
+
+    @Column(name = "sede_id")
+    private Long sedeId;
 
     @Column(name = "password_changed_at")
     private LocalDateTime passwordChangedAt;
@@ -72,7 +68,6 @@ public class User {
         createdAt = LocalDateTime.now();
     }
     
-    // Métodos helper para compatibilidad
     public Long getRoleId() {
         return role != null ? role.getId() : null;
     }

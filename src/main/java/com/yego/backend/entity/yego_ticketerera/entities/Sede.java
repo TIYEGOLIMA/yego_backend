@@ -1,61 +1,50 @@
 package com.yego.backend.entity.yego_ticketerera.entities;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 
-/**
- * Entidad ModuloAtencion del sistema YEGO Ticketerera
- * Representa un módulo de atención al cliente
- */
 @Entity
-@Table(name = "yego_modules")
+@Table(name = "sedes")
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class ModuloAtencion {
-    
+public class Sede {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
-    @Column(name = "name", nullable = false, length = 50)
+
+    @Column(name = "name", nullable = false, length = 100)
     private String name;
-    
+
     @Column(name = "description", columnDefinition = "text")
     private String description;
-    
-    @Column(name = "is_active", nullable = false)
+
+    @Column(name = "active", nullable = false)
     @Builder.Default
-    private Boolean isActive = true;
-    
-    @Column(name = "created_at", nullable = false)
+    private Boolean active = true;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-    
+
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Column(name = "sede_id")
-    private Long sedeId;
-
     @PrePersist
     protected void onCreate() {
-        // Usar zona horaria de Perú (America/Lima)
         createdAt = LocalDateTime.now(ZoneId.of("America/Lima"));
-        if (isActive == null) {
-            isActive = true;
-        }
+        if (active == null) active = true;
     }
-    
+
     @PreUpdate
     protected void onUpdate() {
-        // Usar zona horaria de Perú (America/Lima)
         updatedAt = LocalDateTime.now(ZoneId.of("America/Lima"));
     }
 }

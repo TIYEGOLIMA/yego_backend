@@ -16,4 +16,6 @@ public class CrearTicketRequest {
     private Long userId;
     
     private String licenseNumber;
+
+    private Long sedeId;
 }

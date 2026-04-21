@@ -43,7 +43,7 @@ public class CreateUserDto {
     @NotBlank(message = "El documento es obligatorio")
     @Size(min = 8, max = 12, message = "El documento debe tener entre 8 y 12 caracteres")
     private String dni;
-    
-    private Long moduleId;
+
+    private Long sedeId;
 }
 

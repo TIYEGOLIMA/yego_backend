@@ -9,6 +9,6 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class UpdateUserAreaDto {
-    private Long areaId;
+public class UpdateUserSedeDto {
+    private Long sedeId;
 }

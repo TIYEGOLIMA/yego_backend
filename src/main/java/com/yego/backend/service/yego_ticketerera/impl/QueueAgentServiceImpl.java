@@ -1,5 +1,6 @@
 package com.yego.backend.service.yego_ticketerera.impl;
 
+import com.yego.backend.entity.yego_ticketerera.entities.ModuloAtencion;
 import com.yego.backend.entity.yego_ticketerera.entities.QueueAgent;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.entity.yego_ticketerera.api.response.AsignarModuloResponse;
@@ -7,6 +8,7 @@ import com.yego.backend.entity.yego_ticketerera.api.response.ModuloAtencionRespo
 import com.yego.backend.entity.yego_ticketerera.api.response.ModuloOcupadoResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.ModulosEstadoResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.RecuperarModuloResponse;
+import com.yego.backend.repository.yego_ticketerera.ModuloAtencionRepository;
 import com.yego.backend.repository.yego_ticketerera.QueueAgentRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_ticketerera.QueueAgentService;
@@ -35,6 +37,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
     
     private final QueueAgentRepository queueAgentRepository;
     private final UserRepository userRepository;
+    private final ModuloAtencionRepository moduloAtencionRepository;
     private final ModuloAtencionService moduloAtencionService;
     private final TicketNotificationHandler ticketNotificationHandler;
     
@@ -184,52 +187,59 @@ public class QueueAgentServiceImpl implements QueueAgentService {
     public ResponseEntity<AsignarModuloResponse> asignarModuloAUsuario(Map<String, Object> request) {
         
         try {
-            // Extraer parámetros del request
             Long userId = ((Number) request.get("userId")).longValue();
             Long moduleId = ((Number) request.get("moduleId")).longValue();
-            
-            log.info("Asignando módulo {} al usuario {}", moduleId, userId);
-            
-            // Verificar si el módulo ya está ocupado
+            Long sedeIdRequest = request.get("sedeId") != null
+                    ? ((Number) request.get("sedeId")).longValue()
+                    : null;
+
+            Long sedeIdUsuario = userRepository.findById(userId).map(User::getSedeId).orElse(null);
+            Long sedeId = sedeIdUsuario != null ? sedeIdUsuario : sedeIdRequest;
+
+            if (sedeIdUsuario != null && sedeIdRequest != null && !sedeIdUsuario.equals(sedeIdRequest)) {
+                log.warn("Usuario {} pidió módulo de sede {}; se fuerza su sede asignada {}",
+                        userId, sedeIdRequest, sedeIdUsuario);
+            }
+
             Optional<QueueAgent> moduloOcupado = queueAgentRepository.findByModuleIdAndIsActiveTrue(moduleId);
             if (moduloOcupado.isPresent() && "OCUPADO".equals(moduloOcupado.get().getStatus())) {
-                log.warn("[QueueAgent] Módulo de atención ya ocupado");
                 return ResponseEntity.status(409).build();
             }
-            
-            // Obtener o crear registro para el usuario
+
+            if (sedeId != null) {
+                Long sedeModulo = moduloAtencionRepository.findById(moduleId)
+                        .map(ModuloAtencion::getSedeId)
+                        .orElse(null);
+                if (sedeModulo != null && !sedeModulo.equals(sedeId)) {
+                    return ResponseEntity.badRequest()
+                            .body(AsignarModuloResponse.builder()
+                                    .userId(userId)
+                                    .moduleId(moduleId)
+                                    .status("ERROR: El módulo no pertenece a la sede del usuario")
+                                    .build());
+                }
+            }
+
             QueueAgent queueAgent = queueAgentRepository.findByUserIdAndIsActiveTrue(userId)
                     .map(existente -> {
-                        // Actualizar registro existente
                         existente.setModuleId(moduleId);
                         existente.setUpdatedAt(LocalDateTime.now());
-                        log.info("Actualizando registro existente para usuario {}", userId);
                         return existente;
                     })
-                    .orElseGet(() -> {
-                        // Crear nueva asignación
-                        log.info("Creando nuevo registro para usuario {}", userId);
-                        return QueueAgent.builder()
-                                .userId(userId)
-                                .moduleId(moduleId)
-                                .status("OCUPADO")
-                                .isActive(true)
-                                .createdAt(LocalDateTime.now())
-                                .build();
-                    });
-            
+                    .orElseGet(() -> QueueAgent.builder()
+                            .userId(userId)
+                            .moduleId(moduleId)
+                            .status("OCUPADO")
+                            .isActive(true)
+                            .createdAt(LocalDateTime.now())
+                            .build());
+
             queueAgentRepository.save(queueAgent);
-            
             moduloAtencionService.cambiarEstadoModulo(moduleId, true);
-            log.info("Módulo {} marcado como ocupado (is_active = true)", moduleId);
-            
-            // Enviar lista actualizada de módulos por WebSocket
-            ModulosEstadoResponse modulosEstado = obtenerModulosDisponiblesYOcupados();
-            ticketNotificationHandler.enviarModulosActualizados(modulosEstado);
-            
-            log.info("Módulo {} asignado exitosamente al usuario {}", moduleId, userId);
-            
-            // Construir y devolver respuesta
+            ticketNotificationHandler.enviarModulosActualizados(obtenerModulosDisponiblesYOcupados());
+
+            log.info("Módulo {} asignado al usuario {}", moduleId, userId);
+
             AsignarModuloResponse response = AsignarModuloResponse.builder()
                     .userId(userId)
                     .moduleId(moduleId)

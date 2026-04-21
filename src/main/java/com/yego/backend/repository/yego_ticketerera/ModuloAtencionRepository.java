@@ -6,11 +6,10 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-/**
- * Repository para la entidad ModuloAtencion del sistema YEGO Ticketerera
- */
 @Repository
 public interface ModuloAtencionRepository extends JpaRepository<ModuloAtencion, Long> {
-    
+
     List<ModuloAtencion> findByIsActiveFalseOrderByNameAsc();
+
+    List<ModuloAtencion> findBySedeIdAndIsActiveFalseOrderByNameAsc(Long sedeId);
 }

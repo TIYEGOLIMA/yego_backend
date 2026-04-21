@@ -8,6 +8,8 @@ import com.yego.backend.entity.yego_principal.entities.Area;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.repository.yego_principal.RoleRepository;
 import com.yego.backend.repository.yego_principal.AreaRepository;
+import com.yego.backend.repository.yego_ticketerera.SedeRepository;
+import com.yego.backend.entity.yego_ticketerera.entities.Sede;
 import com.yego.backend.service.yego_principal.AuthService;
 import com.yego.backend.service.yego_principal.AuditService;
 import com.yego.backend.service.yego_principal.SessionService;
@@ -40,22 +42,19 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-/**
- * Implementación del servicio de autenticación del sistema YEGO Principal
- * Equivalente a AuthService de NestJS
- */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
-    
+
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final AreaRepository areaRepository;
+    private final SedeRepository sedeRepository;
     private final SessionService sessionService;
     private final AuditService auditService;
     private final QueueAgentService queueAgentService;
-    /** Cost 10: buen equilibrio seguridad/velocidad; 12 era muy lento en cambio de contraseña. */
+    /** Cost 10: balance seguridad/velocidad; 12 era muy lento en cambio de contraseña. */
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
     
     @Value("${jwt.secret}")
@@ -341,13 +340,17 @@ public class AuthServiceImpl implements AuthService {
         boolean esSupervisor = areasComoSupervisor != null && !areasComoSupervisor.isEmpty();
         String nombreAreaSupervisor = esSupervisor ? areasComoSupervisor.stream().map(Area::getName).collect(Collectors.joining(", ")) : null;
 
+        Long sedeId = user.getSedeId();
+        String sedeNombre = sedeId != null
+                ? sedeRepository.findById(sedeId).map(Sede::getName).orElse(null)
+                : null;
+
         return UserProfileDto.builder()
                 .id(user.getId())
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .name(user.getName())
                 .role(user.getRoleName())
-                .moduleId(user.getModuleId() != null ? user.getModuleId().toString() : null)
                 .active(user.getActive())
                 .lastLogin(user.getLastLogin())
                 .esJefe(esJefe)
@@ -355,6 +358,8 @@ public class AuthServiceImpl implements AuthService {
                 .esSupervisor(esSupervisor)
                 .nombreAreaSupervisor(nombreAreaSupervisor)
                 .requirePasswordChange(shouldRequirePasswordChange(user.getId(), user.getPasswordChangedAt()))
+                .sedeId(sedeId)
+                .sedeNombre(sedeNombre)
                 .build();
     }
     
@@ -423,6 +428,10 @@ public class AuthServiceImpl implements AuthService {
     }
     
     private UserResponseDto mapToUserResponseDto(User user) {
+        Long sedeId = user.getSedeId();
+        String sedeNombre = sedeId != null
+                ? sedeRepository.findById(sedeId).map(Sede::getName).orElse(null)
+                : null;
         return UserResponseDto.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -432,10 +441,11 @@ public class AuthServiceImpl implements AuthService {
                 .dni(user.getDni())
                 .role(user.getRoleId())
                 .roleName(user.getRoleName())
-                .moduleId(user.getModuleId())
                 .active(user.getActive())
                 .lastLogin(user.getLastLogin())
                 .createdAt(user.getCreatedAt())
+                .sedeId(sedeId)
+                .sedeNombre(sedeNombre)
                 .passwordChangedAt(user.getPasswordChangedAt())
                 .build();
     }
