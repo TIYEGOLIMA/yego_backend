@@ -9,7 +9,15 @@ import java.util.List;
 @Repository
 public interface ModuloAtencionRepository extends JpaRepository<ModuloAtencion, Long> {
 
-    List<ModuloAtencion> findByIsActiveFalseOrderByNameAsc();
+    List<ModuloAtencion> findByIsActiveTrueOrderByNameAsc();
 
-    List<ModuloAtencion> findBySedeIdAndIsActiveFalseOrderByNameAsc(Long sedeId);
+    List<ModuloAtencion> findBySedeIdAndIsActiveTrueOrderByNameAsc(Long sedeId);
+
+    List<ModuloAtencion> findAllByOrderByNameAsc();
+
+    List<ModuloAtencion> findBySedeIdOrderByNameAsc(Long sedeId);
+
+    boolean existsByNameIgnoreCaseAndSedeId(String name, Long sedeId);
+
+    boolean existsByNameIgnoreCaseAndSedeIdAndIdNot(String name, Long sedeId, Long id);
 }

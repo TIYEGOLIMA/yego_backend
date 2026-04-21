@@ -10,13 +10,17 @@ public interface DispositivoService {
 
     List<DispositivoResponse> listarDispositivos();
 
-    List<DispositivoResponse> listarDispositivosPorSede(Long sedeId);
-
-    DispositivoResponse obtenerDispositivo(Long id);
-
     DispositivoResponse crearDispositivo(CrearDispositivoRequest request);
 
     DispositivoResponse actualizarDispositivo(Long id, CrearDispositivoRequest request);
+
+    DispositivoResponse regenerarTokenAcceso(Long id);
+
+    /**
+     * Asigna o desasigna el módulo de una Tablet de Calificación.
+     * Si {@code moduleId} es {@code null}, se desvincula del módulo actual.
+     */
+    DispositivoResponse asignarModulo(Long dispositivoId, Long moduleId);
 
     void desactivarDispositivo(Long id);
 

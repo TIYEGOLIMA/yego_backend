@@ -22,11 +22,29 @@ public interface AuthService extends UserDetailsService {
      * Realizar login y generar token (token y perfil en JSON y en header X-Access-Token).
      */
     LoginTokenResult login(LoginDto loginDto, HttpServletRequest request);
-    
+
+    /**
+     * Realizar login y devolver directamente el cuerpo de respuesta listo para serializar.
+     */
+    LoginResponseDto loginResponse(LoginDto loginDto, HttpServletRequest request);
+
     /**
      * Renovar token JWT
      */
     LoginTokenResult refreshToken(String token, HttpServletRequest request);
+
+    /**
+     * Renovar JWT a partir del header HTTP {@code Authorization: Bearer <token>} y devolver
+     * directamente el cuerpo de respuesta. Lanza {@code ResponseStatusException(401)} si el
+     * header no está presente, no es Bearer o el token es inválido.
+     */
+    LoginResponseDto refreshFromAuthorizationHeader(String authorizationHeader, HttpServletRequest request);
+
+    /**
+     * Cerrar sesión usando el header HTTP {@code Authorization}. Tolera headers ausentes o
+     * sin formato Bearer (no fuerza error porque logout es idempotente).
+     */
+    void cerrarSesionConAuthorizationHeader(Long userId, String authorizationHeader);
     
     /**
      * Registrar nuevo usuario

@@ -91,6 +91,31 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             }
             
                         Claims claims = getClaimsFromToken(token);
+
+                        Integer dispositivoIdInt = claims.get("dispositivoId", Integer.class);
+                        if (dispositivoIdInt != null) {
+                            String deviceId = "device-" + dispositivoIdInt;
+                            String tipo = claims.get("tipo", String.class);
+                            UsernamePasswordAuthenticationToken deviceAuth =
+                                new UsernamePasswordAuthenticationToken(
+                                    deviceId,
+                                    null,
+                                    List.of(new SimpleGrantedAuthority("ROLE_DEVICE"))
+                                );
+                            SecurityContextHolder.getContext().setAuthentication(deviceAuth);
+                            accessor.setUser(deviceAuth);
+
+                            String sessionId = accessor.getSessionId();
+                            if (sessionId != null) {
+                                webSocketSessionService.markAsDevice(sessionId, deviceId);
+                                log.debug("[WebSocket] Dispositivo conectado: {} (tipo={}, sede={}, módulo={})",
+                                    deviceId, tipo,
+                                    claims.get("sedeId", Integer.class),
+                                    claims.get("moduleId", Integer.class));
+                            }
+                            return message;
+                        }
+
                         String username = claims.get("username", String.class);
                         if (username == null) {
                             username = claims.getSubject();
@@ -172,38 +197,29 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             webSocketSessionService.addSubscription(sessionId, destination);
             return message;
         }
-        
+
+        // Sesiones de dispositivos (TV / TABLET / TABLET_PRINCIPAL): acceso a topics de ticketera
+        if (webSocketSessionService.isDeviceSession(sessionId)) {
+            if (normalizedTopic.startsWith("tickets")
+                || normalizedTopic.startsWith("new-ticket")
+                || normalizedTopic.startsWith("ticket-")
+                || normalizedTopic.startsWith("modulos-atencion")
+                || normalizedTopic.startsWith("pong")) {
+                webSocketSessionService.addSubscription(sessionId, destination);
+                return message;
+            }
+            log.debug("[WebSocket] Suscripción de dispositivo bloqueada: sesión {} → {}", sessionId, destination);
+            return null;
+        }
+
         // Obtener información del usuario
         List<ModuleResponse> userModules = webSocketSessionService.getUserModules(sessionId);
         String userId = webSocketSessionService.getUserId(sessionId);
         
-        // Obtener el rol del usuario desde el contexto de seguridad
-        String userRole = null;
-        if (accessor.getUser() != null && accessor.getUser() instanceof org.springframework.security.core.Authentication) {
-            org.springframework.security.core.Authentication auth = (org.springframework.security.core.Authentication) accessor.getUser();
-            if (auth.getAuthorities() != null && !auth.getAuthorities().isEmpty()) {
-                userRole = auth.getAuthorities().iterator().next().getAuthority();
-                if (userRole != null && userRole.startsWith("ROLE_")) {
-                    userRole = userRole.substring(5); // Remover prefijo "ROLE_"
-                }
-            }
-        }
-        
-        // Permitir que usuarios TABLET y TABLET2 se suscriban a topics de ticketera sin verificar módulo
-        // Esto es necesario porque las tabletas de rating no tienen el módulo "Tickets" en su lista
-        if ((userRole != null && (userRole.equals("TABLET1") || userRole.equals("TABLET2") || userRole.equals("TV"))) 
-            && (normalizedTopic.contains("ticket") || normalizedTopic.startsWith("ticketera") 
-                || normalizedTopic.startsWith("modulos-atencion") || normalizedTopic.equals("pong"))) {
-            webSocketSessionService.addSubscription(sessionId, destination);
-            log.debug("[WebSocket] Suscripción permitida para TABLET: sesión {} (usuario {}) → {}", sessionId, userId, destination);
-            return message;
-        }
-        
-        // Verificar acceso para topics de módulos específicos
-        if (userModules == null || userModules.isEmpty() || 
+        if (userModules == null || userModules.isEmpty() ||
             !webSocketModuleMappingService.hasAccessToTopic(destination, userModules)) {
-            log.warn("[WebSocket] Suscripción bloqueada: sesión {} (usuario {}, rol {}) → {}", 
-                sessionId, userId, userRole, destination);
+            log.warn("[WebSocket] Suscripción bloqueada: sesión {} (usuario {}) → {}",
+                sessionId, userId, destination);
             return null;
         }
         

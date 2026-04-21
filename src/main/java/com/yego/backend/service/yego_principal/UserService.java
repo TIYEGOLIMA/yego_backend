@@ -12,6 +12,8 @@ public interface UserService {
 
     Object findAll(Integer page, Integer limit, String search, Boolean active);
 
+    List<UserResponseDto> findByRoleName(String roleName, Boolean active);
+
     List<UsuarioResumenDto> findAllResumen();
 
     UserResponseDto findOne(Long id);

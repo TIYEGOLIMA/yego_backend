@@ -17,7 +17,6 @@ import com.yego.backend.handler.yego_ticketerera.TicketNotificationHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,108 +26,82 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-/**
- * Implementación del servicio de QueueAgent del sistema YEGO Ticketerera
- */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class QueueAgentServiceImpl implements QueueAgentService {
-    
+
     private final QueueAgentRepository queueAgentRepository;
     private final UserRepository userRepository;
     private final ModuloAtencionRepository moduloAtencionRepository;
     private final ModuloAtencionService moduloAtencionService;
     private final TicketNotificationHandler ticketNotificationHandler;
-    
-    // ========== MÉTODOS DE NEGOCIO PRINCIPALES ==========
+
     @Override
     @Transactional
     public ResponseEntity<Map<String, Object>> liberarModuloDelUsuario(Long userId) {
-        log.info("Liberando módulo del usuario {}", userId);
-        
         Optional<QueueAgent> queueAgent = queueAgentRepository.findByUserIdAndIsActiveTrue(userId);
         if (queueAgent.isPresent()) {
             QueueAgent agent = queueAgent.get();
             Long moduleId = agent.getModuleId();
-            
-            // Cambiar el estado a LIBRE y desactivar el agente
+
             agent.setStatus("LIBRE");
             agent.setUpdatedAt(LocalDateTime.now());
             agent.setIsActive(false);
-            
+
             queueAgentRepository.save(agent);
             moduloAtencionService.cambiarEstadoModulo(moduleId, false);
-            log.info("Módulo {} reactivado y disponible (is_active = false)", moduleId);
-            
-            // Enviar lista actualizada de módulos por WebSocket
-            ModulosEstadoResponse modulosEstado = obtenerModulosDisponiblesYOcupados();
-            ticketNotificationHandler.enviarModulosActualizados(modulosEstado);
-            
-            log.info("Módulo {} liberado del usuario {} - Estado: LIBRE, isActive: false", moduleId, userId);
+
+            ticketNotificationHandler.enviarModulosActualizados(obtenerModulosDisponiblesYOcupados());
+
+            log.info("Módulo {} liberado del usuario {}", moduleId, userId);
             return ResponseEntity.ok(Map.of("message", "Módulo liberado exitosamente", "moduleId", moduleId, "userId", userId));
-        } else {
-            log.warn("Usuario {} no tenía módulo asignado", userId);
-            return ResponseEntity.ok(Map.of("message", "Usuario no tenía módulo asignado", "userId", userId));
         }
+        return ResponseEntity.ok(Map.of("message", "Usuario no tenía módulo asignado", "userId", userId));
     }
-    
+
     @Override
     @Transactional
     public ResponseEntity<Map<String, Object>> liberarModuloPorModuleId(Long moduleId) {
-        log.info("Liberando módulo {}", moduleId);
-        
         Optional<QueueAgent> queueAgent = queueAgentRepository.findByModuleIdAndIsActiveTrue(moduleId);
         if (queueAgent.isPresent() && "OCUPADO".equals(queueAgent.get().getStatus())) {
             QueueAgent agent = queueAgent.get();
             Long userId = agent.getUserId();
-            
-            // Cambiar el estado a LIBRE y desactivar el agente
+
             agent.setStatus("LIBRE");
             agent.setUpdatedAt(LocalDateTime.now());
             agent.setIsActive(false);
-            
+
             queueAgentRepository.save(agent);
             moduloAtencionService.cambiarEstadoModulo(moduleId, false);
-            log.info("Módulo {} reactivado y disponible (is_active = false)", moduleId);
-            
-            // Enviar lista actualizada de módulos por WebSocket
-            ModulosEstadoResponse modulosEstado = obtenerModulosDisponiblesYOcupados();
-            ticketNotificationHandler.enviarModulosActualizados(modulosEstado);
-            
-            log.info("Módulo {} liberado del usuario {} - Estado: LIBRE, isActive: false", moduleId, userId);
+
+            ticketNotificationHandler.enviarModulosActualizados(obtenerModulosDisponiblesYOcupados());
+
+            log.info("Módulo {} liberado del usuario {}", moduleId, userId);
             return ResponseEntity.ok(Map.of("message", "Módulo liberado exitosamente", "moduleId", moduleId, "userId", userId));
-        } else {
-            log.warn("Módulo {} no está ocupado o no tiene agente asignado", moduleId);
-            return ResponseEntity.ok(Map.of("message", "Módulo no está ocupado", "moduleId", moduleId));
         }
+        return ResponseEntity.ok(Map.of("message", "Módulo no está ocupado", "moduleId", moduleId));
     }
-    
-    // ========== MÉTODOS DE CONSULTA ==========
-    
+
     @Override
     @Transactional(readOnly = true)
     public ModulosEstadoResponse obtenerModulosDisponiblesYOcupados() {
-        log.debug("Módulos disponibles y ocupados");
-        
-        // Obtener módulos disponibles (isActive = false)
-        List<ModuloAtencionResponse> modulosDisponibles = moduloAtencionService.obtenerTodosLosModulosActivosResponse();
-        
-        // Obtener módulos ocupados (status OCUPADO y isActive = true)
+        List<ModuloAtencionResponse> modulosDisponibles =
+                moduloAtencionService.obtenerTodosLosModulosActivosResponse();
+
         List<QueueAgent> agentesOcupados = queueAgentRepository.findByStatusAndIsActiveTrue("OCUPADO");
-        
-        // Obtener todos los usuarios de una vez para evitar N+1 queries
+
         List<Long> userIds = agentesOcupados.stream()
                 .map(QueueAgent::getUserId)
                 .distinct()
                 .toList();
-        
+
         Map<Long, String> usuariosMap = userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(
-                    User::getId,
-                    user -> (user.getName() + " " + user.getLastName()).trim()
+                        User::getId,
+                        user -> (user.getName() + " " + user.getLastName()).trim()
                 ));
-        
+
         List<ModuloOcupadoResponse> modulosOcupados = agentesOcupados.stream()
                 .map(agente -> ModuloOcupadoResponse.builder()
                         .moduleId(agente.getModuleId())
@@ -139,53 +112,36 @@ public class QueueAgentServiceImpl implements QueueAgentService {
                         .updatedAt(agente.getUpdatedAt())
                         .build())
                 .toList();
-        
-        log.debug("Módulos disponibles: {}, ocupados: {}", modulosDisponibles.size(), modulosOcupados.size());
-        
+
         return ModulosEstadoResponse.builder()
                 .modulosDisponibles(modulosDisponibles)
                 .modulosOcupados(modulosOcupados)
                 .build();
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public Optional<Long> obtenerQueueAgentIdPorUsuario(Long userId) {
-        log.debug("QueueAgent ID para usuario {}", userId);
-        
         return queueAgentRepository.findByUserIdAndIsActiveTrue(userId)
                 .filter(agent -> "OCUPADO".equals(agent.getStatus()))
-                .map(agent -> {
-                    log.debug("QueueAgent {} para usuario {} (OCUPADO)", agent.getId(), userId);
-                    return agent.getId();
-                });
+                .map(QueueAgent::getId);
     }
-    
+
     @Override
     @Transactional(readOnly = true)
     public Optional<RecuperarModuloResponse> recuperarModuloAsignado(Long userId) {
-        log.debug("Módulo asignado para usuario {}", userId);
-        
         return queueAgentRepository.findByUserIdAndIsActiveTrue(userId)
-                .map(queueAgent -> {
-                    log.debug("Usuario {} módulo {} (status {}, isActive {})",
-                            userId, queueAgent.getModuleId(), queueAgent.getStatus(), queueAgent.getIsActive());
-                    
-                    return RecuperarModuloResponse.builder()
-                            .moduleId(queueAgent.getModuleId())
-                            .status(queueAgent.getStatus())
-                            .isActive(queueAgent.getIsActive())
-                            .createdAt(queueAgent.getCreatedAt())
-                            .build();
-                });
+                .map(queueAgent -> RecuperarModuloResponse.builder()
+                        .moduleId(queueAgent.getModuleId())
+                        .status(queueAgent.getStatus())
+                        .isActive(queueAgent.getIsActive())
+                        .createdAt(queueAgent.getCreatedAt())
+                        .build());
     }
-    
-    // ========== MÉTODOS PARA EL CONTROLADOR ==========
-    
+
     @Override
     @Transactional
     public ResponseEntity<AsignarModuloResponse> asignarModuloAUsuario(Map<String, Object> request) {
-        
         try {
             Long userId = ((Number) request.get("userId")).longValue();
             Long moduleId = ((Number) request.get("moduleId")).longValue();
@@ -240,14 +196,12 @@ public class QueueAgentServiceImpl implements QueueAgentService {
 
             log.info("Módulo {} asignado al usuario {}", moduleId, userId);
 
-            AsignarModuloResponse response = AsignarModuloResponse.builder()
+            return ResponseEntity.ok(AsignarModuloResponse.builder()
                     .userId(userId)
                     .moduleId(moduleId)
                     .status("OCUPADO")
-                    .build();
-            
-            return ResponseEntity.ok(response);
-            
+                    .build());
+
         } catch (IllegalArgumentException e) {
             log.warn("[QueueAgent] Argumento inválido: {}", e.getMessage());
             return ResponseEntity.badRequest().build();
@@ -255,33 +209,5 @@ public class QueueAgentServiceImpl implements QueueAgentService {
             log.error("[QueueAgent] Error asignando módulo: {}", e.getMessage(), e);
             return ResponseEntity.status(500).build();
         }
-    }
-    
-    @Override
-    public ResponseEntity<Map<String, Object>> verificarJWT(
-            Authentication authentication) {
-        
-        if (authentication == null || !authentication.isAuthenticated()) {
-            return ResponseEntity.status(401)
-                    .body(Map.of("error", "Token inválido o expirado"));
-        }
-        
-        String userIdString = authentication.getName();
-        String role = authentication.getAuthorities().iterator().next().getAuthority().replace("ROLE_", "");
-        
-        Long userId;
-        try {
-            userId = Long.parseLong(userIdString);
-            log.debug("[QueueAgent] Usuario autenticado ID {}", userId);
-        } catch (NumberFormatException e) {
-            log.warn("[QueueAgent] ID de usuario inválido: {}", userIdString);
-            return ResponseEntity.status(401).build();
-        }
-        
-        return ResponseEntity.ok(Map.of(
-                "valid", true,
-                "userId", userId,
-                "role", role
-        ));
     }
 }

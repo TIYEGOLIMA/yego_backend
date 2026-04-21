@@ -45,14 +45,7 @@ public class SacStatsServiceImpl implements SacStatsService {
     
     @Override
     @Transactional(readOnly = true)
-    public SacStatsResponse obtenerTodasLasEstadisticas(String fechaInicio, String fechaFin) {
-        return calcularEstadisticas(fechaInicio, fechaFin, obtenerUsuariosSac(), null);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public SacStatsResponse obtenerTodasLasEstadisticas(String fechaInicio, String fechaFin, Long sedeId) {
-        log.debug("Estadísticas SAC por sede {}", sedeId);
         return calcularEstadisticas(fechaInicio, fechaFin, obtenerUsuariosSac(), sedeId);
     }
 

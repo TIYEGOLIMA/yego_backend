@@ -416,79 +416,36 @@ public class TicketServiceImpl implements TicketService {
         return ticketNumber;
     }
     
-    // Métodos simplificados para el controlador (sin lógica de negocio en el controlador)
-    
     @Override
-    public List<TicketWithCategoryResponse> obtenerTodosLosTicketsConCategorias() {
-        log.debug("Listando todos los tickets con categorías");
-        List<Ticket> tickets = obtenerTickets();
+    @Transactional(readOnly = true)
+    public List<TicketWithCategoryResponse> obtenerTodosLosTicketsConCategorias(Long sedeId) {
+        List<Ticket> tickets = (sedeId != null)
+                ? ticketRepository.findActiveTicketsBySede(sedeId)
+                : ticketRepository.findActiveTickets();
         return convertirTicketsConCategorias(tickets);
     }
-    
+
     @Override
-    public List<TicketWithCategoryResponse> obtenerTicketsEnEsperaConCategorias() {
-        log.debug("Listando tickets en espera con categorías");
-        List<Ticket> tickets = obtenerTicketsPorEstado(Ticket.TicketStatus.WAITING);
+    @Transactional(readOnly = true)
+    public List<TicketWithCategoryResponse> obtenerTicketsPorEstado(String status, Long sedeId) {
+        TicketStatus ticketStatus = TicketStatus.valueOf(status.toUpperCase());
+        List<Ticket> tickets = (sedeId != null)
+                ? ticketRepository.findBySedeIdAndStatusOrderByCreatedAtAsc(sedeId, ticketStatus)
+                : ticketRepository.findByStatusOrderByCreatedAtAsc(ticketStatus);
         return convertirTicketsConCategorias(tickets);
     }
-    
+
     @Override
-    public List<TicketWithCategoryResponse> obtenerTicketsLlamadosConCategorias() {
-        log.debug("Listando tickets llamados con categorías");
-        List<Ticket> tickets = obtenerTicketsPorEstado(Ticket.TicketStatus.CALLED);
-        return convertirTicketsConCategorias(tickets);
+    @Transactional(readOnly = true)
+    public long contarTicketsPorEstado(String status, Long sedeId) {
+        TicketStatus ticketStatus = TicketStatus.valueOf(status.toUpperCase());
+        return (sedeId != null)
+                ? ticketRepository.countBySedeIdAndStatus(sedeId, ticketStatus)
+                : contarTicketsPorEstado(ticketStatus);
     }
-    
-    @Override
-    public List<TicketWithCategoryResponse> obtenerTicketsEnProgresoConCategorias() {
-        log.debug("Listando tickets en progreso con categorías");
-        List<Ticket> tickets = obtenerTicketsPorEstado(Ticket.TicketStatus.IN_PROGRESS);
-        return convertirTicketsConCategorias(tickets);
-    }
-    
-    @Override
-    public List<TicketWithCategoryResponse> obtenerTicketsCompletadosConCategorias() {
-        log.debug("Listando tickets completados con categorías");
-        List<Ticket> tickets = obtenerTicketsPorEstado(Ticket.TicketStatus.COMPLETED);
-        return convertirTicketsConCategorias(tickets);
-    }
-    
-    @Override
-    public long contarTicketsPorEstado(String status) {
-        log.debug("Conteo tickets por estado {}", status);
-        Ticket.TicketStatus ticketStatus = Ticket.TicketStatus.valueOf(status.toUpperCase());
-        return contarTicketsPorEstado(ticketStatus);
-    }
-    
+
     @Override
     public long contarTicketsPorModuloYEstado(Long moduleId, String status) {
-        log.debug("Conteo tickets módulo {} estado {}", moduleId, status);
-        Ticket.TicketStatus ticketStatus = Ticket.TicketStatus.valueOf(status.toUpperCase());
-        return contarTicketsPorModuloYEstado(moduleId, ticketStatus);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<TicketWithCategoryResponse> obtenerTodosLosTicketsConCategoriasPorSede(Long sedeId) {
-        log.debug("Listando todos los tickets activos por sede {}", sedeId);
-        List<Ticket> tickets = ticketRepository.findActiveTicketsBySede(sedeId);
-        return convertirTicketsConCategorias(tickets);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<TicketWithCategoryResponse> obtenerTicketsPorEstadoYSede(String status, Long sedeId) {
-        log.debug("Listando tickets estado {} sede {}", status, sedeId);
-        Ticket.TicketStatus ticketStatus = Ticket.TicketStatus.valueOf(status.toUpperCase());
-        List<Ticket> tickets = ticketRepository.findBySedeIdAndStatusOrderByCreatedAtAsc(sedeId, ticketStatus);
-        return convertirTicketsConCategorias(tickets);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public long contarTicketsPorEstadoYSede(String status, Long sedeId) {
-        log.debug("Conteo tickets estado {} sede {}", status, sedeId);
-        Ticket.TicketStatus ticketStatus = Ticket.TicketStatus.valueOf(status.toUpperCase());
-        return ticketRepository.countBySedeIdAndStatus(sedeId, ticketStatus);
+        return contarTicketsPorModuloYEstado(moduleId, TicketStatus.valueOf(status.toUpperCase()));
     }
 }

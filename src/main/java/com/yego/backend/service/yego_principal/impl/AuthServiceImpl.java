@@ -138,6 +138,50 @@ public class AuthServiceImpl implements AuthService {
     }
     
     @Override
+    public LoginResponseDto loginResponse(LoginDto loginDto, HttpServletRequest request) {
+        return toLoginResponse(login(loginDto, request));
+    }
+
+    @Override
+    public LoginResponseDto refreshFromAuthorizationHeader(String authorizationHeader, HttpServletRequest request) {
+        String token = extraerBearerToken(authorizationHeader)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token de autorización requerido"));
+        try {
+            return toLoginResponse(refreshToken(token, request));
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("[AuthService] Error al renovar token: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token inválido o expirado");
+        }
+    }
+
+    @Override
+    public void cerrarSesionConAuthorizationHeader(Long userId, String authorizationHeader) {
+        String token = extraerBearerToken(authorizationHeader).orElse("");
+        if (userId == null && token.isEmpty()) {
+            return;
+        }
+        cerrarSesion(userId, token);
+    }
+
+    private LoginResponseDto toLoginResponse(LoginTokenResult result) {
+        return LoginResponseDto.builder()
+                .message(result.message())
+                .accessToken(result.accessToken())
+                .user(result.user())
+                .build();
+    }
+
+    private Optional<String> extraerBearerToken(String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            return Optional.empty();
+        }
+        String token = authorizationHeader.substring(7).trim();
+        return token.isEmpty() ? Optional.empty() : Optional.of(token);
+    }
+
+    @Override
     public LoginTokenResult refreshToken(String token, HttpServletRequest request) {
         try {
             // Decodificar el token para obtener información del usuario

@@ -96,6 +96,71 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<UserResponseDto> findByRoleName(String roleName, Boolean active) {
+        if (roleName == null || roleName.isBlank()) {
+            return List.of();
+        }
+
+        List<User> users = userRepository.findByRoleName(roleName.trim().toUpperCase()).stream()
+                .filter(u -> active == null || (u.getActive() != null && u.getActive().equals(active)))
+                .collect(Collectors.toList());
+
+        if (users.isEmpty()) return List.of();
+
+        Map<Long, String> sedesMap = loadSedesMapForUsers(users);
+        Map<Long, String> areasMap = loadAreasMapForUsers(users);
+
+        return users.stream()
+                .map(u -> mapToResponseDtoConContexto(u, sedesMap, areasMap))
+                .collect(Collectors.toList());
+    }
+
+    private Map<Long, String> loadSedesMapForUsers(List<User> users) {
+        List<Long> sedeIds = users.stream()
+                .map(User::getSedeId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (sedeIds.isEmpty()) return java.util.Collections.emptyMap();
+        return sedeRepository.findAllById(sedeIds).stream()
+                .collect(Collectors.toMap(Sede::getId, Sede::getName));
+    }
+
+    private Map<Long, String> loadAreasMapForUsers(List<User> users) {
+        List<Long> areaIds = users.stream()
+                .map(User::getAreaId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (areaIds.isEmpty()) return java.util.Collections.emptyMap();
+        return areaRepository.findAllById(areaIds).stream()
+                .collect(Collectors.toMap(Area::getId, Area::getName));
+    }
+
+    private UserResponseDto mapToResponseDtoConContexto(User user, Map<Long, String> sedesMap, Map<Long, String> areasMap) {
+        Long areaId = user.getAreaId();
+        Long sedeId = user.getSedeId();
+        return UserResponseDto.builder()
+                .id(user.getId())
+                .username(orEmpty(user.getUsername()))
+                .email(orEmpty(user.getEmail()))
+                .name(orEmpty(user.getName()))
+                .lastName(orEmpty(user.getLastName()))
+                .dni(orEmpty(user.getDni()))
+                .role(user.getRoleId() != null ? user.getRoleId() : 0L)
+                .roleName(orEmpty(user.getRoleName()))
+                .active(user.getActive() != null ? user.getActive() : false)
+                .lastLogin(user.getLastLogin())
+                .createdAt(user.getCreatedAt())
+                .areaId(areaId)
+                .areaNombre(areaId != null ? areasMap.get(areaId) : null)
+                .sedeId(sedeId)
+                .sedeNombre(sedeId != null ? sedesMap.get(sedeId) : null)
+                .build();
+    }
+
+    @Override
     public List<UsuarioResumenDto> findAllResumen() {
         List<User> users = userRepository.findByActiveWithRole(true);
         AreaMaps areaMaps = loadAreaMaps();

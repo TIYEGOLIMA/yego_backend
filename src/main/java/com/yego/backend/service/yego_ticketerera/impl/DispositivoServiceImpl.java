@@ -3,8 +3,11 @@ package com.yego.backend.service.yego_ticketerera.impl;
 import com.yego.backend.entity.yego_ticketerera.api.request.CrearDispositivoRequest;
 import com.yego.backend.entity.yego_ticketerera.api.response.DispositivoResponse;
 import com.yego.backend.entity.yego_ticketerera.entities.Dispositivo;
+import com.yego.backend.entity.yego_ticketerera.entities.Dispositivo.TipoDispositivo;
+import com.yego.backend.entity.yego_ticketerera.entities.ModuloAtencion;
 import com.yego.backend.entity.yego_ticketerera.entities.Sede;
 import com.yego.backend.repository.yego_ticketerera.DispositivoRepository;
+import com.yego.backend.repository.yego_ticketerera.ModuloAtencionRepository;
 import com.yego.backend.repository.yego_ticketerera.SedeRepository;
 import com.yego.backend.service.yego_ticketerera.DispositivoService;
 import io.jsonwebtoken.Jwts;
@@ -12,9 +15,11 @@ import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
@@ -22,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +36,7 @@ public class DispositivoServiceImpl implements DispositivoService {
 
     private final DispositivoRepository dispositivoRepository;
     private final SedeRepository sedeRepository;
+    private final ModuloAtencionRepository moduloAtencionRepository;
     private final BCryptPasswordEncoder passwordEncoder;
 
     @Value("${jwt.secret}")
@@ -45,91 +52,106 @@ public class DispositivoServiceImpl implements DispositivoService {
     @Override
     @Transactional(readOnly = true)
     public List<DispositivoResponse> listarDispositivos() {
-        return dispositivoRepository.findByActiveTrueOrderByNameAsc()
-                .stream()
-                .map(d -> {
-                    String sedeNombre = sedeRepository.findById(d.getSedeId())
-                            .map(Sede::getName).orElse(null);
-                    return DispositivoResponse.from(d, sedeNombre);
-                })
-                .toList();
-    }
+        List<Dispositivo> dispositivos = dispositivoRepository.findByActiveTrueOrderByNameAsc();
+        if (dispositivos.isEmpty()) return List.of();
 
-    @Override
-    @Transactional(readOnly = true)
-    public List<DispositivoResponse> listarDispositivosPorSede(Long sedeId) {
-        String sedeNombre = sedeRepository.findById(sedeId).map(Sede::getName).orElse(null);
-        return dispositivoRepository.findBySedeIdAndActiveTrueOrderByNameAsc(sedeId)
-                .stream()
-                .map(d -> DispositivoResponse.from(d, sedeNombre))
-                .toList();
-    }
+        Map<Long, String> sedesMap = cargarSedesPorIds(
+                dispositivos.stream().map(Dispositivo::getSedeId).collect(Collectors.toSet()));
+        Map<Long, String> modulosMap = cargarModulosPorIds(
+                dispositivos.stream()
+                        .map(Dispositivo::getModuleId)
+                        .filter(java.util.Objects::nonNull)
+                        .collect(Collectors.toSet()));
 
-    @Override
-    @Transactional(readOnly = true)
-    public DispositivoResponse obtenerDispositivo(Long id) {
-        Dispositivo d = dispositivoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Dispositivo no encontrado con ID: " + id));
-        String sedeNombre = sedeRepository.findById(d.getSedeId()).map(Sede::getName).orElse(null);
-        return DispositivoResponse.from(d, sedeNombre);
+        return dispositivos.stream()
+                .map(d -> DispositivoResponse.from(
+                        d,
+                        sedesMap.get(d.getSedeId()),
+                        d.getModuleId() != null ? modulosMap.get(d.getModuleId()) : null))
+                .toList();
     }
 
     @Override
     @Transactional
     public DispositivoResponse crearDispositivo(CrearDispositivoRequest request) {
-        sedeRepository.findById(request.getSedeId())
-                .orElseThrow(() -> new IllegalArgumentException("Sede no encontrada con ID: " + request.getSedeId()));
+        Sede sede = obtenerSedeOFalla(request.getSedeId());
+        ModuloAtencion modulo = validarModuloParaDispositivo(request.getType(), request.getModuleId(), sede.getId());
 
         String rawToken = generarTokenAcceso();
-        String hashedToken = passwordEncoder.encode(rawToken);
-
-        Dispositivo dispositivo = Dispositivo.builder()
+        Dispositivo saved = dispositivoRepository.save(Dispositivo.builder()
                 .name(request.getName())
                 .type(request.getType())
-                .sedeId(request.getSedeId())
-                .moduleId(request.getModuleId())
+                .sedeId(sede.getId())
+                .moduleId(modulo != null ? modulo.getId() : null)
                 .description(request.getDescription())
-                .accessToken(hashedToken)
+                .accessToken(passwordEncoder.encode(rawToken))
                 .active(true)
-                .build();
+                .build());
 
-        Dispositivo saved = dispositivoRepository.save(dispositivo);
-        log.info("[Dispositivo] Creado: {} tipo={} sede={}", saved.getName(), saved.getType(), saved.getSedeId());
+        log.info("[Dispositivo] Creado: {} tipo={} sede={} modulo={}",
+                saved.getName(), saved.getType(), saved.getSedeId(), saved.getModuleId());
 
-        String sedeNombre = sedeRepository.findById(saved.getSedeId()).map(Sede::getName).orElse(null);
-        DispositivoResponse response = DispositivoResponse.from(saved, sedeNombre);
-        // Retornar el token en plaintext solo en la creación
-        response.setDescription(response.getDescription() != null
-                ? response.getDescription() + " | TOKEN: " + rawToken
-                : "TOKEN: " + rawToken);
+        DispositivoResponse response = DispositivoResponse.from(
+                saved, sede.getName(), modulo != null ? modulo.getName() : null);
+        response.setAccessTokenPlain(rawToken);
         return response;
     }
 
     @Override
     @Transactional
     public DispositivoResponse actualizarDispositivo(Long id, CrearDispositivoRequest request) {
-        Dispositivo dispositivo = dispositivoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Dispositivo no encontrado con ID: " + id));
-
-        sedeRepository.findById(request.getSedeId())
-                .orElseThrow(() -> new IllegalArgumentException("Sede no encontrada con ID: " + request.getSedeId()));
+        Dispositivo dispositivo = obtenerDispositivoOFalla(id);
+        Sede sede = obtenerSedeOFalla(request.getSedeId());
+        ModuloAtencion modulo = validarModuloParaDispositivo(request.getType(), request.getModuleId(), sede.getId());
 
         dispositivo.setName(request.getName());
         dispositivo.setType(request.getType());
-        dispositivo.setSedeId(request.getSedeId());
-        dispositivo.setModuleId(request.getModuleId());
+        dispositivo.setSedeId(sede.getId());
+        dispositivo.setModuleId(modulo != null ? modulo.getId() : null);
         dispositivo.setDescription(request.getDescription());
 
         Dispositivo saved = dispositivoRepository.save(dispositivo);
+        return DispositivoResponse.from(saved, sede.getName(), modulo != null ? modulo.getName() : null);
+    }
+
+    @Override
+    @Transactional
+    public DispositivoResponse regenerarTokenAcceso(Long id) {
+        Dispositivo dispositivo = obtenerDispositivoOFalla(id);
+
+        String rawToken = generarTokenAcceso();
+        dispositivo.setAccessToken(passwordEncoder.encode(rawToken));
+        Dispositivo saved = dispositivoRepository.save(dispositivo);
+        log.info("[Dispositivo] Token regenerado id={}", id);
+
         String sedeNombre = sedeRepository.findById(saved.getSedeId()).map(Sede::getName).orElse(null);
-        return DispositivoResponse.from(saved, sedeNombre);
+        String moduleNombre = saved.getModuleId() != null
+                ? moduloAtencionRepository.findById(saved.getModuleId()).map(ModuloAtencion::getName).orElse(null)
+                : null;
+
+        DispositivoResponse response = DispositivoResponse.from(saved, sedeNombre, moduleNombre);
+        response.setAccessTokenPlain(rawToken);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public DispositivoResponse asignarModulo(Long dispositivoId, Long moduleId) {
+        Dispositivo dispositivo = obtenerDispositivoOFalla(dispositivoId);
+        ModuloAtencion modulo = validarModuloParaDispositivo(dispositivo.getType(), moduleId, dispositivo.getSedeId());
+
+        dispositivo.setModuleId(modulo != null ? modulo.getId() : null);
+        Dispositivo saved = dispositivoRepository.save(dispositivo);
+        log.info("[Dispositivo] Módulo {} -> dispositivo {}", saved.getModuleId(), saved.getId());
+
+        String sedeNombre = sedeRepository.findById(saved.getSedeId()).map(Sede::getName).orElse(null);
+        return DispositivoResponse.from(saved, sedeNombre, modulo != null ? modulo.getName() : null);
     }
 
     @Override
     @Transactional
     public void desactivarDispositivo(Long id) {
-        Dispositivo dispositivo = dispositivoRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Dispositivo no encontrado con ID: " + id));
+        Dispositivo dispositivo = obtenerDispositivoOFalla(id);
         dispositivo.setActive(false);
         dispositivoRepository.save(dispositivo);
         log.info("[Dispositivo] Desactivado id={}", id);
@@ -138,20 +160,16 @@ public class DispositivoServiceImpl implements DispositivoService {
     @Override
     @Transactional(readOnly = true)
     public Map<String, Object> autenticarDispositivo(String rawAccessToken) {
-        // Buscar todos los dispositivos activos y comparar con BCrypt
         Dispositivo dispositivo = dispositivoRepository.findByActiveTrueOrderByNameAsc()
                 .stream()
                 .filter(d -> passwordEncoder.matches(rawAccessToken, d.getAccessToken()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Token de acceso inválido"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token de acceso inválido"));
 
-        String sedeNombre = sedeRepository.findById(dispositivo.getSedeId())
-                .map(Sede::getName).orElse(null);
-
-        String jwt = generarJwtDispositivo(dispositivo);
+        String sedeNombre = sedeRepository.findById(dispositivo.getSedeId()).map(Sede::getName).orElse(null);
 
         Map<String, Object> result = new HashMap<>();
-        result.put("accessToken", jwt);
+        result.put("accessToken", generarJwtDispositivo(dispositivo));
         result.put("dispositivoId", dispositivo.getId());
         result.put("nombre", dispositivo.getName());
         result.put("tipo", dispositivo.getType());
@@ -165,6 +183,54 @@ public class DispositivoServiceImpl implements DispositivoService {
     @Override
     public String generarTokenAcceso() {
         return "DISP-" + UUID.randomUUID().toString().replace("-", "").toUpperCase();
+    }
+
+    private Dispositivo obtenerDispositivoOFalla(Long id) {
+        return dispositivoRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Dispositivo no encontrado con ID: " + id));
+    }
+
+    private Sede obtenerSedeOFalla(Long sedeId) {
+        if (sedeId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La sede es obligatoria");
+        }
+        return sedeRepository.findById(sedeId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sede no encontrada con ID: " + sedeId));
+    }
+
+    /**
+     * Solo las {@code TABLET} de calificación pueden tener un módulo asignado, y este debe pertenecer
+     * a la misma sede del dispositivo. Devuelve el módulo cargado o {@code null} si no aplica.
+     */
+    private ModuloAtencion validarModuloParaDispositivo(TipoDispositivo tipo, Long moduleId, Long sedeId) {
+        if (moduleId == null) return null;
+
+        if (tipo != TipoDispositivo.TABLET) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Solo las Tablet de Calificación pueden tener un módulo asignado");
+        }
+
+        ModuloAtencion modulo = moduloAtencionRepository.findById(moduleId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Módulo no encontrado con ID: " + moduleId));
+
+        if (!sedeId.equals(modulo.getSedeId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El módulo no pertenece a la sede seleccionada");
+        }
+        return modulo;
+    }
+
+    private Map<Long, String> cargarSedesPorIds(java.util.Set<Long> ids) {
+        if (ids.isEmpty()) return Map.of();
+        return sedeRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(Sede::getId, Sede::getName));
+    }
+
+    private Map<Long, String> cargarModulosPorIds(java.util.Set<Long> ids) {
+        if (ids.isEmpty()) return Map.of();
+        return moduloAtencionRepository.findAllById(ids).stream()
+                .collect(Collectors.toMap(ModuloAtencion::getId, ModuloAtencion::getName));
     }
 
     private String generarJwtDispositivo(Dispositivo dispositivo) {

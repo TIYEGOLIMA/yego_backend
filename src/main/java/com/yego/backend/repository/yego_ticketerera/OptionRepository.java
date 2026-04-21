@@ -6,15 +6,10 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-/**
- * Repository para la entidad Option del sistema YEGO Ticketerera
- */
 @Repository
 public interface OptionRepository extends JpaRepository<Option, Long> {
-    
-    List<Option> findByActiveTrueOrderByPriorityAsc();
-    
+
     List<Option> findByParentIdIsNullAndActiveTrueOrderByPriorityAsc();
-    
+
     List<Option> findByParentIdAndActiveTrueOrderByPriorityAsc(Long parentId);
 }

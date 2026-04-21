@@ -42,6 +42,13 @@ public class UserController {
         return ResponseEntity.ok(userService.findAllResumen());
     }
 
+    @GetMapping("/by-role/{roleName}")
+    public ResponseEntity<List<UserResponseDto>> findByRoleName(
+            @PathVariable String roleName,
+            @RequestParam(required = false) Boolean active) {
+        return ResponseEntity.ok(userService.findByRoleName(roleName, active));
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<?> findOne(@PathVariable Long id) {
         return ResponseEntity.ok(userService.findOne(id));

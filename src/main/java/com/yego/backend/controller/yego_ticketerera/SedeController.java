@@ -5,7 +5,6 @@ import com.yego.backend.entity.yego_ticketerera.api.response.SedeResponse;
 import com.yego.backend.service.yego_ticketerera.SedeService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,7 +13,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/ticketera/sedes")
 @RequiredArgsConstructor
-@Slf4j
 @CrossOrigin(origins = "*")
 public class SedeController {
 
@@ -32,14 +30,12 @@ public class SedeController {
 
     @PostMapping
     public ResponseEntity<SedeResponse> crear(@Valid @RequestBody CrearSedeRequest request) {
-        SedeResponse response = sedeService.crearSede(request);
-        log.info("[SedeController] Sede creada: {}", response.getName());
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(sedeService.crearSede(request));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<SedeResponse> actualizar(@PathVariable Long id,
-                                                    @Valid @RequestBody CrearSedeRequest request) {
+                                                   @Valid @RequestBody CrearSedeRequest request) {
         return ResponseEntity.ok(sedeService.actualizarSede(id, request));
     }
 

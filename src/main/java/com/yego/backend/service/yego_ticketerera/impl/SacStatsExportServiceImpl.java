@@ -32,8 +32,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         log.info("Exportando estadísticas de SAC a Excel - Fecha inicio: {}, Fecha fin: {}", fechaInicio, fechaFin);
         
         try {
-            // Obtener estadísticas con filtro de fecha (si se proporcionan)
-            SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin);
+            SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin, null);
             ByteArrayOutputStream excelData = generarExcel(stats, fechaInicio, fechaFin);
             
             HttpHeaders headers = new HttpHeaders();
@@ -62,8 +61,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
                 return ResponseEntity.badRequest().build();
             }
             
-            // Obtener estadísticas con filtro de fecha (si se proporcionan)
-            SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin);
+            SacStatsResponse stats = sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin, null);
             ByteArrayOutputStream imageData = generarImagen(stats, formato, fechaInicio, fechaFin);
             
             HttpHeaders headers = new HttpHeaders();

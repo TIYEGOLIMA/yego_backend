@@ -29,40 +29,31 @@ public interface TicketService {
     Ticket iniciarAtencion(Long ticketId, Long agentId);
     
     long contarTicketsPorEstado(TicketStatus status);
-    
-    // Método simplificado para el controlador
-    long contarTicketsPorEstado(String status);
-    
+
     List<Ticket> obtenerTicketsEnEsperaPorModulo(Long moduleId);
-    
+
     long contarTicketsPorModuloYEstado(Long moduleId, TicketStatus status);
-    
-    // Método simplificado para el controlador
+
     long contarTicketsPorModuloYEstado(Long moduleId, String status);
-    
-    // Asignación automática de tickets para agentes
+
     Ticket obtenerOAsignarTicketParaAgente(Long agentId);
-    
-    // Convertir tickets con información de categorías
+
     List<TicketWithCategoryResponse> convertirTicketsConCategorias(List<Ticket> tickets);
-    
+
     TicketWithCategoryResponse convertirTicketConCategorias(Ticket ticket);
-    
-    // Métodos simplificados para el controlador (sin lógica de negocio en el controlador)
-    List<TicketWithCategoryResponse> obtenerTodosLosTicketsConCategorias();
-    
-    List<TicketWithCategoryResponse> obtenerTicketsEnEsperaConCategorias();
-    
-    List<TicketWithCategoryResponse> obtenerTicketsLlamadosConCategorias();
-    
-    List<TicketWithCategoryResponse> obtenerTicketsEnProgresoConCategorias();
-    
-    List<TicketWithCategoryResponse> obtenerTicketsCompletadosConCategorias();
 
-    // Métodos filtrados por sede
-    List<TicketWithCategoryResponse> obtenerTodosLosTicketsConCategoriasPorSede(Long sedeId);
+    /**
+     * Lista todos los tickets activos. Si {@code sedeId} es {@code null} no se filtra por sede.
+     */
+    List<TicketWithCategoryResponse> obtenerTodosLosTicketsConCategorias(Long sedeId);
 
-    List<TicketWithCategoryResponse> obtenerTicketsPorEstadoYSede(String status, Long sedeId);
+    /**
+     * Lista los tickets de un estado dado. Si {@code sedeId} es {@code null} no se filtra por sede.
+     */
+    List<TicketWithCategoryResponse> obtenerTicketsPorEstado(String status, Long sedeId);
 
-    long contarTicketsPorEstadoYSede(String status, Long sedeId);
+    /**
+     * Cuenta los tickets de un estado dado. Si {@code sedeId} es {@code null} no se filtra por sede.
+     */
+    long contarTicketsPorEstado(String status, Long sedeId);
 }

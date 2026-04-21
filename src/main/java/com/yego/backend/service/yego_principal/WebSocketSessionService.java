@@ -34,6 +34,20 @@ public class WebSocketSessionService {
     private final Map<String, String> sessionUserIds = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> sessionSubscriptions = new ConcurrentHashMap<>();
     private final Map<String, LocalDateTime> sessionLastActivity = new ConcurrentHashMap<>();
+    private final Set<String> deviceSessions = ConcurrentHashMap.newKeySet();
+
+    public void markAsDevice(String sessionId, String deviceId) {
+        if (sessionId == null) return;
+        deviceSessions.add(sessionId);
+        if (deviceId != null) {
+            sessionUserIds.put(sessionId, deviceId);
+        }
+        updateLastActivity(sessionId);
+    }
+
+    public boolean isDeviceSession(String sessionId) {
+        return sessionId != null && deviceSessions.contains(sessionId);
+    }
     
     public void saveUserModules(String sessionId, List<ModuleResponse> modules, String userId) {
         if (sessionId != null && modules != null) {
@@ -137,6 +151,7 @@ public class WebSocketSessionService {
             sessionUserIds.remove(sessionId);
             sessionSubscriptions.remove(sessionId);
             sessionLastActivity.remove(sessionId);
+            deviceSessions.remove(sessionId);
             log.debug("🔌 [WebSocket] Sesión {} removida (Total: {})", sessionId, sessionModules.size());
         }
     }

@@ -4,171 +4,88 @@ import com.yego.backend.entity.yego_principal.api.request.*;
 import com.yego.backend.entity.yego_principal.api.response.*;
 import com.yego.backend.service.yego_principal.AuthService;
 import com.yego.backend.service.yego_principal.ModuleService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
-
 import java.util.List;
 
-/**
- * Controlador REST para autenticación del sistema YEGO Principal
- * Equivalente a AuthController de NestJS
- */
-
-@Slf4j
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
-    
+
     private final AuthService authService;
     private final ModuleService moduleService;
-    
-    /**
-     * Iniciar sesión
-     */
+
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginDto loginDto, 
-                                  HttpServletRequest request) {
-        LoginTokenResult result = authService.login(loginDto, request);
-        LoginResponseDto body = LoginResponseDto.builder()
-                .message(result.message())
-                .accessToken(result.accessToken())
-                .user(result.user())
-                .build();
+    public ResponseEntity<LoginResponseDto> login(@Valid @RequestBody LoginDto loginDto,
+                                                  HttpServletRequest request) {
+        LoginResponseDto body = authService.loginResponse(loginDto, request);
         return ResponseEntity.ok()
-                .header("X-Access-Token", result.accessToken())
+                .header("X-Access-Token", body.getAccessToken())
                 .body(body);
     }
-    
-    /**
-     * Renovar token JWT
-     */
+
     @PostMapping("/refresh")
-    public ResponseEntity<?> refreshToken(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(401).body("Token de autorización requerido");
-        }
-        
-        String token = authHeader.substring(7);
-        LoginTokenResult result = authService.refreshToken(token, request);
-        LoginResponseDto body = LoginResponseDto.builder()
-                .message(result.message())
-                .accessToken(result.accessToken())
-                .user(result.user())
-                .build();
+    public ResponseEntity<LoginResponseDto> refreshToken(HttpServletRequest request) {
+        LoginResponseDto body = authService.refreshFromAuthorizationHeader(
+                request.getHeader(HttpHeaders.AUTHORIZATION), request);
         return ResponseEntity.ok()
-                .header("X-Access-Token", result.accessToken())
+                .header("X-Access-Token", body.getAccessToken())
                 .body(body);
     }
-    
-    /**
-     * Registrar nuevo usuario
-     */
+
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterDto registerDto) {
-        UserResponseDto response = authService.register(registerDto);
-        return ResponseEntity.status(201).body(response);
+    public ResponseEntity<UserResponseDto> register(@Valid @RequestBody RegisterDto registerDto) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(authService.register(registerDto));
     }
-    
-    /**
-     * Obtener perfil del usuario autenticado
-     */
+
     @GetMapping("/profile")
-    public ResponseEntity<?> getProfile(Authentication authentication) {
+    public ResponseEntity<UserProfileDto> getProfile(Authentication authentication) {
         Long userId = Long.parseLong(authentication.getName());
-        UserProfileDto profile = authService.getUserProfile(userId);
-        return ResponseEntity.ok(profile);
+        return ResponseEntity.ok(authService.getUserProfile(userId));
     }
-    
-    /**
-     * Cambiar contraseña del usuario autenticado
-     */
+
     @PostMapping("/change-password")
-    public ResponseEntity<?> changePassword(@Valid @RequestBody ChangePasswordDto changePasswordDto,
-                                           Authentication authentication) {
-        try {
-            Long userId = Long.parseLong(authentication.getName());
-            authService.changePassword(userId, changePasswordDto.getCurrentPassword(), 
-                    changePasswordDto.getNewPassword());
-            return ResponseEntity.ok().body("Contraseña cambiada exitosamente");
-        } catch (Exception e) {
-            log.error("Error al cambiar contraseña: {}", e.getMessage());
-            throw e; // Re-lanzar para que Spring maneje la ResponseStatusException
-        }
+    public ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordDto changePasswordDto,
+                                               Authentication authentication) {
+        Long userId = Long.parseLong(authentication.getName());
+        authService.changePassword(userId, changePasswordDto.getCurrentPassword(),
+                changePasswordDto.getNewPassword());
+        return ResponseEntity.noContent().build();
     }
-    
-    /**
-     * Cambiar contraseña inicial (p. ej. desde modal de cambio obligatorio)
-     */
+
     @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@Valid @RequestBody ChangePasswordDto changePasswordDto,
-                                            HttpServletRequest request) {
-        try {
-            authService.resetPassword(changePasswordDto, request);
-            return ResponseEntity.ok().body("Contraseña cambiada exitosamente");
-        } catch (Exception e) {
-            log.error("Error al cambiar contraseña inicial: {}", e.getMessage());
-            throw e; // Re-lanzar para que Spring maneje la ResponseStatusException
-        }
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ChangePasswordDto changePasswordDto,
+                                              HttpServletRequest request) {
+        authService.resetPassword(changePasswordDto, request);
+        return ResponseEntity.noContent().build();
     }
-    
-    /**
-     * Cerrar sesión completa y liberar módulo
-     */
+
     @PostMapping("/logout")
-    public ResponseEntity<?> cerrarSesion(HttpServletRequest request, 
-                                         Authentication authentication) {
-        String authHeader = request.getHeader("Authorization");
-        String token = authHeader != null ? authHeader.replace("Bearer ", "") : "";
-        
-        Long userId = null;
-        if (authentication != null && authentication.isAuthenticated()) {
-            userId = Long.parseLong(authentication.getName());
-        }
-        
-        authService.cerrarSesion(userId, token);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Void> cerrarSesion(HttpServletRequest request, Authentication authentication) {
+        Long userId = (authentication != null && authentication.isAuthenticated())
+                ? Long.parseLong(authentication.getName())
+                : null;
+        authService.cerrarSesionConAuthorizationHeader(userId, request.getHeader(HttpHeaders.AUTHORIZATION));
+        return ResponseEntity.noContent().build();
     }
-    
-    /**
-     * Forzar logout sin autenticación (para casos de emergencia)
-     */
+
     @PostMapping("/force-logout")
-    public ResponseEntity<?> forceLogout(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        String token = authHeader != null ? authHeader.replace("Bearer ", "") : "";
-        
-        if (!token.isEmpty()) {
-            authService.cerrarSesion(null, token);
-        }
-        
-        return ResponseEntity.ok().build();
+    public ResponseEntity<Void> forceLogout(HttpServletRequest request) {
+        authService.cerrarSesionConAuthorizationHeader(null, request.getHeader(HttpHeaders.AUTHORIZATION));
+        return ResponseEntity.noContent().build();
     }
-    
-    /**
-     * Obtener módulos permitidos para el usuario autenticado según su rol
-     * El frontend puede usar este endpoint para mostrar solo las opciones disponibles
-     */
+
     @GetMapping("/my-modules")
     public ResponseEntity<List<ModuleResponse>> getMyModules(Authentication authentication) {
-        try {
-            Long userId = Long.parseLong(authentication.getName());
-            log.info("📋 [AuthController] Obteniendo módulos para usuario ID: {}", userId);
-            List<ModuleResponse> modules = moduleService.obtenerModulosPorUsuario(userId);
-            log.info("✅ [AuthController] Devueltos {} módulos para usuario {}", modules.size(), userId);
-            return ResponseEntity.ok(modules);
-        } catch (Exception e) {
-            log.error("❌ [AuthController] Error obteniendo módulos del usuario: {}", e.getMessage());
-            return ResponseEntity.internalServerError().build();
-        }
+        Long userId = Long.parseLong(authentication.getName());
+        return ResponseEntity.ok(moduleService.obtenerModulosPorUsuario(userId));
     }
 }
-
