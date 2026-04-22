@@ -48,6 +48,10 @@ public class Dispositivo {
     @Builder.Default
     private Boolean active = true;
 
+    @Column(name = "token_version", nullable = false)
+    @Builder.Default
+    private Integer tokenVersion = 0;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -58,6 +62,7 @@ public class Dispositivo {
     protected void onCreate() {
         createdAt = LocalDateTime.now(ZoneId.of("America/Lima"));
         if (active == null) active = true;
+        if (tokenVersion == null) tokenVersion = 0;
     }
 
     @PreUpdate

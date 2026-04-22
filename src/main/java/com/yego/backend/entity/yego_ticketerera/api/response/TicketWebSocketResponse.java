@@ -21,9 +21,10 @@ public class TicketWebSocketResponse {
     private String ticketNumber;
     private Ticket.TicketStatus status;
     private LocalDateTime createdAt;
-    private Integer priority; // Cambiado de Ticket.Priority a Integer
+    private Integer priority;
     private Long userId;
     private Long moduleId;
+    private Long sedeId;
     private String licenseNumber;
     private Long optionId;
     private String categoryName;

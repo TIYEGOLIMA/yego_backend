@@ -23,7 +23,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -41,7 +43,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
     @Transactional
     public ResponseEntity<Map<String, Object>> liberarModuloDelUsuario(Long userId) {
         Optional<QueueAgent> queueAgent = queueAgentRepository.findByUserIdAndIsActiveTrue(userId);
-        if (queueAgent.isPresent()) {
+        if (queueAgent.isPresent() && "OCUPADO".equals(queueAgent.get().getStatus())) {
             QueueAgent agent = queueAgent.get();
             Long moduleId = agent.getModuleId();
 
@@ -50,7 +52,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
             agent.setIsActive(false);
 
             queueAgentRepository.save(agent);
-            moduloAtencionService.cambiarEstadoModulo(moduleId, false);
+            moduloAtencionService.cambiarEstadoModulo(moduleId, true);
 
             ticketNotificationHandler.enviarModulosActualizados(obtenerModulosDisponiblesYOcupados());
 
@@ -73,7 +75,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
             agent.setIsActive(false);
 
             queueAgentRepository.save(agent);
-            moduloAtencionService.cambiarEstadoModulo(moduleId, false);
+            moduloAtencionService.cambiarEstadoModulo(moduleId, true);
 
             ticketNotificationHandler.enviarModulosActualizados(obtenerModulosDisponiblesYOcupados());
 
@@ -86,15 +88,34 @@ public class QueueAgentServiceImpl implements QueueAgentService {
     @Override
     @Transactional(readOnly = true)
     public ModulosEstadoResponse obtenerModulosDisponiblesYOcupados() {
-        List<ModuloAtencionResponse> modulosDisponibles =
-                moduloAtencionService.obtenerTodosLosModulosActivosResponse();
-
         List<QueueAgent> agentesOcupados = queueAgentRepository.findByStatusAndIsActiveTrue("OCUPADO");
+
+        Set<Long> idsModulosOcupados = agentesOcupados.stream()
+                .map(QueueAgent::getModuleId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        List<ModuloAtencionResponse> modulosDisponibles = moduloAtencionService
+                .obtenerTodosLosModulosActivosResponse()
+                .stream()
+                .filter(m -> m.getId() != null && !idsModulosOcupados.contains(m.getId()))
+                .toList();
 
         List<Long> userIds = agentesOcupados.stream()
                 .map(QueueAgent::getUserId)
                 .distinct()
                 .toList();
+
+        List<Long> moduleIdsOcupados = agentesOcupados.stream()
+                .map(QueueAgent::getModuleId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        Map<Long, String> nombresModulo = moduleIdsOcupados.isEmpty()
+                ? Map.of()
+                : moduloAtencionRepository.findAllById(moduleIdsOcupados).stream()
+                        .collect(Collectors.toMap(ModuloAtencion::getId, ModuloAtencion::getName));
 
         Map<Long, String> usuariosMap = userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(
@@ -105,6 +126,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
         List<ModuloOcupadoResponse> modulosOcupados = agentesOcupados.stream()
                 .map(agente -> ModuloOcupadoResponse.builder()
                         .moduleId(agente.getModuleId())
+                        .moduleName(nombresModulo.get(agente.getModuleId()))
                         .userId(agente.getUserId())
                         .userName(usuariosMap.getOrDefault(agente.getUserId(), "Usuario " + agente.getUserId()))
                         .status(agente.getStatus())

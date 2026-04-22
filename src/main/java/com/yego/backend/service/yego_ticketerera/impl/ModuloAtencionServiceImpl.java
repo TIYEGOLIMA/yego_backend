@@ -150,16 +150,14 @@ public class ModuloAtencionServiceImpl implements ModuloAtencionService {
                     .moduloAsignado(moduloAsignadoOpt.get())
                     .build();
         } else {
-            List<ModuloAtencion> disponibles = (sedeId != null)
-                    ? moduloAtencionRepository.findBySedeIdAndIsActiveTrueOrderByNameAsc(sedeId)
-                    : moduloAtencionRepository.findByIsActiveTrueOrderByNameAsc();
-            String sedeNombre = resolverSedeNombre(sedeId);
+            List<ModuloAtencionResponse> disponiblesFiltrados =
+                    estadoModulos.getModulosDisponibles().stream()
+                            .filter(m -> sedeId == null || Objects.equals(sedeId, m.getSedeId()))
+                            .toList();
 
             response = ModuloUsuarioResponse.builder()
                     .tieneModuloAsignado(false)
-                    .modulosDisponibles(disponibles.stream()
-                            .map(m -> ModuloAtencionResponse.fromModuloAtencion(m, sedeNombre))
-                            .toList())
+                    .modulosDisponibles(disponiblesFiltrados)
                     .modulosOcupados(estadoModulos.getModulosOcupados())
                     .build();
         }

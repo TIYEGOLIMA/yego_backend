@@ -1,6 +1,8 @@
 package com.yego.backend.config;
 
 import com.yego.backend.entity.yego_principal.api.response.ModuleResponse;
+import com.yego.backend.entity.yego_ticketerera.entities.Dispositivo;
+import com.yego.backend.repository.yego_ticketerera.DispositivoRepository;
 import com.yego.backend.service.yego_principal.ModuleService;
 import com.yego.backend.service.yego_principal.WebSocketModuleMappingService;
 import com.yego.backend.service.yego_principal.WebSocketSessionService;
@@ -39,6 +41,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     private final ModuleService moduleService;
     private final WebSocketSessionService webSocketSessionService;
     private final WebSocketModuleMappingService webSocketModuleMappingService;
+    private final DispositivoRepository dispositivoRepository;
     
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -94,6 +97,20 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
 
                         Integer dispositivoIdInt = claims.get("dispositivoId", Integer.class);
                         if (dispositivoIdInt != null) {
+                            Integer tokenVersionClaim = claims.get("tokenVersion", Integer.class);
+                            Dispositivo dispositivo = dispositivoRepository.findById(dispositivoIdInt.longValue()).orElse(null);
+                            if (dispositivo == null || Boolean.FALSE.equals(dispositivo.getActive())) {
+                                log.warn("[WebSocket] Dispositivo no encontrado o inactivo: {}", dispositivoIdInt);
+                                throw new org.springframework.messaging.MessageDeliveryException("Dispositivo inactivo");
+                            }
+                            int versionActual = dispositivo.getTokenVersion() != null ? dispositivo.getTokenVersion() : 0;
+                            int versionToken = tokenVersionClaim != null ? tokenVersionClaim : 0;
+                            if (versionActual != versionToken) {
+                                log.warn("[WebSocket] Token revocado para dispositivo {} (token={}, actual={})",
+                                        dispositivoIdInt, versionToken, versionActual);
+                                throw new org.springframework.messaging.MessageDeliveryException("Token revocado");
+                            }
+
                             String deviceId = "device-" + dispositivoIdInt;
                             String tipo = claims.get("tipo", String.class);
                             UsernamePasswordAuthenticationToken deviceAuth =

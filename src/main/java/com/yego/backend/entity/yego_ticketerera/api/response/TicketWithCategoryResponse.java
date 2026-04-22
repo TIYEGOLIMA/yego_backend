@@ -21,6 +21,7 @@ public class TicketWithCategoryResponse {
     private Long userId;
     private Long optionId;
     private Long moduleId;
+    private Long sedeId;
     private Long agentId;
     private String licenseNumber;
     private String status;

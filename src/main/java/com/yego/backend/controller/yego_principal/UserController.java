@@ -49,6 +49,7 @@ public class UserController {
         return ResponseEntity.ok(userService.findByRoleName(roleName, active));
     }
 
+
     @GetMapping("/{id}")
     public ResponseEntity<?> findOne(@PathVariable Long id) {
         return ResponseEntity.ok(userService.findOne(id));

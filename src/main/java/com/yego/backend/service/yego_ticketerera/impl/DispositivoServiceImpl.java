@@ -22,11 +22,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.crypto.SecretKey;
+import java.security.SecureRandom;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -121,8 +121,10 @@ public class DispositivoServiceImpl implements DispositivoService {
 
         String rawToken = generarTokenAcceso();
         dispositivo.setAccessToken(passwordEncoder.encode(rawToken));
+        int versionAnterior = dispositivo.getTokenVersion() != null ? dispositivo.getTokenVersion() : 0;
+        dispositivo.setTokenVersion(versionAnterior + 1);
         Dispositivo saved = dispositivoRepository.save(dispositivo);
-        log.info("[Dispositivo] Token regenerado id={}", id);
+        log.info("[Dispositivo] Token regenerado id={} (tokenVersion={})", id, saved.getTokenVersion());
 
         String sedeNombre = sedeRepository.findById(saved.getSedeId()).map(Sede::getName).orElse(null);
         String moduleNombre = saved.getModuleId() != null
@@ -180,9 +182,36 @@ public class DispositivoServiceImpl implements DispositivoService {
         return result;
     }
 
+    private static final char[] TOKEN_ALPHABET =
+            "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
+    private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
+    private static final int TOKEN_LENGTH = 5;
+    private static final int MAX_TOKEN_INTENTOS = 20;
+
     @Override
     public String generarTokenAcceso() {
-        return "DISP-" + UUID.randomUUID().toString().replace("-", "").toUpperCase();
+        List<Dispositivo> activos = dispositivoRepository.findByActiveTrueOrderByNameAsc();
+        for (int intento = 0; intento < MAX_TOKEN_INTENTOS; intento++) {
+            String candidato = construirTokenAleatorio();
+            boolean colisiona = activos.stream()
+                    .map(Dispositivo::getAccessToken)
+                    .filter(hash -> hash != null && !hash.isBlank())
+                    .anyMatch(hash -> passwordEncoder.matches(candidato, hash));
+            if (!colisiona) {
+                return candidato;
+            }
+        }
+        throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                "No se pudo generar un token único, intente nuevamente");
+    }
+
+    private String construirTokenAleatorio() {
+        StringBuilder sb = new StringBuilder(TOKEN_LENGTH + 5);
+        sb.append("DISP-");
+        for (int i = 0; i < TOKEN_LENGTH; i++) {
+            sb.append(TOKEN_ALPHABET[TOKEN_RANDOM.nextInt(TOKEN_ALPHABET.length)]);
+        }
+        return sb.toString();
     }
 
     private Dispositivo obtenerDispositivoOFalla(Long id) {
@@ -240,6 +269,7 @@ public class DispositivoServiceImpl implements DispositivoService {
                 .claim("sedeId", dispositivo.getSedeId())
                 .claim("tipo", dispositivo.getType().name())
                 .claim("moduleId", dispositivo.getModuleId())
+                .claim("tokenVersion", dispositivo.getTokenVersion() != null ? dispositivo.getTokenVersion() : 0)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(getSigningKey())

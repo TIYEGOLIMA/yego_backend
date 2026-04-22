@@ -17,6 +17,7 @@ import java.time.LocalDateTime;
 public class ModuloOcupadoResponse {
     
     private Long moduleId;
+    private String moduleName;
     private Long userId;
     private String userName;
     private String status;

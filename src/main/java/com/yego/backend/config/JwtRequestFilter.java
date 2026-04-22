@@ -1,5 +1,7 @@
 package com.yego.backend.config;
 
+import com.yego.backend.entity.yego_ticketerera.entities.Dispositivo;
+import com.yego.backend.repository.yego_ticketerera.DispositivoRepository;
 import com.yego.backend.service.yego_principal.AuthService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -33,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 public class JwtRequestFilter extends OncePerRequestFilter {
     
     private final AuthService authService;
+    private final DispositivoRepository dispositivoRepository;
     
     @Value("${jwt.secret}")
     private String jwtSecret;
@@ -97,6 +100,32 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                         .parseSignedClaims(jwtToken)
                         .getPayload();
                 
+                Integer dispositivoIdClaim = claims.get("dispositivoId", Integer.class);
+                if (dispositivoIdClaim != null) {
+                    Integer tokenVersionClaim = claims.get("tokenVersion", Integer.class);
+                    Dispositivo dispositivo = dispositivoRepository.findById(dispositivoIdClaim.longValue()).orElse(null);
+                    if (dispositivo == null || Boolean.FALSE.equals(dispositivo.getActive())) {
+                        log.debug("[JwtRequestFilter] Dispositivo inactivo o eliminado: {}", dispositivoIdClaim);
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"error\":\"DEVICE_REVOKED\",\"message\":\"Dispositivo desactivado\"}");
+                        return;
+                    }
+                    int versionActual = dispositivo.getTokenVersion() != null ? dispositivo.getTokenVersion() : 0;
+                    int versionToken = tokenVersionClaim != null ? tokenVersionClaim : 0;
+                    if (versionActual != versionToken) {
+                        log.debug("[JwtRequestFilter] Token revocado dispositivo={} (token={}, actual={})",
+                                dispositivoIdClaim, versionToken, versionActual);
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"error\":\"DEVICE_TOKEN_REVOKED\",\"message\":\"Sesión del dispositivo revocada\"}");
+                        return;
+                    }
+                    request.setAttribute("jwtClaims", claims);
+                    chain.doFilter(request, response);
+                    return;
+                }
+
                 username = claims.get("username", String.class);
                 String role = claims.get("role", String.class);
                 log.info("✅ [JwtRequestFilter] Usuario autenticado: {} con rol: {}", username, role);

@@ -338,6 +338,7 @@ public class TicketServiceImpl implements TicketService {
                 .userId(ticket.getUserId())
                 .optionId(ticket.getOptionId())
                 .moduleId(ticket.getModuleId())
+                .sedeId(ticket.getSedeId())
                 .agentId(ticket.getAgentId())
                 .licenseNumber(ticket.getLicenseNumber())
                 .status(ticket.getStatus().name())
