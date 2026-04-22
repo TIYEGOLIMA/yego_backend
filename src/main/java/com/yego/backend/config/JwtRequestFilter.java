@@ -160,8 +160,9 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                     response.getWriter().write("{\"error\":\"Token de autenticación requerido\"}");
                     return; // BLOQUEAR la conexión
                 }
+            } else if (esRutaAuthSinBearerEsperado(request.getRequestURI())) {
+                log.debug("[JwtRequestFilter] Sin Bearer en ruta anónima: {}", request.getRequestURI());
             } else {
-                // Para otras rutas, solo loggear warning
                 log.warn("⚠️ [JwtRequestFilter] No se recibió token Bearer para: {}", request.getRequestURI());
             }
         }
@@ -227,6 +228,15 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
     
+    private boolean esRutaAuthSinBearerEsperado(String uri) {
+        if (uri == null) {
+            return false;
+        }
+        return uri.contains("/auth/login")
+                || uri.contains("/auth/register")
+                || uri.contains("/dispositivos/auth");
+    }
+
     private Boolean validateToken(String token, UserDetails userDetails) {
         try {
             // Ya validamos el token arriba, solo verificamos que el username coincida
