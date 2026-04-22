@@ -3,7 +3,7 @@ package com.yego.backend.service.yego_api_externo;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_api_externo.api.request.YangoSummaryRequest;
-import com.yego.backend.exception.YangoWeeklyException;
+import com.yego.backend.entity.yego_api_externo.api.response.YangoDriverSnapshot;
 import com.yego.backend.entity.yego_api_externo.api.response.YangoIncomeSummary;
 import com.yego.backend.entity.yego_api_externo.api.response.YangoMatchRow;
 import com.yego.backend.entity.yego_api_externo.api.response.YangoPeriod;
@@ -11,6 +11,7 @@ import com.yego.backend.entity.yego_api_externo.api.response.YangoSuggestItem;
 import com.yego.backend.entity.yego_api_externo.api.response.YangoSuggestionsBody;
 import com.yego.backend.entity.yego_api_externo.api.response.YangoSummaryResponse;
 import com.yego.backend.entity.yego_api_externo.api.response.YangoSummaryResponse.YangoIncomeBlock;
+import com.yego.backend.exception.YangoWeeklyException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -35,8 +36,11 @@ import java.util.concurrent.Executors;
 @Service
 public class YangoWeeklyService {
 
-    /** Hilos dedicados para llamadas HTTP a Yango (no bloquear ForkJoinPool.commonPool()). */
-    private static final Executor YANGO_IO = Executors.newFixedThreadPool(6, r -> {
+    /**
+     * Hilos dedicados para llamadas HTTP a Yango (no bloquear ForkJoinPool.commonPool()).
+     * Por consulta lanzamos hasta 5 calls en paralelo (weekly, monthly, goals, details, common).
+     */
+    private static final Executor YANGO_IO = Executors.newFixedThreadPool(16, r -> {
         Thread t = new Thread(r, "yango-external-io");
         t.setDaemon(true);
         return t;
@@ -50,14 +54,20 @@ public class YangoWeeklyService {
     private final YangoClient yangoClient;
     private final ObjectMapper objectMapper;
     private final String incomeUrl;
+    private final String driverDetailsUrl;
+    private final String driverCommonUrl;
 
     public YangoWeeklyService(
             YangoClient yangoClient,
             ObjectMapper objectMapper,
-            @Value("${yego.yango.driver-income-url:https://fleet.yango.com/api/v1/cards/driver/income}") String incomeUrl) {
+            @Value("${yego.yango.driver-income-url:https://fleet.yango.com/api/v1/cards/driver/income}") String incomeUrl,
+            @Value("${yego.yango.driver-details-url:https://fleet.yango.com/api/v1/cards/driver/details}") String driverDetailsUrl,
+            @Value("${yego.yango.driver-common-url:https://fleet.yango.com/api/fleet/router/v1/cards/driver/common}") String driverCommonUrl) {
         this.yangoClient = yangoClient;
         this.objectMapper = objectMapper;
         this.incomeUrl = incomeUrl;
+        this.driverDetailsUrl = driverDetailsUrl;
+        this.driverCommonUrl = driverCommonUrl;
     }
 
     public YangoSummaryResponse summarize(YangoSummaryRequest req) {
@@ -73,6 +83,7 @@ public class YangoWeeklyService {
 
         String contractorId = resolveContractor(queryText, parkId);
 
+        // Todas las llamadas a Yango se disparan en paralelo en el mismo nivel (no anidadas).
         CompletableFuture<YangoIncomeSummary> weeklyIncomeFuture =
                 CompletableFuture.supplyAsync(() -> fetchIncome(contractorId, weeklyPeriod, parkId), YANGO_IO);
 
@@ -82,12 +93,24 @@ public class YangoWeeklyService {
         CompletableFuture<GoalsResult> goalsFuture =
                 CompletableFuture.supplyAsync(() -> fetchGoals(contractorId, parkId), YANGO_IO);
 
+        CompletableFuture<JsonNode> detailsFuture =
+                CompletableFuture.supplyAsync(
+                        () -> postDriverCardJson(driverDetailsUrl, contractorId, parkId, "details"),
+                        YANGO_IO);
+
+        CompletableFuture<JsonNode> commonFuture =
+                CompletableFuture.supplyAsync(
+                        () -> postDriverCardJson(driverCommonUrl, contractorId, parkId, "common"),
+                        YANGO_IO);
+
         YangoIncomeSummary weeklyIncome = weeklyIncomeFuture.join();
         YangoIncomeSummary monthlyIncome = monthlyIncomeFuture.join();
         GoalsResult goals = goalsFuture.join();
+        YangoDriverSnapshot driverSnapshot = buildDriverSnapshot(detailsFuture.join(), commonFuture.join());
 
         return YangoSummaryResponse.builder()
                 .resolvedContractorId(contractorId)
+                .driver(driverSnapshot)
                 .weekly(YangoIncomeBlock.builder()
                         .period(toPeriod(weeklyPeriod))
                         .incomeSummary(weeklyIncome)
@@ -167,7 +190,7 @@ public class YangoWeeklyService {
             incomeBody.put("date_to", period.dateTo);
             incomeBody.put("driver_id", contractorId);
             String incomeJson = objectMapper.writeValueAsString(incomeBody);
-            ResponseEntity<String> resp = yangoClient.postIncome(incomeUrl, incomeJson, parkId);
+            ResponseEntity<String> resp = yangoClient.postFleet(incomeUrl, incomeJson, parkId);
             if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
                 throw new YangoWeeklyException(
                         HttpStatus.BAD_GATEWAY, "YANGO_UPSTREAM_ERROR",
@@ -200,6 +223,202 @@ public class YangoWeeklyService {
     }
 
     private record GoalsResult(List<JsonNode> active, List<JsonNode> previous) {}
+
+    /** details: perfil y saldo; common: calificación (rating no suele venir en details). */
+    private static YangoDriverSnapshot buildDriverSnapshot(JsonNode details, JsonNode common) {
+        YangoDriverSnapshot fromDetails = mapDriverFromDetailsNode(details);
+        if (fromDetails != null) {
+            Double rating = readAverageRating(common != null ? common.get("driver") : null);
+            if (rating != null) {
+                fromDetails.setAverageRating(rating);
+            }
+            return fromDetails;
+        }
+        return mapDriverFromCommonNode(common);
+    }
+
+    private JsonNode postDriverCardJson(String url, String contractorId, String parkId, String logLabel) {
+        try {
+            String json = objectMapper.writeValueAsString(Map.of("driver_id", contractorId));
+            ResponseEntity<String> resp = yangoClient.postFleet(url, json, parkId);
+            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                return objectMapper.readTree(resp.getBody());
+            }
+        } catch (Exception e) {
+            log.warn("[YangoWeeklyService] driver card {} error: {}", logLabel, e.getMessage());
+        }
+        return null;
+    }
+
+    private static YangoDriverSnapshot mapDriverFromDetailsNode(JsonNode root) {
+        if (root == null) {
+            return null;
+        }
+        JsonNode d = root.get("driver");
+        if (d == null) {
+            return null;
+        }
+        JsonNode profile = d.get("driver_profile");
+        String driverId = textAt(profile, "id");
+        String first = textAt(profile, "first_name");
+        String last = textAt(profile, "last_name");
+        String full = joinNames(first, last);
+        String phone = firstPhone(profile != null ? profile.get("phones") : null);
+        String license = null;
+        if (profile != null && profile.has("license") && !profile.get("license").isNull()) {
+            license = textAt(profile.get("license"), "number");
+        }
+        AccountFields acc = pickCurrentAccount(d.get("accounts"));
+
+        if (driverId == null
+                && first == null
+                && last == null
+                && phone == null
+                && license == null
+                && acc == null) {
+            return null;
+        }
+
+        return YangoDriverSnapshot.builder()
+                .driverId(driverId)
+                .firstName(first)
+                .lastName(last)
+                .fullName(full)
+                .phone(phone)
+                .licenseNumber(license)
+                .balance(acc != null ? acc.balance() : null)
+                .balanceLimit(acc != null ? acc.balanceLimit() : null)
+                .currency(acc != null ? acc.currency() : null)
+                .build();
+    }
+
+    private static YangoDriverSnapshot mapDriverFromCommonNode(JsonNode root) {
+        if (root == null) {
+            return null;
+        }
+        JsonNode d = root.get("driver");
+        if (d == null) {
+            return null;
+        }
+        JsonNode profile = d.get("driver_profile");
+        String driverId = textAt(profile, "id");
+        String first = textAt(profile, "first_name");
+        String last = textAt(profile, "last_name");
+        String full = joinNames(first, last);
+        String license = null;
+        if (profile != null && profile.has("license") && !profile.get("license").isNull()) {
+            license = textAt(profile.get("license"), "number");
+        }
+        AccountFields acc = pickCurrentAccount(d.get("accounts"));
+        Double rating = readAverageRating(d);
+
+        if (driverId == null
+                && first == null
+                && last == null
+                && license == null
+                && acc == null
+                && rating == null) {
+            return null;
+        }
+
+        return YangoDriverSnapshot.builder()
+                .driverId(driverId)
+                .firstName(first)
+                .lastName(last)
+                .fullName(full)
+                .licenseNumber(license)
+                .balance(acc != null ? acc.balance() : null)
+                .balanceLimit(acc != null ? acc.balanceLimit() : null)
+                .currency(acc != null ? acc.currency() : null)
+                .averageRating(rating)
+                .build();
+    }
+
+    private static Double readAverageRating(JsonNode driver) {
+        if (driver == null) {
+            return null;
+        }
+        JsonNode r = driver.get("rating");
+        if (r == null) {
+            return null;
+        }
+        JsonNode ar = r.get("average_rating");
+        if (ar == null || ar.isNull()) {
+            return null;
+        }
+        if (ar.isNumber()) {
+            return ar.asDouble();
+        }
+        if (ar.isTextual()) {
+            try {
+                return Double.parseDouble(ar.asText().trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static String textAt(JsonNode n, String field) {
+        if (n == null || !n.has(field) || n.get(field).isNull()) {
+            return null;
+        }
+        String t = n.get(field).asText();
+        return t != null && !t.isBlank() ? t.trim() : null;
+    }
+
+    private static String firstPhone(JsonNode phones) {
+        if (phones == null || !phones.isArray() || phones.isEmpty()) {
+            return null;
+        }
+        JsonNode z = phones.get(0);
+        if (z == null || z.isNull()) {
+            return null;
+        }
+        String t = z.isTextual() ? z.asText() : null;
+        return t != null && !t.isBlank() ? t.trim() : null;
+    }
+
+    private static String joinNames(String first, String last) {
+        String s = (first != null ? first : "") + " " + (last != null ? last : "");
+        s = s.trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    private record AccountFields(Double balance, Double balanceLimit, String currency) {}
+
+    private static AccountFields pickCurrentAccount(JsonNode accounts) {
+        if (accounts == null || !accounts.isArray() || accounts.isEmpty()) {
+            return null;
+        }
+        for (int i = 0; i < accounts.size(); i++) {
+            JsonNode a = accounts.get(i);
+            if (a == null) {
+                continue;
+            }
+            String type = a.has("type") && a.get("type").isTextual() ? a.get("type").asText() : null;
+            if ("current".equalsIgnoreCase(type)) {
+                return toAccountFields(a);
+            }
+        }
+        return toAccountFields(accounts.get(0));
+    }
+
+    private static AccountFields toAccountFields(JsonNode a) {
+        if (a == null) {
+            return null;
+        }
+        Double b = a.has("balance") && a.get("balance").isNumber() ? a.get("balance").asDouble() : null;
+        Double bl =
+                a.has("balance_limit") && a.get("balance_limit").isNumber()
+                        ? a.get("balance_limit").asDouble()
+                        : null;
+        String cur = textAt(a, "currency");
+        if (b == null && bl == null && (cur == null || cur.isBlank())) {
+            return null;
+        }
+        return new AccountFields(b, bl, cur);
+    }
 
     // ── helpers ──
 

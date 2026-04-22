@@ -33,6 +33,9 @@ public class YangoSummaryResponse {
     @JsonProperty("previous_goals")
     private List<JsonNode> previousGoals = new ArrayList<>();
 
+    @JsonProperty("driver")
+    private YangoDriverSnapshot driver;
+
     @Data
     @Builder
     @NoArgsConstructor

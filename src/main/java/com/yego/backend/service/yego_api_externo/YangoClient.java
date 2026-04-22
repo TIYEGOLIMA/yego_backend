@@ -106,10 +106,10 @@ public class YangoClient {
     }
 
     /**
-     * POST driver income — conexión directa.
+     * POST a endpoints fleet (income, driver details, etc.) con cabeceras estándar.
      */
-    public ResponseEntity<String> postIncome(String incomeUrl, String bodyJson, String parkId) throws Exception {
-        return exchangeDirect(incomeUrl, HttpMethod.POST, bodyJson, cookie -> headersFleetJson(cookie, parkId));
+    public ResponseEntity<String> postFleet(String url, String bodyJson, String parkId) throws Exception {
+        return exchangeDirect(url, HttpMethod.POST, bodyJson, cookie -> headersFleetJson(cookie, parkId));
     }
 
     /**
