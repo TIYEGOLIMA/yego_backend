@@ -138,11 +138,13 @@ public class AuthServiceImpl implements AuthService {
     }
     
     @Override
+    @Transactional
     public LoginResponseDto loginResponse(LoginDto loginDto, HttpServletRequest request) {
         return toLoginResponse(login(loginDto, request));
     }
 
     @Override
+    @Transactional
     public LoginResponseDto refreshFromAuthorizationHeader(String authorizationHeader, HttpServletRequest request) {
         String token = extraerBearerToken(authorizationHeader)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token de autorización requerido"));
@@ -157,6 +159,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional
     public void cerrarSesionConAuthorizationHeader(Long userId, String authorizationHeader) {
         String token = extraerBearerToken(authorizationHeader).orElse("");
         if (userId == null && token.isEmpty()) {
