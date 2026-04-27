@@ -91,6 +91,7 @@ public class ModuleServiceImpl implements ModuleService {
                 .nombre(request.getNombre())
                 .descripcion(request.getDescripcion())
                 .url(request.getUrl())
+                .codigo(normalizarCodigo(request.getCodigo()))
                 .estado("activo")
                 .icono(request.getIcono())
                 .grupo(grupo)
@@ -122,6 +123,9 @@ public class ModuleServiceImpl implements ModuleService {
         modulo.setNombre(request.getNombre());
         modulo.setDescripcion(request.getDescripcion());
         modulo.setUrl(request.getUrl());
+        if (request.getCodigo() != null) {
+            modulo.setCodigo(normalizarCodigo(request.getCodigo()));
+        }
         modulo.setEstado(request.getEstado() != null ? request.getEstado() : modulo.getEstado());
         modulo.setIcono(request.getIcono() != null ? request.getIcono() : modulo.getIcono());
         modulo.setGrupo(grupo);
@@ -357,6 +361,13 @@ public class ModuleServiceImpl implements ModuleService {
                 .trim();
     }
 
+    private static String normalizarCodigo(String codigo) {
+        if (codigo == null || codigo.isBlank()) {
+            return null;
+        }
+        return codigo.trim();
+    }
+
     private ModuleResponse convertirAResponse(Module modulo) {
         // Normalizar la URL para asegurar que sea una ruta relativa del frontend
         String url = modulo.getUrl();
@@ -401,6 +412,7 @@ public class ModuleServiceImpl implements ModuleService {
                 .nombre(modulo.getNombre())
                 .descripcion(modulo.getDescripcion())
                 .url(url)
+                .codigo(modulo.getCodigo())
                 .estado(modulo.getEstado())
                 .icono(modulo.getIcono())
                 .grupo(grupoResponse)

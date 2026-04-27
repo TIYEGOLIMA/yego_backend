@@ -2,7 +2,6 @@ package com.yego.backend.entity.yego_pro_ops.api.request;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -25,7 +24,7 @@ public class DriverCloseRequest {
 
     @NotBlank(message = "fecha es requerida")
     @JsonProperty("fecha")
-    private String fecha; // Formato: "2025-12-14"
+    private String fecha;
 
     @JsonProperty("userId")
     private Long userId;
@@ -76,6 +75,5 @@ public class DriverCloseRequest {
     private Integer diferenciaOdometro;
 
     @JsonProperty("turnoIds")
-    private List<Long> turnoIds; // IDs de los turnos del conductor para esta fecha
+    private List<Long> turnoIds;
 }
-

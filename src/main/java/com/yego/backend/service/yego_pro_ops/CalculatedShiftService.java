@@ -1,61 +1,26 @@
 package com.yego.backend.service.yego_pro_ops;
 
-import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverPaymentSummaryResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.PaidShiftsResponse;
+import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
+
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public interface CalculatedShiftService {
-    /**
-     * 🔧 USO INTERNO: Scheduler
-     * Calcula y guarda las horas de turno para un conductor y fecha específica basándose en los viajes
-     * @param driverId ID del conductor
-     * @param fecha Fecha del turno
-     */
-    void calcularYGuardarHorasTurno(String driverId, java.time.LocalDate fecha);
-    
-    /**
-     * 🔧 USO INTERNO: Scheduler (diario a las 5 AM)
-     * Procesa las horas de turno del día anterior para todos los conductores activos
-     */
+
     void procesarHorasTurnoDiaAnterior();
 
-/**
-     * 📋 VISTA: DetalleView
-     * Obtiene las fechas únicas con sus tipos de turno para un conductor
-     * @param driverId ID del conductor
-     * @return Respuesta con fechas únicas y sus tipos de turno (diurno, nocturno, o ambos)
-     */
     FechasConTiposTurnoResponse obtenerFechasConTiposTurno(String driverId);
-    
-    /**
-     * 📋 VISTA: Resumen de Pagos
-     * Obtiene el resumen de pagos de todos los conductores con sus turnos filtrados por fecha
-     * @param fecha Fecha para filtrar los turnos (formato: "YYYY-MM-DD")
-     * @return Respuesta con lista de conductores, monto total a pagar, cantidad de turnos y lista de turnos
-     */
-    DriverPaymentSummaryResponse obtenerResumenPagos(String fecha);
-    
-    /**
-     * 💰 VISTA: Lista de Turnos Pagados
-     * Obtiene todos los turnos que ya están pagados (pagado = true)
-     * @param fecha Fecha opcional para filtrar los turnos pagados (formato: "YYYY-MM-DD", null para todos)
-     * @return Respuesta con lista de turnos pagados
-     */
-    PaidShiftsResponse obtenerTurnosPagados(String fecha);
-    
-    /**
-     * 📋 ENDPOINT: Obtener o calcular turnos
-     * Verifica si hay turnos calculados para un driver y fecha.
-     * Si no hay, calcula automáticamente y luego devuelve la lista.
-     * @param driverId ID del conductor
-     * @param fecha Fecha del turno (formato: "YYYY-MM-DD")
-     * @return Lista de turnos calculados para ese driver y fecha
-     */
-    java.util.List<com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift> obtenerOCalcularTurnos(String driverId, String fecha);
 
-    /**
-     * Invalida la caché de resumen de pagos y turnos pagados para una fecha (tras registrar/actualizar cierre).
-     */
+    DriverPaymentSummaryResponse obtenerResumenPagos(String fecha);
+
+    PaidShiftsResponse obtenerTurnosPagados(String fecha);
+
+    List<CalculatedShift> obtenerOCalcularTurnos(String driverId, String fecha);
+
+    CompletableFuture<List<CalculatedShift>> calcularTurnosAsync(String driverId, String fecha);
+
     void invalidarCacheDetalle(String fecha);
 }
-

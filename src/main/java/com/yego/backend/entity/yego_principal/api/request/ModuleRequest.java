@@ -22,6 +22,9 @@ public class ModuleRequest {
     
     @NotBlank(message = "La URL es obligatoria")
     private String url;
+
+    /** Clave de pantalla en el frontend (ej. YEGO_GANTT). Opcional al crear; recomendado para rutas dinámicas. */
+    private String codigo;
     
     private String estado;
     

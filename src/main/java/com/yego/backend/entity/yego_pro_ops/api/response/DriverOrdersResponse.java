@@ -13,23 +13,16 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DriverOrdersResponse {
-    
+
     @JsonProperty("date_from")
     private String dateFrom;
-    
+
     @JsonProperty("date_to")
     private String dateTo;
-    
+
     @JsonProperty("orders")
     private List<OrderInfoResponse> orders;
-    
-    @JsonProperty("cursor")
-    private String cursor;
-    
-    @JsonProperty("has_more")
-    private Boolean hasMore;
-    
+
     @JsonProperty("cierre_registrado")
     private Boolean cierreRegistrado;
 }
-

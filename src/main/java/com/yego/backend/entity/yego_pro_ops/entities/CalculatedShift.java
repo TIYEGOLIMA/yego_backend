@@ -1,6 +1,13 @@
 package com.yego.backend.entity.yego_pro_ops.entities;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -10,7 +17,6 @@ import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 
 @Entity
 @Table(name = "module_calculated_shifts")
@@ -48,22 +54,22 @@ public class CalculatedShift {
 
     @Column(name = "duracion_minutos")
     private Integer duracionMinutos;
-    
+
     @Column(name = "cantidad_viajes")
-    private Integer cantidadViajes; // Cantidad de viajes que tuvo el conductor en ese turno
-    
+    private Integer cantidadViajes;
+
     @Column(name = "monto_total")
-    private Double montoTotal; // Liquidación: solo suma de efectivo (cash) a pagar al conductor
-    
+    private Double montoTotal;
+
     @Column(name = "produccion_total")
-    private Double produccionTotal; // Efectivo + pago corporativo + pago sin efectivo + propinas + compensación promoción + bonificación
-    
+    private Double produccionTotal;
+
     @Column(name = "comisiones_servicio")
-    private Double comisionesServicio; // Solo comisiones del servicio (price_commission_service)
-    
+    private Double comisionesServicio;
+
     @Column(name = "pagado", nullable = false)
     @Builder.Default
-    private Boolean pagado = false; // Indica si ya se le pagó al conductor
+    private Boolean pagado = false;
 
     @Column(name = "es_manual", nullable = false)
     @Builder.Default
@@ -77,23 +83,8 @@ public class CalculatedShift {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        if (createdAt == null) {
-            createdAt = LocalDateTime.now(ZoneId.of("America/Lima"));
-        }
-        if (updatedAt == null) {
-            updatedAt = LocalDateTime.now(ZoneId.of("America/Lima"));
-        }
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now(ZoneId.of("America/Lima"));
-    }
-
     public enum TipoTurno {
-        diurno, nocturno
+        manana, tarde
     }
 
     public enum EstadoTurno {

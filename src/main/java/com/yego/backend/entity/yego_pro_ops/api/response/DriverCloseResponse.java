@@ -30,13 +30,13 @@ public class DriverCloseResponse {
     private Long userId;
 
     @JsonProperty("userName")
-    private String userName; // Nombre del usuario que registró el cierre
+    private String userName;
 
     @JsonProperty("userIdModificado")
     private Long userIdModificado;
 
     @JsonProperty("userNameModificado")
-    private String userNameModificado; // Nombre del usuario que modificó el cierre
+    private String userNameModificado;
 
     @JsonProperty("gnvM3")
     private String gnvM3;
@@ -84,7 +84,7 @@ public class DriverCloseResponse {
     private Integer diferenciaOdometro;
 
     @JsonProperty("tiposTurno")
-    private List<String> tiposTurno; // Lista de tipos de turno (ej: ["diurno", "nocturno"])
+    private List<String> tiposTurno;
 
     @JsonProperty("createdAt")
     private LocalDateTime createdAt;
@@ -92,4 +92,3 @@ public class DriverCloseResponse {
     @JsonProperty("updatedAt")
     private LocalDateTime updatedAt;
 }
-

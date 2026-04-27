@@ -13,16 +13,16 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DriverTripsSimplifiedResponse {
-    
+
     @JsonProperty("date_from")
     private String dateFrom;
-    
+
     @JsonProperty("date_to")
     private String dateTo;
-    
+
     @JsonProperty("trips")
     private List<TripSimplified> trips;
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -30,18 +30,17 @@ public class DriverTripsSimplifiedResponse {
     public static class TripSimplified {
         @JsonProperty("status")
         private String status;
-        
+
         @JsonProperty("short_id")
         private Long shortId;
-        
+
         @JsonProperty("id")
         private String id;
-        
+
         @JsonProperty("ended_at")
         private String endedAt;
-        
+
         @JsonProperty("booked_at")
         private String bookedAt;
     }
 }
-

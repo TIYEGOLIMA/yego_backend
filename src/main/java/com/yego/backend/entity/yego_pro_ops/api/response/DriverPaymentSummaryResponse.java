@@ -8,18 +8,15 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-/**
- * DTO de respuesta para el resumen de pagos de conductores
- */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class DriverPaymentSummaryResponse {
-    
+
     @JsonProperty("conductores")
     private List<ConductorPaymentInfo> conductores;
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -27,41 +24,41 @@ public class DriverPaymentSummaryResponse {
     public static class ConductorPaymentInfo {
         @JsonProperty("driver_id")
         private String driverId;
-        
+
         @JsonProperty("avatar_url")
         private String avatarUrl;
-        
+
         @JsonProperty("nombre")
-        private String nombre; // Nombre completo del conductor
-        
+        private String nombre;
+
         @JsonProperty("telefono")
-        private String telefono; // Teléfono del conductor
-        
+        private String telefono;
+
         @JsonProperty("placa")
-        private String placa; // Placa del vehículo (del cierre/liquidación si existe)
-        
+        private String placa;
+
         @JsonProperty("monto_total_pagar")
-        private Double montoTotalPagar; // Suma de monto_total (liquidación/efectivo) de turnos no pagados
-        
+        private Double montoTotalPagar;
+
         @JsonProperty("produccion_total")
-        private Double produccionTotal; // Suma de producción total de todos los turnos del conductor
-        
+        private Double produccionTotal;
+
         @JsonProperty("comisiones_servicio")
-        private Double comisionesServicio; // Suma de comisiones del servicio de todos los turnos del conductor
-        
+        private Double comisionesServicio;
+
         @JsonProperty("cantidad_turnos")
-        private Integer cantidadTurnos; // Cantidad de turnos que tiene el conductor
-        
+        private Integer cantidadTurnos;
+
         @JsonProperty("cantidad_viajes")
-        private Integer cantidadViajes; // Total de viajes que tuvo el conductor en todos sus turnos
-        
+        private Integer cantidadViajes;
+
         @JsonProperty("viajes_por_hora")
-        private Double viajesPorHora; // KPI: cantidad de viajes por hora (cantidad_viajes / (duracion_total_minutos / 60))
-        
+        private Double viajesPorHora;
+
         @JsonProperty("turnos")
-        private List<TurnoInfo> turnos; // Lista de turnos del conductor
+        private List<TurnoInfo> turnos;
     }
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -69,27 +66,26 @@ public class DriverPaymentSummaryResponse {
     public static class TurnoInfo {
         @JsonProperty("id")
         private Long id;
-        
+
         @JsonProperty("fecha")
         private String fecha;
-        
+
         @JsonProperty("hora_inicio")
         private String horaInicio;
-        
+
         @JsonProperty("hora_fin")
         private String horaFin;
-        
+
         @JsonProperty("tipo_turno")
         private String tipoTurno;
-        
+
         @JsonProperty("duracion_minutos")
         private Integer duracionMinutos;
-        
+
         @JsonProperty("monto_total")
-        private Double montoTotal; // Liquidación: solo efectivo (por turno)
-        
+        private Double montoTotal;
+
         @JsonProperty("pagado")
         private Boolean pagado;
     }
 }
-

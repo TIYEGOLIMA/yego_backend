@@ -17,9 +17,6 @@ public class DriverSimpleResponse {
     @JsonProperty("conductores")
     private List<DriverInfo> conductores;
 
-    @JsonProperty("mensaje")
-    private String mensaje; // Mensaje de error o información
-
     @Data
     @Builder
     @NoArgsConstructor
@@ -38,4 +35,3 @@ public class DriverSimpleResponse {
         private String avatarUrl;
     }
 }
-

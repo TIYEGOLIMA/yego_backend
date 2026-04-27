@@ -1,6 +1,11 @@
 package com.yego.backend.entity.yego_pro_ops.entities;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -32,10 +37,10 @@ public class DriverClose {
     private LocalDate fecha;
 
     @Column(name = "user_id", nullable = false)
-    private Long userId; // Usuario que registró el cierre
+    private Long userId;
 
     @Column(name = "user_id_modificado")
-    private Long userIdModificado; // Usuario que modificó el cierre
+    private Long userIdModificado;
 
     @Column(name = "gnv_m3", length = 50)
     private String gnvM3;
@@ -83,7 +88,7 @@ public class DriverClose {
     private Integer diferenciaOdometro;
 
     @Column(name = "calculated_shift_ids", length = 255)
-    private String calculatedShiftIds; // IDs de CalculatedShift separados por coma (ej: "1,2" para identificar los registros de turnos)
+    private String calculatedShiftIds;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

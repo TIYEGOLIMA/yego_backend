@@ -17,6 +17,7 @@ public class ModuleResponse {
     private String nombre;
     private String descripcion;
     private String url;
+    private String codigo;
     private String estado;
     private String icono;
     private GrupoResponse grupo;

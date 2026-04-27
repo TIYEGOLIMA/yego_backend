@@ -44,6 +44,10 @@ public class Module {
     @Column(name = "yeg_sis_ext_icons", nullable = false)
     private String icono;
 
+    /** Clave estable para el frontend (ej. YEGO_GANTT). La URL puede cambiar sin cambiar este valor. */
+    @Column(name = "yeg_sis_ext_codigo", length = 64)
+    private String codigo;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "yeg_sis_ext_grupo_id", nullable = true)
     private Grupo grupo;

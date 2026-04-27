@@ -18,32 +18,31 @@ import java.util.stream.Collectors;
 @Data
 @Configuration
 public class ProxyConfig {
-    
+
+    private static final String PROXY_LINE_REGEX = "^\\d+\\.\\d+\\.\\d+\\.\\d+:\\d+:.+:.+$";
+
     @Value("${yego.pro-ops.proxy.enabled:false}")
     private boolean enabled = false;
-    
+
     @Value("${yego.pro-ops.proxy.file:proxies.txt}")
     private String proxyFile = "proxies.txt";
-    
+
     private List<String> proxies = new ArrayList<>();
 
-    /** Formato esperado por línea: IP:PUERTO:USUARIO:CONTRASEÑA */
-    private static final String PROXY_LINE_REGEX = "^\\d+\\.\\d+\\.\\d+\\.\\d+:\\d+:.+:.+$";
-    
     @PostConstruct
     public void init() {
-        if (enabled) {
-            loadProxiesFromFile();
-        } else {
-            log.info("ℹ️ [ProxyConfig] Rotación de proxies deshabilitada");
+        if (!enabled) {
+            log.info("[ProxyConfig] rotación de proxies deshabilitada");
+            return;
         }
+        loadProxiesFromFile();
     }
-    
+
     private void loadProxiesFromFile() {
         try {
             InputStream inputStream = getClass().getClassLoader().getResourceAsStream(proxyFile);
             if (inputStream == null) {
-                log.info("ℹ️ [ProxyConfig] No hay archivo {}; la lista se cargará desde Webshare (scheduler)", proxyFile);
+                log.info("[ProxyConfig] sin archivo {}; se cargará desde Webshare (scheduler)", proxyFile);
                 return;
             }
             try (BufferedReader reader = new BufferedReader(
@@ -54,33 +53,26 @@ public class ProxyConfig {
                     .filter(line -> line.matches(PROXY_LINE_REGEX))
                     .collect(Collectors.toList());
                 if (proxies.isEmpty()) {
-                    log.info("ℹ️ [ProxyConfig] Archivo {} vacío o sin líneas válidas; la lista se cargará desde Webshare", proxyFile);
+                    log.info("[ProxyConfig] archivo {} vacío; se cargará desde Webshare", proxyFile);
                 } else {
-                    log.info("✅ [ProxyConfig] {} proxies cargados desde {} (opcional; el scheduler actualizará desde Webshare)", proxies.size(), proxyFile);
+                    log.info("[ProxyConfig] {} proxies cargados desde {}", proxies.size(), proxyFile);
                 }
             }
         } catch (Exception e) {
-            log.warn("⚠️ [ProxyConfig] No se pudo leer {}: {}. La lista se cargará desde Webshare.", proxyFile, e.getMessage());
+            log.warn("[ProxyConfig] no se pudo leer {}: {}", proxyFile, e.getMessage());
         }
     }
 
-    /**
-     * Actualiza la lista de proxies en memoria (thread-safe).
-     * Usado por el scheduler que descarga la lista desde Webshare cada 5 horas.
-     *
-     * @param newProxies lista en formato IP:PORT:USER:PASSWORD por línea
-     */
     public synchronized void updateProxies(List<String> newProxies) {
         if (newProxies == null || newProxies.isEmpty()) {
-            log.warn("⚠️ [ProxyConfig] updateProxies: lista vacía, no se actualiza");
+            log.warn("[ProxyConfig] updateProxies recibió lista vacía; no se actualiza");
             return;
         }
-        List<String> valid = newProxies.stream()
-                .map(String::trim)
-                .filter(line -> !line.isEmpty() && !line.startsWith("#"))
-                .filter(line -> line.matches(PROXY_LINE_REGEX))
-                .collect(Collectors.toList());
-        this.proxies = new ArrayList<>(valid);
-        log.info("✅ [ProxyConfig] Lista de proxies actualizada: {} proxies válidos", this.proxies.size());
+        this.proxies = newProxies.stream()
+            .map(String::trim)
+            .filter(line -> !line.isEmpty() && !line.startsWith("#"))
+            .filter(line -> line.matches(PROXY_LINE_REGEX))
+            .collect(Collectors.toCollection(ArrayList::new));
+        log.info("[ProxyConfig] lista actualizada: {} proxies válidos", this.proxies.size());
     }
 }

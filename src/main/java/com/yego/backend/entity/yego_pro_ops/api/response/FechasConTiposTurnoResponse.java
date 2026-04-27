@@ -8,9 +8,6 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 import java.util.List;
 
-/**
- * DTO de response para fechas con tipos de turno del sistema YEGO Pro Ops
- */
 @Data
 @Builder
 @NoArgsConstructor
@@ -26,7 +23,7 @@ public class FechasConTiposTurnoResponse {
     @AllArgsConstructor
     public static class FechaConTiposTurno {
         private LocalDate fecha;
-        private List<TipoTurnoInfo> tiposTurno; // Lista de tipos de turno (diurno, nocturno, o ambos)
+        private List<TipoTurnoInfo> tiposTurno;
     }
 
     @Data
@@ -34,8 +31,7 @@ public class FechasConTiposTurnoResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class TipoTurnoInfo {
-        private Long id; // ID del CalculatedShift
-        private String tipoTurno; // "diurno" o "nocturno"
+        private Long id;
+        private String tipoTurno;
     }
 }
-

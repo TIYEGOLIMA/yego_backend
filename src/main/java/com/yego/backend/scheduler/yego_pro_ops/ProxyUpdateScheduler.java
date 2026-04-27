@@ -12,12 +12,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * Scheduler que actualiza la lista de proxies desde Webshare cada 5 horas.
- * La URL descarga un listado en formato IP:PORT:USER:PASSWORD (una línea por proxy).
- *
- * @see ProxyConfig#updateProxies(List)
- */
 @Component
 @Slf4j
 public class ProxyUpdateScheduler {
@@ -28,40 +22,36 @@ public class ProxyUpdateScheduler {
     @Value("${yego.pro-ops.proxy.webshare-url:}")
     private String webshareUrl;
 
-    public ProxyUpdateScheduler(ProxyConfig proxyConfig, @Autowired(required = false) RestTemplate restTemplate) {
+    public ProxyUpdateScheduler(ProxyConfig proxyConfig,
+                                @Autowired(required = false) RestTemplate restTemplate) {
         this.proxyConfig = proxyConfig;
         this.restTemplate = restTemplate != null ? restTemplate : new RestTemplate();
     }
 
-    /**
-     * Actualiza la lista de proxies desde la URL de Webshare.
-     * Primera ejecución: pocos segundos después del arranque (no hace falta proxies.txt).
-     * Siguientes: cada 5 horas.
-     */
-    @Scheduled(initialDelayString = "${yego.pro-ops.proxy.refresh-initial-delay-ms:5000}", fixedDelayString = "${yego.pro-ops.proxy.refresh-interval-ms:18000000}")
+    @Scheduled(
+        initialDelayString = "${yego.pro-ops.proxy.refresh-initial-delay-ms:5000}",
+        fixedDelayString = "${yego.pro-ops.proxy.refresh-interval-ms:18000000}"
+    )
     public void refreshProxyList() {
-        if (!proxyConfig.isEnabled()) {
-            log.debug("[ProxyUpdateScheduler] Proxy deshabilitado, no se actualiza la lista");
-            return;
-        }
+        if (!proxyConfig.isEnabled()) return;
         if (webshareUrl == null || webshareUrl.isBlank()) {
-            log.warn("⚠️ [ProxyUpdateScheduler] yego.pro-ops.proxy.webshare-url no configurada, no se actualiza la lista");
+            log.warn("[ProxyUpdateScheduler] yego.pro-ops.proxy.webshare-url no configurada");
             return;
         }
         try {
             String body = restTemplate.getForObject(webshareUrl, String.class);
             if (body == null || body.isBlank()) {
-                log.warn("⚠️ [ProxyUpdateScheduler] Respuesta vacía de Webshare");
+                log.warn("[ProxyUpdateScheduler] respuesta vacía de Webshare");
                 return;
             }
             List<String> lines = Arrays.stream(body.split("\n"))
-                    .map(String::trim)
-                    .filter(line -> !line.isEmpty())
-                    .collect(Collectors.toList());
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .collect(Collectors.toList());
             proxyConfig.updateProxies(lines);
-            log.info("🔄 [ProxyUpdateScheduler] Lista de proxies refrescada desde Webshare ({} líneas)", lines.size());
+            log.info("[ProxyUpdateScheduler] lista refrescada ({} líneas)", lines.size());
         } catch (Exception e) {
-            log.error("❌ [ProxyUpdateScheduler] Error descargando lista de proxies desde Webshare: {}", e.getMessage());
+            log.error("[ProxyUpdateScheduler] error descargando lista: {}", e.getMessage());
         }
     }
 }

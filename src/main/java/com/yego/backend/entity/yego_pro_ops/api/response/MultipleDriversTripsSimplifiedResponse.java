@@ -13,16 +13,16 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class MultipleDriversTripsSimplifiedResponse {
-    
+
     @JsonProperty("date_from")
     private String dateFrom;
-    
+
     @JsonProperty("date_to")
     private String dateTo;
-    
+
     @JsonProperty("drivers")
     private List<DriverTrips> drivers;
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -30,17 +30,11 @@ public class MultipleDriversTripsSimplifiedResponse {
     public static class DriverTrips {
         @JsonProperty("driver_id")
         private String driverId;
-        
-        @JsonProperty("driver_full_name")
-        private String driverFullName;
-        
-        @JsonProperty("car_brand_model")
-        private String carBrandModel;
-        
+
         @JsonProperty("trips")
         private List<TripSimplified> trips;
     }
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -48,15 +42,14 @@ public class MultipleDriversTripsSimplifiedResponse {
     public static class TripSimplified {
         @JsonProperty("status")
         private String status;
-        
+
         @JsonProperty("id")
         private String id;
-        
+
         @JsonProperty("ended_at")
         private String endedAt;
-        
+
         @JsonProperty("booked_at")
         private String bookedAt;
     }
 }
-
