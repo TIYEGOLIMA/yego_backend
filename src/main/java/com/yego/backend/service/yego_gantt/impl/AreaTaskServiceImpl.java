@@ -123,6 +123,22 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         return tags.stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 
+    private static List<Long> detachedUserIds(AreaTask t) {
+        List<Long> raw = t.getAssignedUserIds();
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        return List.copyOf(raw);
+    }
+
+    private static List<String> detachedTags(AreaTask t) {
+        List<String> raw = t.getTags();
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        return List.copyOf(raw);
+    }
+
     private AreaTaskResponseDto toDto(AreaTask t, Map<Long, String> names) {
         return AreaTaskResponseDto.builder()
                 .id(t.getId())
@@ -138,8 +154,8 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 .priority(t.getPriority())
                 .progressPercent(t.getProgressPercent())
                 .assignedUserId(t.getAssignedUserId())
-                .assignedUserIds(t.getAssignedUserIds() != null ? t.getAssignedUserIds() : List.of())
-                .tags(t.getTags() != null ? t.getTags() : List.of())
+                .assignedUserIds(detachedUserIds(t))
+                .tags(detachedTags(t))
                 .sortOrder(t.getSortOrder())
                 .createdAt(t.getCreatedAt())
                 .updatedAt(t.getUpdatedAt())
