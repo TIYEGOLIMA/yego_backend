@@ -7,11 +7,22 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface AreaRepository extends JpaRepository<Area, Long> {
+
+    /** Solo id + nombre (menos columnas que findAllById para armar DTOs de tareas). */
+    interface AreaIdNameRow {
+        Long getId();
+
+        String getName();
+    }
+
+    @Query("SELECT a.id AS id, a.name AS name FROM Area a WHERE a.id IN :ids")
+    List<AreaIdNameRow> findIdAndNameByIdIn(@Param("ids") Collection<Long> ids);
 
     Optional<Area> findByName(String name);
 

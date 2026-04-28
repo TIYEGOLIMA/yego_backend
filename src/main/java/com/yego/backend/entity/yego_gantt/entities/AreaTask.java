@@ -5,12 +5,23 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
-@Table(name = "area_tasks")
+@Table(name = "area_tasks", indexes = {
+        @Index(name = "idx_area_tasks_area_id", columnList = "area_id"),
+        @Index(name = "idx_area_tasks_project_id", columnList = "project_id"),
+        @Index(name = "idx_area_tasks_sprint_id", columnList = "sprint_id"),
+        @Index(name = "idx_area_tasks_area_priority", columnList = "area_id,priority"),
+})
+@BatchSize(size = 32)
 @Data
 @Builder
 @NoArgsConstructor
@@ -23,6 +34,12 @@ public class AreaTask {
 
     @Column(name = "area_id", nullable = false)
     private Long areaId;
+
+    @Column(name = "project_id")
+    private Long projectId;
+
+    @Column(name = "sprint_id")
+    private Long sprintId;
 
     @Column(name = "title", nullable = false, length = 500)
     private String title;
@@ -53,11 +70,19 @@ public class AreaTask {
     @Column(name = "assigned_user_id")
     private Long assignedUserId;
 
-    @Column(name = "assigned_user_ids", length = 1000)
-    private String assignedUserIds;
+    @Fetch(FetchMode.SUBSELECT)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "area_task_assignees", joinColumns = @JoinColumn(name = "task_id"))
+    @Column(name = "user_id")
+    @Builder.Default
+    private List<Long> assignedUserIds = new ArrayList<>();
 
-    @Column(name = "tags", length = 2000)
-    private String tags;
+    @Fetch(FetchMode.SUBSELECT)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "area_task_tags", joinColumns = @JoinColumn(name = "task_id"))
+    @Column(name = "tag", length = 200)
+    @Builder.Default
+    private List<String> tags = new ArrayList<>();
 
     @Column(name = "sort_order", nullable = false)
     @Builder.Default
@@ -73,18 +98,12 @@ public class AreaTask {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        if (progressPercent == null) {
-            progressPercent = 0;
-        }
-        if (sortOrder == null) {
-            sortOrder = 0;
-        }
-        if (status == null) {
-            status = AreaTaskStatus.PENDING;
-        }
-        if (priority == null) {
-            priority = AreaTaskPriority.MEDIUM;
-        }
+        if (progressPercent == null) progressPercent = 0;
+        if (sortOrder == null) sortOrder = 0;
+        if (status == null) status = AreaTaskStatus.PENDING;
+        if (priority == null) priority = AreaTaskPriority.MEDIUM;
+        if (assignedUserIds == null) assignedUserIds = new ArrayList<>();
+        if (tags == null) tags = new ArrayList<>();
     }
 
     @PreUpdate

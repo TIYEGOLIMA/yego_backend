@@ -15,6 +15,9 @@ public class CreateProjectDto {
     @NotBlank
     private String name;
 
+    /** Clave de icono UI (lista acotada en backend). */
+    private String iconKey;
+
     private String description;
 
     /** IDs de usuarios (jefes de área) que participan en el proyecto */

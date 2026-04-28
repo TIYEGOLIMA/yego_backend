@@ -15,6 +15,8 @@ public class UpdateProjectDto {
 
     private String description;
 
+    private String iconKey;
+
     /** IDs de usuarios (jefes de área) que participan en el proyecto */
     private List<Long> memberUserIds;
 }

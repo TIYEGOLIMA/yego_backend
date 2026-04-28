@@ -19,6 +19,8 @@ public class AreaTaskResponseDto {
     private Long id;
     private Long areaId;
     private String areaName;
+    private Long projectId;
+    private Long sprintId;
     private String title;
     private String description;
     private LocalDate startDate;

@@ -24,6 +24,10 @@ public class CreateAreaTaskDto {
     @NotNull
     private Long areaId;
 
+    private Long projectId;
+
+    private Long sprintId;
+
     @NotBlank
     @Size(max = 500)
     private String title;

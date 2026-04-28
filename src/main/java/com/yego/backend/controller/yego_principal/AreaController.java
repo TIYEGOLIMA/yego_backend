@@ -8,15 +8,15 @@ import com.yego.backend.entity.yego_principal.api.response.ColaboradorDto;
 import com.yego.backend.entity.yego_principal.api.response.UserSimpleDto;
 import com.yego.backend.service.yego_principal.AreaService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
-@Slf4j
 @RestController
 @RequestMapping(value = "/api/areas", produces = MediaType.APPLICATION_JSON_VALUE + ";charset=UTF-8")
 @RequiredArgsConstructor
@@ -38,6 +38,16 @@ public class AreaController {
     @GetMapping("/find-all-active")
     public ResponseEntity<List<AreaSimpleDto>> findAllActive() {
         return ResponseEntity.ok(areaService.findAllActive());
+    }
+
+    /** Colaboradores de varias áreas en un solo JSON (evita N GET /areas/{id}/colaboradores). */
+    @GetMapping("/colaboradores-por-areas")
+    public ResponseEntity<Map<Long, List<ColaboradorDto>>> getColaboradoresPorAreas(
+            @RequestParam(value = "ids", required = false) List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return ResponseEntity.ok(Collections.emptyMap());
+        }
+        return ResponseEntity.ok(areaService.getColaboradoresByAreaIds(ids));
     }
 
     @GetMapping("/{id}")

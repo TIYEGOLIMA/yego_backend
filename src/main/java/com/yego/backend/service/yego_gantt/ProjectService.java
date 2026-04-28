@@ -8,13 +8,11 @@ import java.util.List;
 
 public interface ProjectService {
 
-    ProjectResponseDto create(CreateProjectDto dto);
+    ProjectResponseDto create(Long requesterId, CreateProjectDto dto);
 
-    List<ProjectResponseDto> findAllActive();
+    List<ProjectResponseDto> findAllActiveForUser(Long requesterId);
 
-    ProjectResponseDto findOne(Long id);
+    ProjectResponseDto update(Long requesterId, Long id, UpdateProjectDto dto);
 
-    ProjectResponseDto update(Long id, UpdateProjectDto dto);
-
-    void delete(Long id);
+    void delete(Long requesterId, Long id);
 }

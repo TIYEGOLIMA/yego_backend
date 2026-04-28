@@ -8,6 +8,7 @@ import com.yego.backend.entity.yego_principal.api.response.ColaboradorDto;
 import com.yego.backend.entity.yego_principal.api.response.UserSimpleDto;
 
 import java.util.List;
+import java.util.Map;
 
 public interface AreaService {
 
@@ -33,4 +34,7 @@ public interface AreaService {
     List<UserSimpleDto> findUsersForResponsable(Long areaIdEnEdicion);
 
     List<ColaboradorDto> getColaboradoresByAreaId(Long areaId);
+
+    /** Colaboradores agrupados por área; una consulta SQL para todos los ids solicitados. */
+    Map<Long, List<ColaboradorDto>> getColaboradoresByAreaIds(List<Long> areaIds);
 }

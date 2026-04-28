@@ -6,33 +6,40 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "gantt_projects")
+@Table(name = "workos_sprints")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Project {
+public class Sprint {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "project_id", nullable = false)
+    private Long projectId;
+
     @Column(name = "name", nullable = false, length = 200)
     private String name;
 
-    @Column(name = "description", length = 2000)
-    private String description;
+    @Column(name = "goal", length = 2000)
+    private String goal;
 
-    @Column(name = "activo", nullable = false)
-    @Builder.Default
-    private Boolean activo = true;
+    @Column(name = "start_date", nullable = false)
+    private LocalDate startDate;
 
-    @Column(name = "icon_key", nullable = false, length = 40)
+    @Column(name = "end_date", nullable = false)
+    private LocalDate endDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
-    private String iconKey = "folder";
+    private SprintStatus status = SprintStatus.PLANNED;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -44,6 +51,7 @@ public class Project {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        if (status == null) status = SprintStatus.PLANNED;
     }
 
     @PreUpdate

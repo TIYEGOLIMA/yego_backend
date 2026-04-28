@@ -17,7 +17,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -153,22 +155,42 @@ public class AreaServiceImpl implements AreaService {
     @Override
     @Transactional(readOnly = true)
     public List<ColaboradorDto> getColaboradoresByAreaId(Long areaId) {
-        return userRepository.findColaboradoresProjectionByAreaId(areaId).stream()
-                .map(row -> {
-                    Long id = ((Number) row[0]).longValue();
-                    String name = row[1] != null ? (String) row[1] : "";
-                    String lastName = row[2] != null ? (String) row[2] : "";
-                    String email = row[3] != null ? (String) row[3] : "";
-                    String rol = row[4] != null ? (String) row[4] : "";
-                    String nombreCompleto = (name + " " + lastName).trim();
-                    return ColaboradorDto.builder()
-                            .id(id)
-                            .nombreCompleto(nombreCompleto)
-                            .email(email)
-                            .rol(rol)
-                            .build();
-                })
-                .collect(Collectors.toList());
+        if (areaId == null) {
+            return Collections.emptyList();
+        }
+        return getColaboradoresByAreaIds(List.of(areaId)).getOrDefault(areaId, Collections.emptyList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, List<ColaboradorDto>> getColaboradoresByAreaIds(List<Long> areaIds) {
+        if (areaIds == null || areaIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<Long> distinct = areaIds.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        Map<Long, List<ColaboradorDto>> out = distinct.stream()
+                .collect(Collectors.toMap(id -> id, id -> new ArrayList<>(), (a, b) -> a, LinkedHashMap::new));
+        for (Object[] row : userRepository.findColaboradoresProjectionByAreaIdIn(distinct)) {
+            Long areaId = ((Number) row[0]).longValue();
+            out.get(areaId).add(colaboradorDtoFromRowAreaIdIdNameEmailRol(row));
+        }
+        return out;
+    }
+
+    /** Fila JPQL: areaId, id, name, lastName, email, rol */
+    private ColaboradorDto colaboradorDtoFromRowAreaIdIdNameEmailRol(Object[] row) {
+        Long id = ((Number) row[1]).longValue();
+        String name = row[2] != null ? (String) row[2] : "";
+        String lastName = row[3] != null ? (String) row[3] : "";
+        String email = row[4] != null ? (String) row[4] : "";
+        String rol = row[5] != null ? (String) row[5] : "";
+        String nombreCompleto = (name + " " + lastName).trim();
+        return ColaboradorDto.builder()
+                .id(id)
+                .nombreCompleto(nombreCompleto)
+                .email(email)
+                .rol(rol)
+                .build();
     }
 
     private AreaResponseDto mapToResponseDto(Area area, Map<Long, User> usersById, Map<Long, Long> countByAreaId) {

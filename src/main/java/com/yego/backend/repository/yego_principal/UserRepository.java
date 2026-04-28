@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -73,9 +74,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // --- Áreas ---
 
-    @Query("SELECT u FROM User u JOIN FETCH u.role WHERE u.areaId = :areaId ORDER BY u.name ASC")
-    List<User> findByAreaId(@Param("areaId") Long areaId);
-
     @Query("SELECT COUNT(u) FROM User u WHERE u.areaId = :areaId")
     Long countByAreaId(@Param("areaId") Long areaId);
 
@@ -89,9 +87,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u.id, u.name, u.lastName FROM User u WHERE u.active = true ORDER BY u.name ASC")
     List<Object[]> findActiveUsersForResponsableDropdown();
 
-    /** Proyección para colaboradores de un área (evita cargar entidades completas). */
-    @Query("SELECT u.id, u.name, u.lastName, u.email, r.name FROM User u JOIN u.role r WHERE u.areaId = :areaId ORDER BY u.name ASC")
-    List<Object[]> findColaboradoresProjectionByAreaId(@Param("areaId") Long areaId);
+    /** Colaboradores por áreas: primera columna area_id; resto igual que ColaboradorDto + rol. */
+    @Query("SELECT u.areaId, u.id, u.name, u.lastName, u.email, r.name FROM User u JOIN u.role r WHERE u.areaId IN :areaIds ORDER BY u.areaId ASC, u.name ASC")
+    List<Object[]> findColaboradoresProjectionByAreaIdIn(@Param("areaIds") Collection<Long> areaIds);
 
     // --- Reportes y estadísticas ---
 

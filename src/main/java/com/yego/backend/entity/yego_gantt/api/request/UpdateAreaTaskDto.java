@@ -19,6 +19,10 @@ import java.util.List;
 @AllArgsConstructor
 public class UpdateAreaTaskDto {
 
+    private Long projectId;
+
+    private Long sprintId;
+
     @Size(max = 500)
     private String title;
 
