@@ -30,16 +30,24 @@ public class AreaTaskController {
 
     private final AreaTaskService areaTaskService;
 
+    /**
+     * Resumen de tareas. {@code mySpace=true}: lista agregada del usuario (sin workspace propias + privadas en proyectos).
+     * Si {@code mySpace=true}, se ignora {@code onlyWithoutWorkspace} y el filtro por {@code workspaceId} concreto.
+     */
     @GetMapping("/summary")
     public ResponseEntity<AreaTasksSummaryResponseDto> summary(Authentication authentication,
                                                                @RequestParam(required = false) Long areaId,
                                                                @RequestParam(required = false) Long workspaceId,
                                                                @RequestParam(required = false) Long ownerUserId,
-                                                               @RequestParam(required = false) AreaTaskPriority priority) {
+                                                               @RequestParam(required = false) AreaTaskPriority priority,
+                                                               @RequestParam(required = false) Boolean onlyWithoutWorkspace,
+                                                               @RequestParam(required = false) Boolean mySpace) {
         Long userId = Long.parseLong(authentication.getName());
+        boolean mySpaceFlag = Boolean.TRUE.equals(mySpace);
+        boolean onlyNoWs = !mySpaceFlag && Boolean.TRUE.equals(onlyWithoutWorkspace);
         return ResponseEntity.ok(areaTaskService.summary(
                 userId,
-                new AreaTaskListParams(areaId, workspaceId, priority, ownerUserId)));
+                new AreaTaskListParams(areaId, workspaceId, priority, ownerUserId, onlyNoWs, mySpaceFlag)));
     }
 
     @PostMapping

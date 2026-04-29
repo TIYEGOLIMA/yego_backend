@@ -28,4 +28,14 @@ public final class GanttPortfolioAuthorizations {
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, forbiddenMessage);
     }
+
+    /** Solo ADMIN / SUPERADMIN (p. ej. eliminar sprints). */
+    public static void requirePlatformAdmin(UserRepository userRepo, Long requesterId, String forbiddenMessage) {
+        User user = userRepo.findByIdWithRole(requesterId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        if (GanttReadableAreas.isPlatformAdmin(user)) {
+            return;
+        }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, forbiddenMessage);
+    }
 }

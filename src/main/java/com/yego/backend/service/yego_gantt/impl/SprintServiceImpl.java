@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -42,13 +43,18 @@ public class SprintServiceImpl implements SprintService {
         if (dto.getEndDate().isBefore(dto.getStartDate())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha fin no puede ser anterior al inicio");
         }
+        SprintStatus initialStatus = dto.getStatus() != null ? dto.getStatus() : SprintStatus.PLANNED;
+        if (initialStatus == SprintStatus.COMPLETED && LocalDate.now().isBefore(dto.getEndDate())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "No se puede cerrar el sprint antes de su fecha de fin");
+        }
         Sprint sprint = Sprint.builder()
                 .workspaceId(dto.getWorkspaceId())
                 .name(dto.getName().trim())
                 .goal(dto.getGoal())
                 .startDate(dto.getStartDate())
                 .endDate(dto.getEndDate())
-                .status(dto.getStatus() != null ? dto.getStatus() : SprintStatus.PLANNED)
+                .status(initialStatus)
                 .build();
         return toDto(sprintRepo.save(sprint));
     }
@@ -69,6 +75,7 @@ public class SprintServiceImpl implements SprintService {
                 "Sin permiso para gestionar sprints");
         Sprint sprint = sprintRepo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint no encontrado: " + id));
+        SprintStatus previousStatus = sprint.getStatus();
         if (dto.getName() != null) sprint.setName(dto.getName().trim());
         if (dto.getGoal() != null) sprint.setGoal(dto.getGoal());
         if (dto.getStartDate() != null) sprint.setStartDate(dto.getStartDate());
@@ -77,14 +84,20 @@ public class SprintServiceImpl implements SprintService {
         if (sprint.getEndDate().isBefore(sprint.getStartDate())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha fin no puede ser anterior al inicio");
         }
+        if (sprint.getStatus() == SprintStatus.COMPLETED && previousStatus != SprintStatus.COMPLETED) {
+            if (LocalDate.now().isBefore(sprint.getEndDate())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "No se puede cerrar el sprint antes de su fecha de fin");
+            }
+        }
         return toDto(sprintRepo.save(sprint));
     }
 
     @Override
     @Transactional
     public void delete(Long requesterId, Long id) {
-        GanttPortfolioAuthorizations.requirePortfolioManager(userRepo, areaRepository, requesterId,
-                "Sin permiso para gestionar sprints");
+        GanttPortfolioAuthorizations.requirePlatformAdmin(userRepo, requesterId,
+                "Solo administradores pueden eliminar sprints");
         sprintRepo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint no encontrado: " + id));
         sprintRepo.deleteById(id);

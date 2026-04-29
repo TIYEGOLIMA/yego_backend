@@ -61,7 +61,24 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     }
 
     /** Una sola consulta acotada en BD (sin findAll). */
+    /** Listado agregado «Mi espacio»: sin workspace del creador + privadas en proyectos del creador. */
+    private List<AreaTask> loadMySpaceTasksFromDb(User viewer, GanttTaskScope scope, Long areaIdFilter,
+                                                  AreaTaskPriority priorityFilter, Long ownerUserIdFilter) {
+        assertAreaFilterAllowed(scope, areaIdFilter);
+        if (!scope.allAreas() && scope.areaIds().isEmpty()) {
+            return List.of();
+        }
+        long viewerId = viewer.getId();
+        if (scope.allAreas()) {
+            return areaTaskRepository.findAdminMySpaceFiltered(areaIdFilter, priorityFilter,
+                    ownerUserIdFilter, viewerId);
+        }
+        return areaTaskRepository.findScopedMySpaceFiltered(scope.areaIds(), areaIdFilter, priorityFilter,
+                ownerUserIdFilter, viewerId);
+    }
+
     private List<AreaTask> loadVisibleTasksFromDb(User viewer, GanttTaskScope scope, Long areaIdFilter, Long workspaceIdFilter,
+                                                  boolean onlyWithoutWorkspace,
                                                   AreaTaskPriority priorityFilter, Long ownerUserIdFilter) {
         assertAreaFilterAllowed(scope, areaIdFilter);
         if (!scope.allAreas() && scope.areaIds().isEmpty()) {
@@ -70,10 +87,10 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         boolean skipPrivate = GanttReadableAreas.isPlatformAdmin(viewer);
         long viewerId = viewer.getId();
         if (scope.allAreas()) {
-            return areaTaskRepository.findAdminFiltered(areaIdFilter, workspaceIdFilter, priorityFilter, ownerUserIdFilter,
-                    viewerId, skipPrivate);
+            return areaTaskRepository.findAdminFiltered(areaIdFilter, workspaceIdFilter, onlyWithoutWorkspace, priorityFilter,
+                    ownerUserIdFilter, viewerId, skipPrivate);
         }
-        return areaTaskRepository.findScopedFiltered(scope.areaIds(), areaIdFilter, workspaceIdFilter, priorityFilter,
+        return areaTaskRepository.findScopedFiltered(scope.areaIds(), areaIdFilter, workspaceIdFilter, onlyWithoutWorkspace, priorityFilter,
                 ownerUserIdFilter, viewerId, skipPrivate);
     }
 
@@ -242,11 +259,14 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     public AreaTasksSummaryResponseDto summary(long userId, AreaTaskListParams filters) {
         User user = requireUser(userId);
         GanttTaskScope scope = resolveScope(user);
-        List<AreaTask> tasks = loadVisibleTasksFromDb(user, scope,
-                filters.areaId(),
-                filters.workspaceId(),
-                filters.priority(),
-                filters.ownerUserId());
+        List<AreaTask> tasks = filters.mySpace()
+                ? loadMySpaceTasksFromDb(user, scope, filters.areaId(), filters.priority(), filters.ownerUserId())
+                : loadVisibleTasksFromDb(user, scope,
+                        filters.areaId(),
+                        filters.workspaceId(),
+                        filters.onlyWithoutWorkspace(),
+                        filters.priority(),
+                        filters.ownerUserId());
         return AreaTasksSummaryResponseDto.builder()
                 .tasks(toDtos(tasks))
                 .kpis(buildKpis(tasks))

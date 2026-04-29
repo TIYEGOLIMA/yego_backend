@@ -24,7 +24,6 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -74,16 +73,12 @@ public class WorkspaceServiceImpl implements WorkspaceService {
                     .toList();
         }
 
-        Set<Long> visibleIds = memberRepo.findByUserId(requesterId).stream()
-                .map(ProjectMember::getWorkspaceId)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
         Set<Long> readableAreas = GanttReadableAreas.forUser(user, areaRepository);
-        if (!readableAreas.isEmpty()) {
-            visibleIds.addAll(areaTaskRepository.findDistinctWorkspaceIdsByAreaIdIn(
-                    readableAreas,
-                    user.getId(),
-                    GanttReadableAreas.isPlatformAdmin(user)));
+        if (readableAreas.isEmpty()) {
+            return List.of();
         }
+        Set<Long> visibleIds = new LinkedHashSet<>(
+                areaTaskRepository.findDistinctWorkspaceIdsWhereAssignedScoped(readableAreas, user.getId()));
 
         if (visibleIds.isEmpty()) {
             return List.of();
