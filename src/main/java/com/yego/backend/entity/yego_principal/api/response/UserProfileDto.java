@@ -25,6 +25,10 @@ public class UserProfileDto {
     private Boolean esSupervisor;
     private String nombreAreaSupervisor;
     private Boolean requirePasswordChange;
+    /** Área principal del usuario (columna `users.area_id`). */
+    private Long areaId;
+    /** Nombre completo del área desde BD; null si no hay área o no existe la fila. */
+    private String areaNombre;
     private Long sedeId;
     private String sedeNombre;
 }

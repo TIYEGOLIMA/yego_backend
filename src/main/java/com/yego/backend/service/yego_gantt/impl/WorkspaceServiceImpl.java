@@ -1,8 +1,8 @@
 package com.yego.backend.service.yego_gantt.impl;
 
-import com.yego.backend.entity.yego_gantt.api.request.CreateProjectDto;
-import com.yego.backend.entity.yego_gantt.api.request.UpdateProjectDto;
-import com.yego.backend.entity.yego_gantt.api.response.ProjectResponseDto;
+import com.yego.backend.entity.yego_gantt.api.request.CreateWorkspaceDto;
+import com.yego.backend.entity.yego_gantt.api.request.UpdateWorkspaceDto;
+import com.yego.backend.entity.yego_gantt.api.response.WorkspaceResponseDto;
 import com.yego.backend.entity.yego_gantt.entities.Project;
 import com.yego.backend.entity.yego_gantt.entities.ProjectMember;
 import com.yego.backend.entity.yego_principal.entities.User;
@@ -13,7 +13,7 @@ import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_gantt.GanttPortfolioAuthorizations;
 import com.yego.backend.service.yego_gantt.GanttReadableAreas;
-import com.yego.backend.service.yego_gantt.ProjectService;
+import com.yego.backend.service.yego_gantt.WorkspaceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -28,9 +28,9 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class ProjectServiceImpl implements ProjectService {
+public class WorkspaceServiceImpl implements WorkspaceService {
 
-    private static final Set<String> ALLOWED_PROJECT_ICON_KEYS = Set.of(
+    private static final Set<String> ALLOWED_WORKSPACE_ICON_KEYS = Set.of(
             "folder", "folder-kanban", "rocket", "briefcase", "layers", "cpu", "sparkles",
             "target", "globe", "zap", "building", "compass", "lightbulb", "box", "heart", "palette");
 
@@ -42,9 +42,9 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional
-    public ProjectResponseDto create(Long requesterId, CreateProjectDto dto) {
+    public WorkspaceResponseDto create(Long requesterId, CreateWorkspaceDto dto) {
         GanttPortfolioAuthorizations.requirePortfolioManager(userRepo, areaRepository, requesterId,
-                "Sin permiso para gestionar proyectos");
+                "Sin permiso para gestionar espacios de trabajo");
         Project p = Project.builder()
                 .name(dto.getName().trim())
                 .description(dto.getDescription())
@@ -55,7 +55,7 @@ public class ProjectServiceImpl implements ProjectService {
         if (dto.getMemberUserIds() != null) {
             for (Long userId : dto.getMemberUserIds()) {
                 memberRepo.save(ProjectMember.builder()
-                        .projectId(p.getId())
+                        .workspaceId(p.getId())
                         .userId(userId)
                         .build());
             }
@@ -64,7 +64,7 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public List<ProjectResponseDto> findAllActiveForUser(Long requesterId) {
+    public List<WorkspaceResponseDto> findAllActiveForUser(Long requesterId) {
         User user = userRepo.findByIdWithRole(requesterId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
         if (GanttReadableAreas.isPlatformAdmin(user)) {
@@ -75,11 +75,14 @@ public class ProjectServiceImpl implements ProjectService {
         }
 
         Set<Long> visibleIds = memberRepo.findByUserId(requesterId).stream()
-                .map(ProjectMember::getProjectId)
+                .map(ProjectMember::getWorkspaceId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         Set<Long> readableAreas = GanttReadableAreas.forUser(user, areaRepository);
         if (!readableAreas.isEmpty()) {
-            visibleIds.addAll(areaTaskRepository.findDistinctProjectIdsByAreaIdIn(readableAreas));
+            visibleIds.addAll(areaTaskRepository.findDistinctWorkspaceIdsByAreaIdIn(
+                    readableAreas,
+                    user.getId(),
+                    GanttReadableAreas.isPlatformAdmin(user)));
         }
 
         if (visibleIds.isEmpty()) {
@@ -94,11 +97,11 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional
-    public ProjectResponseDto update(Long requesterId, Long id, UpdateProjectDto dto) {
+    public WorkspaceResponseDto update(Long requesterId, Long id, UpdateWorkspaceDto dto) {
         GanttPortfolioAuthorizations.requirePortfolioManager(userRepo, areaRepository, requesterId,
-                "Sin permiso para gestionar proyectos");
+                "Sin permiso para gestionar espacios de trabajo");
         Project p = projectRepo.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Proyecto no encontrado: " + id));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Espacio de trabajo no encontrado: " + id));
 
         if (dto.getName() != null) p.setName(dto.getName().trim());
         if (dto.getDescription() != null) p.setDescription(dto.getDescription());
@@ -107,10 +110,10 @@ public class ProjectServiceImpl implements ProjectService {
         p = projectRepo.save(p);
 
         if (dto.getMemberUserIds() != null) {
-            memberRepo.deleteByProjectId(id);
+            memberRepo.deleteByWorkspaceId(id);
             for (Long userId : dto.getMemberUserIds()) {
                 memberRepo.save(ProjectMember.builder()
-                        .projectId(id)
+                        .workspaceId(id)
                         .userId(userId)
                         .build());
             }
@@ -122,18 +125,18 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional
     public void delete(Long requesterId, Long id) {
         GanttPortfolioAuthorizations.requirePortfolioManager(userRepo, areaRepository, requesterId,
-                "Sin permiso para gestionar proyectos");
-        memberRepo.deleteByProjectId(id);
+                "Sin permiso para gestionar espacios de trabajo");
+        memberRepo.deleteByWorkspaceId(id);
         projectRepo.deleteById(id);
     }
 
-    private ProjectResponseDto toDto(Project p) {
-        List<Long> memberIds = memberRepo.findByProjectId(p.getId())
+    private WorkspaceResponseDto toDto(Project p) {
+        List<Long> memberIds = memberRepo.findByWorkspaceId(p.getId())
                 .stream()
                 .map(ProjectMember::getUserId)
                 .toList();
 
-        return ProjectResponseDto.builder()
+        return WorkspaceResponseDto.builder()
                 .id(p.getId())
                 .name(p.getName())
                 .description(p.getDescription())
@@ -150,6 +153,6 @@ public class ProjectServiceImpl implements ProjectService {
             return "folder";
         }
         String k = raw.trim().toLowerCase();
-        return ALLOWED_PROJECT_ICON_KEYS.contains(k) ? k : "folder";
+        return ALLOWED_WORKSPACE_ICON_KEYS.contains(k) ? k : "folder";
     }
 }

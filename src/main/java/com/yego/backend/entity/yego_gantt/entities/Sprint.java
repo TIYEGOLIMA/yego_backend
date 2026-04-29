@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import com.yego.backend.entity.yego_gantt.entities.enums.SprintStatus;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -22,7 +24,7 @@ public class Sprint {
     private Long id;
 
     @Column(name = "project_id", nullable = false)
-    private Long projectId;
+    private Long workspaceId;
 
     @Column(name = "name", nullable = false, length = 200)
     private String name;

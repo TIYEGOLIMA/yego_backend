@@ -9,5 +9,5 @@ import java.util.List;
 @Repository
 public interface SprintRepository extends JpaRepository<Sprint, Long> {
 
-    List<Sprint> findByProjectIdOrderByStartDateAsc(Long projectId);
+    List<Sprint> findByWorkspaceIdOrderByStartDateAsc(Long workspaceId);
 }

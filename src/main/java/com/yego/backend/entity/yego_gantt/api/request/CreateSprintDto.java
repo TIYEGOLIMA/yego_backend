@@ -1,6 +1,6 @@
 package com.yego.backend.entity.yego_gantt.api.request;
 
-import com.yego.backend.entity.yego_gantt.entities.SprintStatus;
+import com.yego.backend.entity.yego_gantt.entities.enums.SprintStatus;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -18,7 +18,7 @@ import java.time.LocalDate;
 public class CreateSprintDto {
 
     @NotNull
-    private Long projectId;
+    private Long workspaceId;
 
     @NotBlank
     @Size(max = 200)

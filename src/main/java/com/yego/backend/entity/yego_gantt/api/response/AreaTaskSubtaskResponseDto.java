@@ -5,25 +5,20 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ProjectResponseDto {
-
+public class AreaTaskSubtaskResponseDto {
     private Long id;
-    private String name;
-    private String description;
-    private Boolean activo;
-
-    private String iconKey;
-
-    /** IDs de usuarios (jefes de área) miembros del proyecto */
-    private List<Long> memberUserIds;
-
+    private Long parentTaskId;
+    private String title;
+    private Integer sortOrder;
+    private Boolean done;
+    private BigDecimal weight;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

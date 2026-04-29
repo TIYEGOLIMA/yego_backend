@@ -10,7 +10,7 @@ public interface SprintService {
 
     SprintResponseDto create(Long requesterId, CreateSprintDto dto);
 
-    List<SprintResponseDto> findByProject(Long projectId);
+    List<SprintResponseDto> findByWorkspace(Long workspaceId);
 
     SprintResponseDto update(Long requesterId, Long id, UpdateSprintDto dto);
 

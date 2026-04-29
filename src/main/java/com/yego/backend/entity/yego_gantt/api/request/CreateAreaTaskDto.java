@@ -1,7 +1,7 @@
 package com.yego.backend.entity.yego_gantt.api.request;
 
-import com.yego.backend.entity.yego_gantt.entities.AreaTaskPriority;
-import com.yego.backend.entity.yego_gantt.entities.AreaTaskStatus;
+import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskPriority;
+import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskStatus;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -24,7 +24,7 @@ public class CreateAreaTaskDto {
     @NotNull
     private Long areaId;
 
-    private Long projectId;
+    private Long workspaceId;
 
     private Long sprintId;
 
@@ -52,6 +52,9 @@ public class CreateAreaTaskDto {
     private Long assignedUserId;
 
     private List<Long> assignedUserIds;
+
+    /** Si no se envía, se infiere por etiquetas reservadas (privada/private). */
+    private Boolean privateTask;
 
     private List<String> tags;
 

@@ -1,7 +1,7 @@
 package com.yego.backend.entity.yego_gantt.api.response;
 
-import com.yego.backend.entity.yego_gantt.entities.AreaTaskPriority;
-import com.yego.backend.entity.yego_gantt.entities.AreaTaskStatus;
+import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskPriority;
+import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,7 +19,7 @@ public class AreaTaskResponseDto {
     private Long id;
     private Long areaId;
     private String areaName;
-    private Long projectId;
+    private Long workspaceId;
     private Long sprintId;
     private String title;
     private String description;
@@ -31,7 +31,11 @@ public class AreaTaskResponseDto {
     private Long assignedUserId;
     private List<Long> assignedUserIds;
     private List<String> tags;
+    private boolean privateTask;
+    private Long createdByUserId;
     private Integer sortOrder;
+    private Integer subtaskDone;
+    private Integer subtaskTotal;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

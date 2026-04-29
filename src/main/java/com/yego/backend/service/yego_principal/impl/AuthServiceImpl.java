@@ -392,6 +392,12 @@ public class AuthServiceImpl implements AuthService {
                 ? sedeRepository.findById(sedeId).map(Sede::getName).orElse(null)
                 : null;
 
+        Long userAreaId = user.getAreaId();
+        String areaNombre = null;
+        if (userAreaId != null) {
+            areaNombre = areaRepository.findById(userAreaId).map(Area::getName).orElse(null);
+        }
+
         return UserProfileDto.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -405,6 +411,8 @@ public class AuthServiceImpl implements AuthService {
                 .esSupervisor(esSupervisor)
                 .nombreAreaSupervisor(nombreAreaSupervisor)
                 .requirePasswordChange(shouldRequirePasswordChange(user.getId(), user.getPasswordChangedAt()))
+                .areaId(userAreaId)
+                .areaNombre(areaNombre)
                 .sedeId(sedeId)
                 .sedeNombre(sedeNombre)
                 .build();

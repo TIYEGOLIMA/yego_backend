@@ -1,28 +1,29 @@
 package com.yego.backend.entity.yego_gantt.api.response;
 
-import com.yego.backend.entity.yego_gantt.entities.enums.SprintStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class SprintResponseDto {
+public class WorkspaceResponseDto {
+
     private Long id;
-    private Long workspaceId;
     private String name;
-    private String goal;
-    private LocalDate startDate;
-    private LocalDate endDate;
-    private SprintStatus status;
-    private int taskCount;
-    private int doneCount;
+    private String description;
+    private Boolean activo;
+
+    private String iconKey;
+
+    /** IDs de usuarios miembros del espacio de trabajo */
+    private List<Long> memberUserIds;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

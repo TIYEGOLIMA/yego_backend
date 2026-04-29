@@ -1,6 +1,6 @@
 package com.yego.backend.entity.yego_gantt.api.request;
 
-import com.yego.backend.entity.yego_gantt.entities.SprintStatus;
+import com.yego.backend.entity.yego_gantt.entities.enums.SprintStatus;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

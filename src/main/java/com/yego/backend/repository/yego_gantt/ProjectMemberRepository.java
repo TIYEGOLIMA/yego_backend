@@ -9,9 +9,9 @@ import java.util.List;
 @Repository
 public interface ProjectMemberRepository extends JpaRepository<ProjectMember, Long> {
 
-    List<ProjectMember> findByProjectId(Long projectId);
+    List<ProjectMember> findByWorkspaceId(Long workspaceId);
 
     List<ProjectMember> findByUserId(Long userId);
 
-    void deleteByProjectId(Long projectId);
+    void deleteByWorkspaceId(Long workspaceId);
 }

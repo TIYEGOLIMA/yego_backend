@@ -9,6 +9,9 @@ import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.Fetch;
 import org.hibernate.annotations.FetchMode;
 
+import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskPriority;
+import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskStatus;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -36,12 +39,11 @@ public class AreaTask {
     private Long areaId;
 
     @Column(name = "project_id")
-    private Long projectId;
+    private Long workspaceId;
 
     @Column(name = "sprint_id")
     private Long sprintId;
 
-    @Column(name = "title", nullable = false, length = 500)
     private String title;
 
     @Column(name = "description", length = 4000)
@@ -87,6 +89,13 @@ public class AreaTask {
     @Column(name = "sort_order", nullable = false)
     @Builder.Default
     private Integer sortOrder = 0;
+
+    @Column(name = "created_by_user_id")
+    private Long createdByUserId;
+
+    @Column(name = "private_task", nullable = false)
+    @Builder.Default
+    private boolean privateTask = false;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

@@ -3,9 +3,9 @@ package com.yego.backend.service.yego_gantt.impl;
 import com.yego.backend.entity.yego_gantt.api.request.CreateSprintDto;
 import com.yego.backend.entity.yego_gantt.api.request.UpdateSprintDto;
 import com.yego.backend.entity.yego_gantt.api.response.SprintResponseDto;
-import com.yego.backend.entity.yego_gantt.entities.AreaTaskStatus;
 import com.yego.backend.entity.yego_gantt.entities.Sprint;
-import com.yego.backend.entity.yego_gantt.entities.SprintStatus;
+import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskStatus;
+import com.yego.backend.entity.yego_gantt.entities.enums.SprintStatus;
 import com.yego.backend.repository.yego_gantt.AreaTaskRepository;
 import com.yego.backend.repository.yego_gantt.ProjectRepository;
 import com.yego.backend.repository.yego_gantt.SprintRepository;
@@ -36,14 +36,14 @@ public class SprintServiceImpl implements SprintService {
     public SprintResponseDto create(Long requesterId, CreateSprintDto dto) {
         GanttPortfolioAuthorizations.requirePortfolioManager(userRepo, areaRepository, requesterId,
                 "Sin permiso para gestionar sprints");
-        projectRepo.findById(dto.getProjectId())
+        projectRepo.findById(dto.getWorkspaceId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
-                        "Proyecto no encontrado: " + dto.getProjectId()));
+                        "Espacio de trabajo no encontrado: " + dto.getWorkspaceId()));
         if (dto.getEndDate().isBefore(dto.getStartDate())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha fin no puede ser anterior al inicio");
         }
         Sprint sprint = Sprint.builder()
-                .projectId(dto.getProjectId())
+                .workspaceId(dto.getWorkspaceId())
                 .name(dto.getName().trim())
                 .goal(dto.getGoal())
                 .startDate(dto.getStartDate())
@@ -55,8 +55,8 @@ public class SprintServiceImpl implements SprintService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<SprintResponseDto> findByProject(Long projectId) {
-        return sprintRepo.findByProjectIdOrderByStartDateAsc(projectId)
+    public List<SprintResponseDto> findByWorkspace(Long workspaceId) {
+        return sprintRepo.findByWorkspaceIdOrderByStartDateAsc(workspaceId)
                 .stream()
                 .map(this::toDto)
                 .toList();
@@ -96,7 +96,7 @@ public class SprintServiceImpl implements SprintService {
 
         return SprintResponseDto.builder()
                 .id(s.getId())
-                .projectId(s.getProjectId())
+                .workspaceId(s.getWorkspaceId())
                 .name(s.getName())
                 .goal(s.getGoal())
                 .startDate(s.getStartDate())

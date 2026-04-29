@@ -21,7 +21,7 @@ public class ProjectMember {
     private Long id;
 
     @Column(name = "project_id", nullable = false)
-    private Long projectId;
+    private Long workspaceId;
 
     @Column(name = "user_id", nullable = false)
     private Long userId;

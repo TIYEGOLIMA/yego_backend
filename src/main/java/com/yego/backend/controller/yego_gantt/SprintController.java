@@ -23,27 +23,24 @@ public class SprintController {
     @PostMapping
     public ResponseEntity<SprintResponseDto> create(Authentication authentication,
                                                     @Valid @RequestBody CreateSprintDto dto) {
-        Long userId = Long.parseLong(authentication.getName());
-        return ResponseEntity.status(201).body(sprintService.create(userId, dto));
+        return ResponseEntity.status(201).body(sprintService.create(Long.parseLong(authentication.getName()), dto));
     }
 
-    @GetMapping("/by-project/{projectId}")
-    public ResponseEntity<List<SprintResponseDto>> findByProject(@PathVariable Long projectId) {
-        return ResponseEntity.ok(sprintService.findByProject(projectId));
+    @GetMapping("/by-workspace/{workspaceId}")
+    public ResponseEntity<List<SprintResponseDto>> findByWorkspace(@PathVariable Long workspaceId) {
+        return ResponseEntity.ok(sprintService.findByWorkspace(workspaceId));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<SprintResponseDto> update(Authentication authentication,
                                                     @PathVariable Long id,
                                                     @Valid @RequestBody UpdateSprintDto dto) {
-        Long userId = Long.parseLong(authentication.getName());
-        return ResponseEntity.ok(sprintService.update(userId, id, dto));
+        return ResponseEntity.ok(sprintService.update(Long.parseLong(authentication.getName()), id, dto));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(Authentication authentication, @PathVariable Long id) {
-        Long userId = Long.parseLong(authentication.getName());
-        sprintService.delete(userId, id);
+        sprintService.delete(Long.parseLong(authentication.getName()), id);
         return ResponseEntity.noContent().build();
     }
 }
