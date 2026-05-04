@@ -27,8 +27,10 @@ public class SprintController {
     }
 
     @GetMapping("/by-workspace/{workspaceId}")
-    public ResponseEntity<List<SprintResponseDto>> findByWorkspace(@PathVariable Long workspaceId) {
-        return ResponseEntity.ok(sprintService.findByWorkspace(workspaceId));
+    public ResponseEntity<List<SprintResponseDto>> findByWorkspace(
+            @PathVariable Long workspaceId,
+            @RequestParam(required = false, defaultValue = "false") boolean assignableOnly) {
+        return ResponseEntity.ok(sprintService.findByWorkspace(workspaceId, assignableOnly));
     }
 
     @PutMapping("/{id}")

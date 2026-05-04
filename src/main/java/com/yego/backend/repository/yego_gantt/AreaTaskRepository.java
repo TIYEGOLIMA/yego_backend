@@ -23,7 +23,8 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
             OR (:onlyWithoutWorkspace = FALSE AND (:workspaceIdFilter IS NULL OR t.workspaceId = :workspaceIdFilter))
           )
           AND (:priorityFilter IS NULL OR t.priority = :priorityFilter)
-          AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter)
+          AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter
+              OR :ownerUserIdFilter MEMBER OF t.assignedUserIds)
           AND (:skipPrivateVisibilityFilter = true OR t.privateTask = false
               OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId))
         ORDER BY t.areaId ASC, t.sortOrder ASC, t.id ASC
@@ -39,14 +40,17 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
 
     @Query("""
         SELECT t FROM AreaTask t
-        WHERE t.areaId IN :areaIds
+        WHERE (t.areaId IN :areaIds
+            OR t.assignedUserId = :viewerUserId
+            OR :viewerUserId MEMBER OF t.assignedUserIds)
           AND (:areaIdFilter IS NULL OR t.areaId = :areaIdFilter)
           AND (
             (:onlyWithoutWorkspace = TRUE AND t.workspaceId IS NULL)
             OR (:onlyWithoutWorkspace = FALSE AND (:workspaceIdFilter IS NULL OR t.workspaceId = :workspaceIdFilter))
           )
           AND (:priorityFilter IS NULL OR t.priority = :priorityFilter)
-          AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter)
+          AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter
+              OR :ownerUserIdFilter MEMBER OF t.assignedUserIds)
           AND (:skipPrivateVisibilityFilter = true OR t.privateTask = false
               OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId))
         ORDER BY t.areaId ASC, t.sortOrder ASC, t.id ASC
@@ -71,7 +75,8 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
                 AND (t.assignedUserId = :viewerUserId OR :viewerUserId MEMBER OF t.assignedUserIds))
           )
           AND (:priorityFilter IS NULL OR t.priority = :priorityFilter)
-          AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter)
+          AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter
+              OR :ownerUserIdFilter MEMBER OF t.assignedUserIds)
         ORDER BY t.areaId ASC, t.sortOrder ASC, t.id ASC
         """)
     List<AreaTask> findAdminMySpaceFiltered(
@@ -82,7 +87,9 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
 
     @Query("""
         SELECT t FROM AreaTask t
-        WHERE t.areaId IN :areaIds
+        WHERE (t.areaId IN :areaIds
+            OR t.assignedUserId = :viewerUserId
+            OR :viewerUserId MEMBER OF t.assignedUserIds)
           AND (:areaIdFilter IS NULL OR t.areaId = :areaIdFilter)
           AND (
             (t.workspaceId IS NULL AND t.createdByUserId = :viewerUserId)
@@ -93,7 +100,8 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
                     OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId)))
           )
           AND (:priorityFilter IS NULL OR t.priority = :priorityFilter)
-          AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter)
+          AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter
+              OR :ownerUserIdFilter MEMBER OF t.assignedUserIds)
         ORDER BY t.areaId ASC, t.sortOrder ASC, t.id ASC
         """)
     List<AreaTask> findScopedMySpaceFiltered(
@@ -104,20 +112,17 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
             @Param("viewerUserId") Long viewerUserId);
 
     /**
-     * Proyectos con al menos una tarea asignada al usuario, acotados a sus áreas legibles
-     * (misma visibilidad de privadas que el listado scoped).
+     * Proyectos con al menos una tarea asignada al usuario (incluye tareas cuyo {@code areaId}
+     * no pertenece al ámbito del usuario). Misma regla de privadas que el listado scoped.
      */
     @Query("""
         SELECT DISTINCT t.workspaceId FROM AreaTask t
         WHERE t.workspaceId IS NOT NULL
-          AND t.areaId IN :areaIds
           AND (t.assignedUserId = :viewerUserId OR :viewerUserId MEMBER OF t.assignedUserIds)
           AND (t.privateTask = false
               OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId))
         """)
-    List<Long> findDistinctWorkspaceIdsWhereAssignedScoped(
-            @Param("areaIds") Collection<Long> areaIds,
-            @Param("viewerUserId") Long viewerUserId);
+    List<Long> findDistinctWorkspaceIdsWhereUserIsAssignee(@Param("viewerUserId") Long viewerUserId);
 
     long countBySprintId(Long sprintId);
 

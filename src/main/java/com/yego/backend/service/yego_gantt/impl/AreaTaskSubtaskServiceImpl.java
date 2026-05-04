@@ -12,6 +12,7 @@ import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_gantt.AreaTaskSubtaskService;
 import com.yego.backend.service.yego_gantt.AreaTaskPrivateAccess;
+import com.yego.backend.service.yego_gantt.AreaTaskVisibility;
 import com.yego.backend.service.yego_gantt.GanttTaskScope;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -43,10 +44,10 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
     private AreaTask requireReadableParent(User user, GanttTaskScope scope, Long parentTaskId) {
         AreaTask task = taskRepo.findById(parentTaskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarea no encontrada"));
-        if (!scope.canAccessArea(task.getAreaId())) {
+        if (!AreaTaskPrivateAccess.canSeeTaskContent(user, task)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a esta tarea");
         }
-        if (!AreaTaskPrivateAccess.canSeeTaskContent(user, task)) {
+        if (!AreaTaskVisibility.canReadTaskByScopeAndAssignment(user, scope, task)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a esta tarea");
         }
         return task;

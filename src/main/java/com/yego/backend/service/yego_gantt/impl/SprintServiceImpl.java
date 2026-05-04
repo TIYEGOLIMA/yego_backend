@@ -61,11 +61,26 @@ public class SprintServiceImpl implements SprintService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<SprintResponseDto> findByWorkspace(Long workspaceId) {
-        return sprintRepo.findByWorkspaceIdOrderByStartDateAsc(workspaceId)
-                .stream()
-                .map(this::toDto)
-                .toList();
+    public List<SprintResponseDto> findByWorkspace(Long workspaceId, boolean assignableOnly) {
+        List<Sprint> list = assignableOnly
+                ? sprintRepo.findByWorkspaceIdAndStatusInOrderByStartDateAsc(
+                        workspaceId, List.of(SprintStatus.PLANNED, SprintStatus.ACTIVE))
+                : sprintRepo.findByWorkspaceIdOrderByStartDateAsc(workspaceId);
+        return list.stream().map(this::toDto).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public void assertSprintOpenForNewTasks(Long sprintId) {
+        if (sprintId == null) {
+            return;
+        }
+        Sprint sprint = sprintRepo.findById(sprintId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Sprint no encontrado"));
+        if (!sprint.getStatus().isOpenForAssignment()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El sprint está completado o cancelado; elige uno planificado o activo para asignar la tarea.");
+        }
     }
 
     @Override

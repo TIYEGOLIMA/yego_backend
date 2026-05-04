@@ -15,10 +15,12 @@ import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_gantt.AreaTaskListParams;
 import com.yego.backend.service.yego_gantt.AreaTaskPrivateAccess;
+import com.yego.backend.service.yego_gantt.AreaTaskVisibility;
 import com.yego.backend.service.yego_gantt.AreaTaskService;
 import com.yego.backend.service.yego_gantt.GanttReadableAreas;
 import com.yego.backend.service.yego_gantt.GanttTaskTagPrivacy;
 import com.yego.backend.service.yego_gantt.GanttTaskScope;
+import com.yego.backend.service.yego_gantt.SprintService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,6 +43,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     private final AreaTaskSubtaskRepository areaTaskSubtaskRepository;
     private final AreaRepository areaRepository;
     private final UserRepository userRepository;
+    private final SprintService sprintService;
 
     private GanttTaskScope resolveScope(User user) {
         return GanttTaskScope.resolve(user, areaRepository);
@@ -109,10 +112,10 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     private AreaTask requireReadableTask(User user, GanttTaskScope scope, Long taskId) {
         AreaTask task = areaTaskRepository.findById(taskId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarea no encontrada"));
-        if (!scope.canAccessArea(task.getAreaId())) {
+        if (!AreaTaskPrivateAccess.canSeeTaskContent(user, task)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a esta tarea");
         }
-        if (!AreaTaskPrivateAccess.canSeeTaskContent(user, task)) {
+        if (!AreaTaskVisibility.canReadTaskByScopeAndAssignment(user, scope, task)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a esta tarea");
         }
         return task;
@@ -291,6 +294,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         assertCanManage(scope, effectiveAreaId);
         areaRepository.findById(effectiveAreaId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Área no existe"));
+        sprintService.assertSprintOpenForNewTasks(dto.getSprintId());
         List<String> tagsStored = GanttTaskTagPrivacy.stripPrivacyTagLabels(tagList);
         AreaTask task = AreaTask.builder()
                 .areaId(effectiveAreaId)
@@ -346,6 +350,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
             task.setWorkspaceId(dto.getWorkspaceId());
         }
         if (dto.getSprintId() != null) {
+            sprintService.assertSprintOpenForNewTasks(dto.getSprintId());
             task.setSprintId(dto.getSprintId());
         }
         if (dto.getAssignedUserId() != null) {

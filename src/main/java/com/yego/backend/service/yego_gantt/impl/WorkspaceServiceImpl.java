@@ -73,12 +73,8 @@ public class WorkspaceServiceImpl implements WorkspaceService {
                     .toList();
         }
 
-        Set<Long> readableAreas = GanttReadableAreas.forUser(user, areaRepository);
-        if (readableAreas.isEmpty()) {
-            return List.of();
-        }
         Set<Long> visibleIds = new LinkedHashSet<>(
-                areaTaskRepository.findDistinctWorkspaceIdsWhereAssignedScoped(readableAreas, user.getId()));
+                areaTaskRepository.findDistinctWorkspaceIdsWhereUserIsAssignee(user.getId()));
 
         if (visibleIds.isEmpty()) {
             return List.of();

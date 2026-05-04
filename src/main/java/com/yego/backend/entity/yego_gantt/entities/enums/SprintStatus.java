@@ -4,5 +4,10 @@ public enum SprintStatus {
     PLANNED,
     ACTIVE,
     COMPLETED,
-    CANCELLED
+    CANCELLED;
+
+    /** Aún se pueden crear o reasignar tareas (no cerrado ni cancelado). */
+    public boolean isOpenForAssignment() {
+        return this != COMPLETED && this != CANCELLED;
+    }
 }
