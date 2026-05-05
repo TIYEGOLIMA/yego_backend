@@ -63,11 +63,13 @@ public class AuthServiceImpl implements AuthService {
     @Value("${jwt.expiration:28800}")
     private Long jwtExpiration;
     
-    @Value("${auth.password-policy.excluded-user-ids:1,4,5,6}")
+    @Value("${auth.password-policy.excluded-user-ids:1,4,5,6,27,37}")
     private String excludedUserIdsConfig;
     
     private java.util.Set<Long> getExcludedUserIdsPasswordPolicy() {
-        if (excludedUserIdsConfig == null || excludedUserIdsConfig.isBlank()) return java.util.Set.of(1L, 4L, 5L, 6L);
+        if (excludedUserIdsConfig == null || excludedUserIdsConfig.isBlank()) {
+            return java.util.Set.of(1L, 4L, 5L, 6L, 27L, 37L);
+        }
         java.util.Set<Long> set = new java.util.HashSet<>();
         for (String s : excludedUserIdsConfig.split(",")) {
             try {
@@ -75,7 +77,7 @@ public class AuthServiceImpl implements AuthService {
                 set.add(id);
             } catch (NumberFormatException ignored) { }
         }
-        return set.isEmpty() ? java.util.Set.of(1L, 4L, 5L, 6L) : set;
+        return set.isEmpty() ? java.util.Set.of(1L, 4L, 5L, 6L, 27L, 37L) : set;
     }
     
     private SecretKey getSigningKey() {

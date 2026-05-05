@@ -1,22 +1,24 @@
-package com.yego.backend.service.yego_gantt;
+package com.yego.backend.service.yego_gantt.impl;
 
 import com.yego.backend.entity.yego_principal.entities.Area;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.repository.yego_principal.AreaRepository;
+import com.yego.backend.service.yego_gantt.GanttReadableAreasService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * Ámbito de áreas para WorkOS/Gantt: mismo criterio en listado de proyectos y tareas.
- */
-public final class GanttReadableAreas {
+@Service
+@RequiredArgsConstructor
+public class GanttReadableAreasServiceImpl implements GanttReadableAreasService {
 
-    private GanttReadableAreas() {
-    }
+    private final AreaRepository areaRepository;
 
-    public static boolean isPlatformAdmin(User user) {
+    @Override
+    public boolean isPlatformAdmin(User user) {
         if (user == null || user.getRole() == null) {
             return false;
         }
@@ -24,8 +26,8 @@ public final class GanttReadableAreas {
         return "ADMIN".equalsIgnoreCase(name) || "SUPERADMIN".equalsIgnoreCase(name);
     }
 
-    /** Jefe de al menos un área → esas áreas; si no, el área del usuario colaborador. */
-    public static Set<Long> forUser(User user, AreaRepository areaRepository) {
+    @Override
+    public Set<Long> readableAreaIdsForUser(User user) {
         if (user == null) {
             return Set.of();
         }

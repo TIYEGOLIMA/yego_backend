@@ -43,6 +43,8 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     private final ProjectRepository projectRepository;
     private final SprintRepository sprintRepository;
     private final SprintService sprintService;
+    private final GanttTaskScopeService ganttTaskScopeService;
+    private final GanttReadableAreasService ganttReadableAreasService;
 
     private User requireUser(long userId) {
         return userRepository.findByIdWithRole(userId)
@@ -50,11 +52,11 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     }
 
     private GanttTaskScope scope(User user) {
-        return GanttTaskScope.resolve(user, areaRepository);
+        return ganttTaskScopeService.resolve(user);
     }
 
     private void assertHasScope(GanttTaskScope scope, User user) {
-        if (GanttReadableAreas.isPlatformAdmin(user)) {
+        if (ganttReadableAreasService.isPlatformAdmin(user)) {
             return;
         }
         if (!scope.allAreas() && scope.areaIds().isEmpty()) {
@@ -64,7 +66,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
 
     /** Acta completa (todos los ítems y KPIs): admin, quien la creó o el dueño. */
     private boolean hasFullActaVisibility(User user, WorkosMeetingMinute m) {
-        if (GanttReadableAreas.isPlatformAdmin(user)) {
+        if (ganttReadableAreasService.isPlatformAdmin(user)) {
             return true;
         }
         return Objects.equals(m.getCreatedByUserId(), user.getId())
@@ -103,7 +105,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
 
     /** Cabecera del acta, borrado, alta masiva de ítems y borrado de filas: solo admin, creador o dueño. */
     private boolean canWriteWholeMinute(User user, WorkosMeetingMinute m) {
-        if (GanttReadableAreas.isPlatformAdmin(user)) {
+        if (ganttReadableAreasService.isPlatformAdmin(user)) {
             return true;
         }
         return Objects.equals(m.getCreatedByUserId(), user.getId())
@@ -360,7 +362,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
         User user = requireUser(userId);
         GanttTaskScope sc = scope(user);
         assertHasScope(sc, user);
-        boolean admin = GanttReadableAreas.isPlatformAdmin(user);
+        boolean admin = ganttReadableAreasService.isPlatformAdmin(user);
         Specification<WorkosMeetingMinute> spec = Specification.allOf(
                 MeetingMinuteSpecifications.notDeleted(),
                 MeetingMinuteSpecifications.visibleTo(sc, userId, admin),
@@ -472,7 +474,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
         for (CreateMeetingMinuteItemRequest r : reqs) {
             order++;
             int effectiveOrder = r.getItemOrder() != null ? r.getItemOrder() : order;
-            if (r.getAreaId() != null && !GanttReadableAreas.isPlatformAdmin(user) && !sc.canAccessArea(r.getAreaId())) {
+            if (r.getAreaId() != null && !ganttReadableAreasService.isPlatformAdmin(user) && !sc.canAccessArea(r.getAreaId())) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Área no permitida en el ítem");
             }
             WorkosMeetingMinuteItem it = WorkosMeetingMinuteItem.builder()
@@ -515,7 +517,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ítem ya convertido; no editable aquí");
         }
         if (req.getAreaId() != null) {
-            if (!GanttReadableAreas.isPlatformAdmin(user) && !sc.canAccessArea(req.getAreaId())) {
+            if (!ganttReadableAreasService.isPlatformAdmin(user) && !sc.canAccessArea(req.getAreaId())) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Área no permitida");
             }
             it.setAreaId(req.getAreaId());
@@ -691,7 +693,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     public MeetingMinutesDashboardKpisResponse dashboardKpis(long userId) {
         User user = requireUser(userId);
         GanttTaskScope sc = scope(user);
-        boolean admin = GanttReadableAreas.isPlatformAdmin(user);
+        boolean admin = ganttReadableAreasService.isPlatformAdmin(user);
         Specification<WorkosMeetingMinute> spec = Specification.allOf(
                 MeetingMinuteSpecifications.notDeleted(),
                 MeetingMinuteSpecifications.visibleTo(sc, userId, admin));

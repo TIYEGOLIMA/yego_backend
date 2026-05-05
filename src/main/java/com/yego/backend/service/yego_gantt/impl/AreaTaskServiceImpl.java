@@ -12,13 +12,10 @@ import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.repository.yego_gantt.AreaTaskRepository;
 import com.yego.backend.repository.yego_gantt.AreaTaskSubtaskRepository;
 import com.yego.backend.repository.yego_principal.AreaRepository;
-import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_gantt.AreaTaskListParams;
-import com.yego.backend.service.yego_gantt.AreaTaskPrivateAccess;
-import com.yego.backend.service.yego_gantt.AreaTaskVisibility;
 import com.yego.backend.service.yego_gantt.AreaTaskService;
-import com.yego.backend.service.yego_gantt.GanttReadableAreas;
-import com.yego.backend.service.yego_gantt.GanttTaskTagPrivacy;
+import com.yego.backend.service.yego_gantt.GanttReadableAreasService;
+import com.yego.backend.service.yego_gantt.GanttTaskTagPrivacyService;
 import com.yego.backend.service.yego_gantt.GanttTaskScope;
 import com.yego.backend.service.yego_gantt.SprintService;
 import lombok.RequiredArgsConstructor;
@@ -42,17 +39,11 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     private final AreaTaskRepository areaTaskRepository;
     private final AreaTaskSubtaskRepository areaTaskSubtaskRepository;
     private final AreaRepository areaRepository;
-    private final UserRepository userRepository;
+    private final AreaTaskAccessHelper areaTaskAccess;
     private final SprintService sprintService;
-
-    private GanttTaskScope resolveScope(User user) {
-        return GanttTaskScope.resolve(user, areaRepository);
-    }
-
-    private User requireUser(Long userId) {
-        return userRepository.findByIdWithRole(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
-    }
+    private final WorkosTaskSystemMessageRecorder systemMessageRecorder;
+    private final GanttReadableAreasService ganttReadableAreasService;
+    private final GanttTaskTagPrivacyService ganttTaskTagPrivacyService;
 
     private void assertAreaFilterAllowed(GanttTaskScope scope, Long areaIdFilter) {
         if (areaIdFilter == null) {
@@ -87,7 +78,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         if (!scope.allAreas() && scope.areaIds().isEmpty()) {
             return List.of();
         }
-        boolean skipPrivate = GanttReadableAreas.isPlatformAdmin(viewer);
+        boolean skipPrivate = ganttReadableAreasService.isPlatformAdmin(viewer);
         long viewerId = viewer.getId();
         if (scope.allAreas()) {
             return areaTaskRepository.findAdminFiltered(areaIdFilter, workspaceIdFilter, onlyWithoutWorkspace, priorityFilter,
@@ -95,30 +86,6 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         }
         return areaTaskRepository.findScopedFiltered(scope.areaIds(), areaIdFilter, workspaceIdFilter, onlyWithoutWorkspace, priorityFilter,
                 ownerUserIdFilter, viewerId, skipPrivate);
-    }
-
-    private void assertCanManage(GanttTaskScope scope, Long areaId) {
-        if (scope.canAccessArea(areaId)) {
-            return;
-        }
-        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puede crear o editar tareas en esta área");
-    }
-
-    private void assertCanMutateTask(User user, GanttTaskScope scope, AreaTask task) {
-        assertCanManage(scope, task.getAreaId());
-        AreaTaskPrivateAccess.assertCanMutatePrivateTask(user, task);
-    }
-
-    private AreaTask requireReadableTask(User user, GanttTaskScope scope, Long taskId) {
-        AreaTask task = areaTaskRepository.findById(taskId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarea no encontrada"));
-        if (!AreaTaskPrivateAccess.canSeeTaskContent(user, task)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a esta tarea");
-        }
-        if (!AreaTaskVisibility.canReadTaskByScopeAndAssignment(user, scope, task)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a esta tarea");
-        }
-        return task;
     }
 
     /** Normaliza sprint y asignación: tarea privada siempre asignada al creador. */
@@ -260,8 +227,8 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     @Override
     @Transactional(readOnly = true)
     public AreaTasksSummaryResponseDto summary(long userId, AreaTaskListParams filters) {
-        User user = requireUser(userId);
-        GanttTaskScope scope = resolveScope(user);
+        User user = areaTaskAccess.requireUser(userId);
+        GanttTaskScope scope = areaTaskAccess.resolveScope(user);
         List<AreaTask> tasks = filters.mySpace()
                 ? loadMySpaceTasksFromDb(user, scope, filters.areaId(), filters.priority(), filters.ownerUserId())
                 : loadVisibleTasksFromDb(user, scope,
@@ -279,23 +246,23 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     @Override
     @Transactional
     public AreaTaskResponseDto create(Long userId, CreateAreaTaskDto dto) {
-        User user = requireUser(userId);
-        GanttTaskScope scope = resolveScope(user);
+        User user = areaTaskAccess.requireUser(userId);
+        GanttTaskScope scope = areaTaskAccess.resolveScope(user);
         if (dto.getEndDate().isBefore(dto.getStartDate())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha fin no puede ser anterior al inicio");
         }
         List<String> tagList = safeTags(dto.getTags());
         boolean priv = dto.getPrivateTask() != null
                 ? dto.getPrivateTask()
-                : GanttTaskTagPrivacy.tagsIndicatePrivate(tagList);
+                : ganttTaskTagPrivacyService.tagsIndicatePrivate(tagList);
         Long effectiveAreaId = (priv && user.getAreaId() != null)
                 ? user.getAreaId()
                 : dto.getAreaId();
-        assertCanManage(scope, effectiveAreaId);
+        areaTaskAccess.assertCanManage(scope, effectiveAreaId);
         areaRepository.findById(effectiveAreaId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Área no existe"));
         sprintService.assertSprintOpenForNewTasks(dto.getSprintId());
-        List<String> tagsStored = GanttTaskTagPrivacy.stripPrivacyTagLabels(tagList);
+        List<String> tagsStored = ganttTaskTagPrivacyService.stripPrivacyTagLabels(tagList);
         AreaTask task = AreaTask.builder()
                 .areaId(effectiveAreaId)
                 .workspaceId(dto.getWorkspaceId())
@@ -322,10 +289,11 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     @Override
     @Transactional
     public AreaTaskResponseDto update(Long userId, Long taskId, UpdateAreaTaskDto dto) {
-        User user = requireUser(userId);
-        GanttTaskScope scope = resolveScope(user);
-        AreaTask task = requireReadableTask(user, scope, taskId);
-        assertCanMutateTask(user, scope, task);
+        User user = areaTaskAccess.requireUser(userId);
+        GanttTaskScope scope = areaTaskAccess.resolveScope(user);
+        AreaTask task = areaTaskAccess.requireReadableTask(user, scope, taskId);
+        areaTaskAccess.assertCanMutateTask(user, scope, task);
+        AreaTaskFieldSnapshot beforeSnapshot = AreaTaskFieldSnapshot.from(task);
         if (dto.getTitle() != null) {
             task.setTitle(dto.getTitle().trim());
         }
@@ -362,9 +330,9 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         if (dto.getTags() != null) {
             List<String> raw = safeTags(dto.getTags());
             if (dto.getPrivateTask() == null) {
-                task.setPrivateTask(GanttTaskTagPrivacy.tagsIndicatePrivate(raw));
+                task.setPrivateTask(ganttTaskTagPrivacyService.tagsIndicatePrivate(raw));
             }
-            task.setTags(new ArrayList<>(GanttTaskTagPrivacy.stripPrivacyTagLabels(raw)));
+            task.setTags(new ArrayList<>(ganttTaskTagPrivacyService.stripPrivacyTagLabels(raw)));
         }
         if (dto.getPrivateTask() != null) {
             task.setPrivateTask(dto.getPrivateTask());
@@ -380,23 +348,24 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 && user.getAreaId() != null) {
             task.setAreaId(user.getAreaId());
         }
-        assertCanManage(scope, task.getAreaId());
+        areaTaskAccess.assertCanManage(scope, task.getAreaId());
         Long creatorForRules = task.getCreatedByUserId() != null ? task.getCreatedByUserId() : userId;
         applyPrivateTaskRules(creatorForRules, task);
         if (task.getEndDate().isBefore(task.getStartDate())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha fin no puede ser anterior al inicio");
         }
         AreaTask saved = areaTaskRepository.save(task);
+        systemMessageRecorder.recordAfterTaskUpdate(userId, taskId, beforeSnapshot, saved);
         return toDtos(List.of(saved)).get(0);
     }
 
     @Override
     @Transactional
     public void delete(Long userId, Long taskId) {
-        User user = requireUser(userId);
-        GanttTaskScope scope = resolveScope(user);
-        AreaTask task = requireReadableTask(user, scope, taskId);
-        assertCanMutateTask(user, scope, task);
+        User user = areaTaskAccess.requireUser(userId);
+        GanttTaskScope scope = areaTaskAccess.resolveScope(user);
+        AreaTask task = areaTaskAccess.requireReadableTask(user, scope, taskId);
+        areaTaskAccess.assertCanMutateTask(user, scope, task);
         areaTaskRepository.delete(task);
     }
 }

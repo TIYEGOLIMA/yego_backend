@@ -9,9 +9,7 @@ import com.yego.backend.entity.yego_gantt.entities.enums.SprintStatus;
 import com.yego.backend.repository.yego_gantt.AreaTaskRepository;
 import com.yego.backend.repository.yego_gantt.ProjectRepository;
 import com.yego.backend.repository.yego_gantt.SprintRepository;
-import com.yego.backend.repository.yego_principal.AreaRepository;
-import com.yego.backend.repository.yego_principal.UserRepository;
-import com.yego.backend.service.yego_gantt.GanttPortfolioAuthorizations;
+import com.yego.backend.service.yego_gantt.GanttPortfolioAuthorizationService;
 import com.yego.backend.service.yego_gantt.SprintService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -29,13 +27,12 @@ public class SprintServiceImpl implements SprintService {
     private final SprintRepository sprintRepo;
     private final AreaTaskRepository taskRepo;
     private final ProjectRepository projectRepo;
-    private final UserRepository userRepo;
-    private final AreaRepository areaRepository;
+    private final GanttPortfolioAuthorizationService ganttPortfolioAuthorizationService;
 
     @Override
     @Transactional
     public SprintResponseDto create(Long requesterId, CreateSprintDto dto) {
-        GanttPortfolioAuthorizations.requirePortfolioManager(userRepo, areaRepository, requesterId,
+        ganttPortfolioAuthorizationService.requirePortfolioManager(requesterId,
                 "Sin permiso para gestionar sprints");
         projectRepo.findById(dto.getWorkspaceId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
@@ -86,7 +83,7 @@ public class SprintServiceImpl implements SprintService {
     @Override
     @Transactional
     public SprintResponseDto update(Long requesterId, Long id, UpdateSprintDto dto) {
-        GanttPortfolioAuthorizations.requirePortfolioManager(userRepo, areaRepository, requesterId,
+        ganttPortfolioAuthorizationService.requirePortfolioManager(requesterId,
                 "Sin permiso para gestionar sprints");
         Sprint sprint = sprintRepo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint no encontrado: " + id));
@@ -111,7 +108,7 @@ public class SprintServiceImpl implements SprintService {
     @Override
     @Transactional
     public void delete(Long requesterId, Long id) {
-        GanttPortfolioAuthorizations.requirePlatformAdmin(userRepo, requesterId,
+        ganttPortfolioAuthorizationService.requirePlatformAdmin(requesterId,
                 "Solo administradores pueden eliminar sprints");
         sprintRepo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sprint no encontrado: " + id));

@@ -40,6 +40,8 @@ public interface AreaTaskSubtaskRepository extends JpaRepository<AreaTaskSubtask
 
     long countByParentTaskId(Long parentTaskId);
 
+    boolean existsByIdAndParentTaskId(Long id, Long parentTaskId);
+
     @Query(value = """
             SELECT parent_task_id AS pid,
                    COUNT(*)::int AS total,

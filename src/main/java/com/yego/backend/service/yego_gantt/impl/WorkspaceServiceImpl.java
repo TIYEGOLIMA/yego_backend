@@ -9,10 +9,9 @@ import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.repository.yego_gantt.AreaTaskRepository;
 import com.yego.backend.repository.yego_gantt.ProjectMemberRepository;
 import com.yego.backend.repository.yego_gantt.ProjectRepository;
-import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
-import com.yego.backend.service.yego_gantt.GanttPortfolioAuthorizations;
-import com.yego.backend.service.yego_gantt.GanttReadableAreas;
+import com.yego.backend.service.yego_gantt.GanttPortfolioAuthorizationService;
+import com.yego.backend.service.yego_gantt.GanttReadableAreasService;
 import com.yego.backend.service.yego_gantt.WorkspaceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -37,12 +36,13 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     private final ProjectMemberRepository memberRepo;
     private final AreaTaskRepository areaTaskRepository;
     private final UserRepository userRepo;
-    private final AreaRepository areaRepository;
+    private final GanttPortfolioAuthorizationService ganttPortfolioAuthorizationService;
+    private final GanttReadableAreasService ganttReadableAreasService;
 
     @Override
     @Transactional
     public WorkspaceResponseDto create(Long requesterId, CreateWorkspaceDto dto) {
-        GanttPortfolioAuthorizations.requirePortfolioManager(userRepo, areaRepository, requesterId,
+        ganttPortfolioAuthorizationService.requirePortfolioManager(requesterId,
                 "Sin permiso para gestionar espacios de trabajo");
         Project p = Project.builder()
                 .name(dto.getName().trim())
@@ -66,7 +66,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     public List<WorkspaceResponseDto> findAllActiveForUser(Long requesterId) {
         User user = userRepo.findByIdWithRole(requesterId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
-        if (GanttReadableAreas.isPlatformAdmin(user)) {
+        if (ganttReadableAreasService.isPlatformAdmin(user)) {
             return projectRepo.findByActivoTrueOrderByNameAsc()
                     .stream()
                     .map(this::toDto)
@@ -89,7 +89,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     @Override
     @Transactional
     public WorkspaceResponseDto update(Long requesterId, Long id, UpdateWorkspaceDto dto) {
-        GanttPortfolioAuthorizations.requirePortfolioManager(userRepo, areaRepository, requesterId,
+        ganttPortfolioAuthorizationService.requirePortfolioManager(requesterId,
                 "Sin permiso para gestionar espacios de trabajo");
         Project p = projectRepo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Espacio de trabajo no encontrado: " + id));
@@ -115,7 +115,7 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     @Override
     @Transactional
     public void delete(Long requesterId, Long id) {
-        GanttPortfolioAuthorizations.requirePortfolioManager(userRepo, areaRepository, requesterId,
+        ganttPortfolioAuthorizationService.requirePortfolioManager(requesterId,
                 "Sin permiso para gestionar espacios de trabajo");
         memberRepo.deleteByWorkspaceId(id);
         projectRepo.deleteById(id);

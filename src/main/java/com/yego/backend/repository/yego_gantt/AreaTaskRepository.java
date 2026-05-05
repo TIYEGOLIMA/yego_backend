@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
@@ -131,4 +132,8 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE AreaTask t SET t.progressPercent = :pct WHERE t.id = :id")
     int updateProgressPercentById(@Param("id") Long id, @Param("pct") Integer pct);
+
+    /** Evita N+1 al evaluar si el usuario es asignado (colección cargada en la misma consulta). */
+    @Query("SELECT DISTINCT t FROM AreaTask t LEFT JOIN FETCH t.assignedUserIds WHERE t.id = :id")
+    Optional<AreaTask> findWithAssigneesById(@Param("id") Long id);
 }

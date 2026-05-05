@@ -206,8 +206,8 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 
                 SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
                 
-                // Política semanal: si la contraseña está vencida, solo permitir cambio de contraseña, reset o logout
-                // Solo aplicar si tenemos un userId numérico (excluidos: 1, 4, 5, 6 no tienen esta obligación)
+                // Política semanal: si la contraseña está vencida, solo permitir cambio de contraseña, reset o logout.
+                // Exclusiones: auth.password-policy.excluded-user-ids (p. ej. 1, 4, 5, 6, 27, 37).
                 String path = request.getRequestURI();
                 boolean pathAllowed = path.contains("/change-password") || path.contains("/reset-password") || path.contains("/logout");
                 if (!pathAllowed && userIdLong != null) {

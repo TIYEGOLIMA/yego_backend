@@ -8,11 +8,8 @@ import com.yego.backend.entity.yego_gantt.entities.AreaTaskSubtask;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.repository.yego_gantt.AreaTaskRepository;
 import com.yego.backend.repository.yego_gantt.AreaTaskSubtaskRepository;
-import com.yego.backend.repository.yego_principal.AreaRepository;
-import com.yego.backend.repository.yego_principal.UserRepository;
+import com.yego.backend.service.yego_gantt.AreaTaskPrivateAccessService;
 import com.yego.backend.service.yego_gantt.AreaTaskSubtaskService;
-import com.yego.backend.service.yego_gantt.AreaTaskPrivateAccess;
-import com.yego.backend.service.yego_gantt.AreaTaskVisibility;
 import com.yego.backend.service.yego_gantt.GanttTaskScope;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -29,35 +26,14 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
 
     private final AreaTaskSubtaskRepository subtaskRepo;
     private final AreaTaskRepository taskRepo;
-    private final UserRepository userRepository;
-    private final AreaRepository areaRepository;
-
-    private GanttTaskScope resolveScope(User user) {
-        return GanttTaskScope.resolve(user, areaRepository);
-    }
-
-    private User requireUser(Long userId) {
-        return userRepository.findByIdWithRole(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
-    }
-
-    private AreaTask requireReadableParent(User user, GanttTaskScope scope, Long parentTaskId) {
-        AreaTask task = taskRepo.findById(parentTaskId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarea no encontrada"));
-        if (!AreaTaskPrivateAccess.canSeeTaskContent(user, task)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a esta tarea");
-        }
-        if (!AreaTaskVisibility.canReadTaskByScopeAndAssignment(user, scope, task)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No tiene acceso a esta tarea");
-        }
-        return task;
-    }
+    private final AreaTaskAccessHelper areaTaskAccessHelper;
+    private final AreaTaskPrivateAccessService areaTaskPrivateAccessService;
 
     private void assertCanManageParent(User user, GanttTaskScope scope, AreaTask parent) {
         if (!scope.canAccessArea(parent.getAreaId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puede editar subtareas en esta área");
         }
-        AreaTaskPrivateAccess.assertCanMutatePrivateTask(user, parent);
+        areaTaskPrivateAccessService.assertCanMutatePrivateTask(user, parent);
     }
 
     private AreaTaskSubtask requireSubtask(Long parentTaskId, Long subtaskId) {
@@ -94,9 +70,7 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
     @Override
     @Transactional(readOnly = true)
     public List<AreaTaskSubtaskResponseDto> list(Long requesterId, Long parentTaskId) {
-        User user = requireUser(requesterId);
-        GanttTaskScope scope = resolveScope(user);
-        requireReadableParent(user, scope, parentTaskId);
+        areaTaskAccessHelper.requireReadableTask(requesterId, parentTaskId);
         return subtaskRepo.findByParentTaskIdOrderBySortOrderAscIdAsc(parentTaskId).stream()
                 .map(AreaTaskSubtaskServiceImpl::toDto)
                 .toList();
@@ -105,9 +79,9 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
     @Override
     @Transactional
     public AreaTaskSubtaskResponseDto create(Long requesterId, Long parentTaskId, CreateAreaTaskSubtaskDto dto) {
-        User user = requireUser(requesterId);
-        GanttTaskScope scope = resolveScope(user);
-        AreaTask parent = requireReadableParent(user, scope, parentTaskId);
+        User user = areaTaskAccessHelper.requireUser(requesterId);
+        GanttTaskScope scope = areaTaskAccessHelper.resolveScope(user);
+        AreaTask parent = areaTaskAccessHelper.requireReadableTask(user, scope, parentTaskId);
         assertCanManageParent(user, scope, parent);
         int nextOrder = subtaskRepo.findMaxSortOrderByParentTaskId(parentTaskId) + 1;
         BigDecimal w = dto.getWeight() != null ? dto.getWeight() : BigDecimal.ONE;
@@ -126,9 +100,9 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
     @Override
     @Transactional
     public AreaTaskSubtaskResponseDto update(Long requesterId, Long parentTaskId, Long subtaskId, UpdateAreaTaskSubtaskDto dto) {
-        User user = requireUser(requesterId);
-        GanttTaskScope scope = resolveScope(user);
-        AreaTask parent = requireReadableParent(user, scope, parentTaskId);
+        User user = areaTaskAccessHelper.requireUser(requesterId);
+        GanttTaskScope scope = areaTaskAccessHelper.resolveScope(user);
+        AreaTask parent = areaTaskAccessHelper.requireReadableTask(user, scope, parentTaskId);
         assertCanManageParent(user, scope, parent);
         AreaTaskSubtask s = requireSubtask(parentTaskId, subtaskId);
         if (dto.getTitle() != null) {
@@ -154,9 +128,9 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
     @Override
     @Transactional
     public void delete(Long requesterId, Long parentTaskId, Long subtaskId) {
-        User user = requireUser(requesterId);
-        GanttTaskScope scope = resolveScope(user);
-        AreaTask parent = requireReadableParent(user, scope, parentTaskId);
+        User user = areaTaskAccessHelper.requireUser(requesterId);
+        GanttTaskScope scope = areaTaskAccessHelper.resolveScope(user);
+        AreaTask parent = areaTaskAccessHelper.requireReadableTask(user, scope, parentTaskId);
         assertCanManageParent(user, scope, parent);
         int removed = subtaskRepo.deleteByIdAndParentTaskId(subtaskId, parentTaskId);
         if (removed == 0) {

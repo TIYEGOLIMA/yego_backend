@@ -1,18 +1,17 @@
-package com.yego.backend.service.yego_gantt;
+package com.yego.backend.service.yego_gantt.impl;
+
+import com.yego.backend.service.yego_gantt.GanttTaskTagPrivacyService;
+import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Etiquetas reservadas que marcan tarea como privada (alineado con {@code taskPrivacy.ts} en frontend).
- */
-public final class GanttTaskTagPrivacy {
+@Service
+public class GanttTaskTagPrivacyServiceImpl implements GanttTaskTagPrivacyService {
 
-    private GanttTaskTagPrivacy() {
-    }
-
-    public static boolean tagsIndicatePrivate(List<String> tags) {
+    @Override
+    public boolean tagsIndicatePrivate(List<String> tags) {
         if (tags == null || tags.isEmpty()) {
             return false;
         }
@@ -26,8 +25,8 @@ public final class GanttTaskTagPrivacy {
         return false;
     }
 
-    /** Lista nueva sin etiquetas reservadas de privacidad. */
-    public static List<String> stripPrivacyTagLabels(List<String> tags) {
+    @Override
+    public List<String> stripPrivacyTagLabels(List<String> tags) {
         if (tags == null || tags.isEmpty()) {
             return new ArrayList<>();
         }

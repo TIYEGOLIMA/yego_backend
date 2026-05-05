@@ -1,20 +1,23 @@
-package com.yego.backend.service.yego_gantt;
+package com.yego.backend.service.yego_gantt.impl;
 
 import com.yego.backend.entity.yego_gantt.entities.AreaTask;
 import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.service.yego_gantt.AreaTaskVisibilityService;
+import com.yego.backend.service.yego_gantt.GanttReadableAreasService;
+import com.yego.backend.service.yego_gantt.GanttTaskScope;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
 
-/**
- * Visibilidad por ámbito y por asignación: un colaborador puede ver una tarea en su proyecto
- * aunque el {@code areaId} de la tarea no sea de sus áreas gestionadas.
- */
-public final class AreaTaskVisibility {
+@Service
+@RequiredArgsConstructor
+public class AreaTaskVisibilityServiceImpl implements AreaTaskVisibilityService {
 
-    private AreaTaskVisibility() {
-    }
+    private final GanttReadableAreasService ganttReadableAreasService;
 
-    public static boolean isAssignee(Long userId, AreaTask task) {
+    @Override
+    public boolean isAssignee(Long userId, AreaTask task) {
         if (userId == null || task == null) {
             return false;
         }
@@ -33,11 +36,9 @@ public final class AreaTaskVisibility {
         return false;
     }
 
-    /**
-     * Lectura de tarea: admin global, o área permitida, o asignado (con reglas de privacidad ya aplicadas aparte).
-     */
-    public static boolean canReadTaskByScopeAndAssignment(User user, GanttTaskScope scope, AreaTask task) {
-        if (GanttReadableAreas.isPlatformAdmin(user)) {
+    @Override
+    public boolean canReadTaskByScopeAndAssignment(User user, GanttTaskScope scope, AreaTask task) {
+        if (ganttReadableAreasService.isPlatformAdmin(user)) {
             return true;
         }
         if (scope.canAccessArea(task.getAreaId())) {
