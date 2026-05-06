@@ -14,7 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Inserta mensajes SYSTEM tras actualización de tarea. Sin dependencia de {@code AreaTaskService}.
@@ -86,22 +88,74 @@ public class WorkosTaskSystemMessageRecorder {
         }
         boolean assigneesChanged = !before.assigneeIdsSorted().equals(after.assigneeIdsSorted());
         if (assigneesChanged) {
-            String from = describeAssignees(before);
-            String to = describeAssignees(after);
-            out.add(actor + " cambió los asignados de «" + from + "» a «" + to + "».");
+            out.add(compactAssigneeChangeMessage(actor, before, after));
         }
         return out;
     }
 
-    private String describeAssignees(AreaTaskFieldSnapshot s) {
-        if (s.assigneeIdsSorted().isEmpty()) {
-            return "sin asignar";
+    /**
+     * Historial corto: recuento (antes→después) + solo deltas (entraron/salieron), sin repetir todo el equipo.
+     */
+    private String compactAssigneeChangeMessage(String actor, AreaTaskFieldSnapshot before, AreaTaskFieldSnapshot after) {
+        List<Long> oldIds = before.assigneeIdsSorted();
+        List<Long> newIds = after.assigneeIdsSorted();
+        Set<Long> oldSet = new LinkedHashSet<>(oldIds);
+        Set<Long> newSet = new LinkedHashSet<>(newIds);
+        List<Long> entered = new ArrayList<>();
+        for (Long id : newIds) {
+            if (!oldSet.contains(id)) {
+                entered.add(id);
+            }
         }
-        List<String> names = new ArrayList<>();
-        for (Long id : s.assigneeIdsSorted()) {
-            names.add(formatUserId(id));
+        List<Long> left = new ArrayList<>();
+        for (Long id : oldIds) {
+            if (!newSet.contains(id)) {
+                left.add(id);
+            }
         }
-        return String.join(", ", names);
+        StringBuilder sb = new StringBuilder();
+        sb.append(actor)
+                .append(" actualizó asignaciones (")
+                .append(oldIds.size())
+                .append(" → ")
+                .append(newIds.size())
+                .append(")");
+        if (!left.isEmpty()) {
+            sb.append(". Salieron: ").append(formatNamesPreview(left, 2));
+        }
+        if (!entered.isEmpty()) {
+            sb.append(". Entraron: ").append(formatNamesPreview(entered, 2));
+        }
+        sb.append(".");
+        return sb.toString();
+    }
+
+    private String formatNamesPreview(List<Long> userIds, int maxShown) {
+        if (userIds.isEmpty()) {
+            return "";
+        }
+        List<String> names = new ArrayList<>(userIds.size());
+        for (Long id : userIds) {
+            names.add(compactDisplayName(formatUserId(id)));
+        }
+        if (names.size() <= maxShown) {
+            return String.join(", ", names);
+        }
+        return String.join(", ", names.subList(0, maxShown))
+                + " (+" + (names.size() - maxShown) + ")";
+    }
+
+    /** Evita líneas gigantes cuando el nombre completo es muy largo. */
+    private String compactDisplayName(String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            return "?";
+        }
+        String t = fullName.trim();
+        final int maxChars = 32;
+        if (t.length() <= maxChars) {
+            return t;
+        }
+        return t.substring(0, maxChars - 1).trim() + "…";
     }
 
     private String formatUserId(long id) {

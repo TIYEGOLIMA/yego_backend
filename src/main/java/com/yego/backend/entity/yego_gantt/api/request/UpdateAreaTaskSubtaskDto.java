@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Data
 @NoArgsConstructor
@@ -22,4 +23,12 @@ public class UpdateAreaTaskSubtaskDto {
     private Integer sortOrder;
 
     private Boolean done;
+
+    private Long assignedUserId;
+
+    private Boolean unassignUser;
+
+    private LocalDate dueDate;
+
+    private Boolean clearDueDate;
 }

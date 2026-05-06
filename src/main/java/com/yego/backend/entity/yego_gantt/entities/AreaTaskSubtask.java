@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -41,6 +42,15 @@ public class AreaTaskSubtask {
     @Column(nullable = false, precision = 12, scale = 4)
     @Builder.Default
     private BigDecimal weight = BigDecimal.ONE;
+
+    @Column(name = "assigned_user_id")
+    private Long assignedUserId;
+
+    @Column(name = "due_date")
+    private LocalDate dueDate;
+
+    @Column(name = "created_by_user_id")
+    private Long createdByUserId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

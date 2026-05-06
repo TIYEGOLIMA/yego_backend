@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 /**
  * Creación de subtarea: el peso es opcional en API (por defecto 1, coherente con {@code AreaTaskSubtask}).
@@ -29,4 +30,8 @@ public class CreateAreaTaskSubtaskDto {
     private Integer sortOrder;
 
     private Boolean done;
+
+    private Long assignedUserId;
+
+    private LocalDate dueDate;
 }
