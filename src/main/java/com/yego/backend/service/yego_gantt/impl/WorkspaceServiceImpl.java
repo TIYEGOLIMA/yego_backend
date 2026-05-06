@@ -42,8 +42,8 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     @Override
     @Transactional
     public WorkspaceResponseDto create(Long requesterId, CreateWorkspaceDto dto) {
-        ganttPortfolioAuthorizationService.requirePortfolioManager(requesterId,
-                "Sin permiso para gestionar espacios de trabajo");
+        ganttPortfolioAuthorizationService.requireWorkspacePrivileged(requesterId,
+                "Sin permiso para crear espacios de trabajo");
         Project p = Project.builder()
                 .name(dto.getName().trim())
                 .description(dto.getDescription())
@@ -89,8 +89,8 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     @Override
     @Transactional
     public WorkspaceResponseDto update(Long requesterId, Long id, UpdateWorkspaceDto dto) {
-        ganttPortfolioAuthorizationService.requirePortfolioManager(requesterId,
-                "Sin permiso para gestionar espacios de trabajo");
+        ganttPortfolioAuthorizationService.requireWorkspacePrivileged(requesterId,
+                "Sin permiso para editar espacios de trabajo");
         Project p = projectRepo.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Espacio de trabajo no encontrado: " + id));
 
@@ -115,8 +115,8 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     @Override
     @Transactional
     public void delete(Long requesterId, Long id) {
-        ganttPortfolioAuthorizationService.requirePortfolioManager(requesterId,
-                "Sin permiso para gestionar espacios de trabajo");
+        ganttPortfolioAuthorizationService.requireWorkspacePrivileged(requesterId,
+                "Sin permiso para eliminar espacios de trabajo");
         memberRepo.deleteByWorkspaceId(id);
         projectRepo.deleteById(id);
     }

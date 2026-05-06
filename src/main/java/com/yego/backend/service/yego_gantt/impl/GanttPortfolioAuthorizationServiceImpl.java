@@ -10,6 +10,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Locale;
+
 @Service
 @RequiredArgsConstructor
 public class GanttPortfolioAuthorizationServiceImpl implements GanttPortfolioAuthorizationService {
@@ -29,6 +31,37 @@ public class GanttPortfolioAuthorizationServiceImpl implements GanttPortfolioAut
             return;
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, forbiddenMessage);
+    }
+
+    @Override
+    public void requireWorkspacePrivileged(Long requesterId, String forbiddenMessage) {
+        User user = userRepository.findByIdWithRole(requesterId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+        if (canManageWorkspacesByRole(user)) {
+            return;
+        }
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, forbiddenMessage);
+    }
+
+    /**
+     * Alineado con WorkOS/front: ADMIN, SUPERADMIN, SUPERVISOR, SUPERVISOR_LEAD, y roles tipo supervisor de lealtad.
+     */
+    static boolean canManageWorkspacesByRole(User user) {
+        if (user == null || user.getRole() == null) {
+            return false;
+        }
+        String raw = user.getRole().getName();
+        if (raw == null || raw.isBlank()) {
+            return false;
+        }
+        String r = raw.toUpperCase(Locale.ROOT).trim().replaceAll("[\\s-]+", "_");
+        if ("ADMIN".equals(r) || "SUPERADMIN".equals(r)) {
+            return true;
+        }
+        if ("SUPERVISOR".equals(r) || "SUPERVISOR_LEAD".equals(r)) {
+            return true;
+        }
+        return r.contains("SUPERVISOR") && r.contains("LEALTAD");
     }
 
     @Override

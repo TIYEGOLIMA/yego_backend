@@ -31,6 +31,17 @@ Query opcional en GET: `subtaskId` (hilo de una subtarea).
 
 El frontend Integral llama **`/yego-gantt/tasks/...`** en el cliente HTTP (el servicio antepone **`/api`**).
 
+## Dónde aparece el chat en la aplicación (Fase 1)
+
+- El chat de tarea vive en el **modal de detalle** al abrir una tarea desde **Board**, **Portfolio** y los flujos que invocan **`onOpenTaskById`** (por ejemplo Actas o Calendario).
+- La vista **Timeline** usa otro panel lateral y **no** incluye este chat en Fase 1; no es una incoherencia accidental sino el alcance acordado hasta integrar otra entrada de UX si se decide en Fase 2+.
+
+Plantilla de evidencia, tabla de red/BD y decisión **GO / NO-GO**: **[docs/workos-chat-fase1-go-no-go.md](../../../docs/workos-chat-fase1-go-no-go.md)** (desde la raíz del repo: `docs/workos-chat-fase1-go-no-go.md`).
+
+### Red esperada al abrir el detalle
+
+Con el hilo “Toda la tarea”: **una** petición de **subtareas** y **una** de **mensajes**. Al cambiar de subtarea en el selector del chat, se dispara **otra** petición de mensajes (esperado). En desarrollo, `React.StrictMode` puede duplicar efectos: puede verse una request cancelada y otra 200; para medir tiempos es más fiable un build de producción o tomar la request final no cancelada (ver documento enlazado).
+
 ## Checklist QA manual (GO/NO-GO)
 
 Marque tras probar en un entorno con la migración aplicada.

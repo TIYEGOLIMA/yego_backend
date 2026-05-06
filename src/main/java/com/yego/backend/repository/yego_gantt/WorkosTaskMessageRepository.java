@@ -36,10 +36,6 @@ public interface WorkosTaskMessageRepository extends JpaRepository<WorkosTaskMes
                     + " WHERE m.task_id = :taskId AND NOT m.is_deleted ORDER BY m.created_at ASC")
     List<WorkosTaskMessageListRow> findVisibleByTaskWithAuthors(@Param("taskId") Long taskId);
 
-    /**
-     * Hilo por subtarea: una sola consulta (sin EXISTS previo en servicio).
-     * Si {@code subtaskId} no pertenece a {@code taskId}, el EXISTS devuelve 0 filas.
-     */
     @Query(
             nativeQuery = true,
             value = LIST_SELECT_BASE
@@ -47,13 +43,6 @@ public interface WorkosTaskMessageRepository extends JpaRepository<WorkosTaskMes
                     + "AND EXISTS (SELECT 1 FROM area_task_subtasks st WHERE st.id = :subtaskId AND st.parent_task_id = :taskId) "
                     + "ORDER BY m.created_at ASC")
     List<WorkosTaskMessageListRow> findVisibleByTaskAndSubtaskWithAuthors(
-            @Param("taskId") Long taskId, @Param("subtaskId") Long subtaskId);
-
-    @Query("SELECT m FROM WorkosTaskMessage m WHERE m.taskId = :taskId AND NOT m.isDeleted ORDER BY m.createdAt ASC")
-    List<WorkosTaskMessage> findVisibleByTaskIdOrderByCreatedAtAsc(@Param("taskId") Long taskId);
-
-    @Query("SELECT m FROM WorkosTaskMessage m WHERE m.taskId = :taskId AND m.subtaskId = :subtaskId AND NOT m.isDeleted ORDER BY m.createdAt ASC")
-    List<WorkosTaskMessage> findVisibleByTaskIdAndSubtaskIdOrderByCreatedAtAsc(
             @Param("taskId") Long taskId, @Param("subtaskId") Long subtaskId);
 
     @Query("SELECT m FROM WorkosTaskMessage m WHERE m.id = :id AND m.taskId = :taskId AND NOT m.isDeleted")
