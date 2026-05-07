@@ -36,6 +36,9 @@ public interface AreaTaskSubtaskRepository extends JpaRepository<AreaTaskSubtask
 
     boolean existsByParentTaskIdAndAssignedUserId(Long parentTaskId, Long assignedUserId);
 
+    @Query("SELECT DISTINCT s.parentTaskId FROM AreaTaskSubtask s WHERE s.assignedUserId = :userId")
+    List<Long> findDistinctParentTaskIdsByAssignedUserId(@Param("userId") Long userId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM AreaTaskSubtask s WHERE s.id = :subtaskId AND s.parentTaskId = :parentTaskId")
     int deleteByIdAndParentTaskId(@Param("subtaskId") Long subtaskId, @Param("parentTaskId") Long parentTaskId);

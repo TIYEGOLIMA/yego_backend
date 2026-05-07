@@ -14,6 +14,7 @@ import com.yego.backend.repository.yego_gantt.AreaTaskSubtaskRepository;
 import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.service.yego_gantt.AreaTaskListParams;
 import com.yego.backend.service.yego_gantt.AreaTaskService;
+import com.yego.backend.service.yego_gantt.AreaTaskVisibilityService;
 import com.yego.backend.service.yego_gantt.GanttReadableAreasService;
 import com.yego.backend.service.yego_gantt.GanttTaskTagPrivacyService;
 import com.yego.backend.service.yego_gantt.GanttTaskScope;
@@ -26,6 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -44,6 +46,47 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     private final WorkosTaskSystemMessageRecorder systemMessageRecorder;
     private final GanttReadableAreasService ganttReadableAreasService;
     private final GanttTaskTagPrivacyService ganttTaskTagPrivacyService;
+    private final AreaTaskVisibilityService areaTaskVisibilityService;
+
+    private static boolean isStatusOnlyUpdate(UpdateAreaTaskDto dto) {
+        if (dto == null || dto.getStatus() == null) {
+            return false;
+        }
+        return dto.getWorkspaceId() == null
+                && dto.getSprintId() == null
+                && dto.getTitle() == null
+                && dto.getDescription() == null
+                && dto.getStartDate() == null
+                && dto.getEndDate() == null
+                && dto.getPriority() == null
+                && dto.getProgressPercent() == null
+                && dto.getAssignedUserId() == null
+                && dto.getAssignedUserIds() == null
+                && dto.getPrivateTask() == null
+                && dto.getTags() == null
+                && dto.getSortOrder() == null;
+    }
+
+    /**
+     * Puede enviar PUT solo con {@code status} sin ser gestor del área: asignado al padre, creador o responsable de subtarea.
+     */
+    private boolean canUpdateTaskStatusAsParticipant(User user, AreaTask task) {
+        if (ganttReadableAreasService.isPlatformAdmin(user)) {
+            return true;
+        }
+        Long uid = user.getId();
+        if (uid == null) {
+            return false;
+        }
+        if (areaTaskVisibilityService.isAssignee(uid, task)) {
+            return true;
+        }
+        if (task.getCreatedByUserId() != null && task.getCreatedByUserId().equals(uid)) {
+            return true;
+        }
+        Long tid = task.getId();
+        return tid != null && areaTaskSubtaskRepository.existsByParentTaskIdAndAssignedUserId(tid, uid);
+    }
 
     private void assertAreaFilterAllowed(GanttTaskScope scope, Long areaIdFilter) {
         if (areaIdFilter == null) {
@@ -161,10 +204,13 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         return m;
     }
 
-    private AreaTaskResponseDto toDto(AreaTask t, Map<Long, String> names, Map<Long, SubtaskAgg> subMap) {
+    private AreaTaskResponseDto toDto(AreaTask t, Map<Long, String> names, Map<Long, SubtaskAgg> subMap,
+            Set<Long> viewerSubtaskParentIds) {
         SubtaskAgg sa = subMap != null ? subMap.get(t.getId()) : null;
         int done = sa == null ? 0 : sa.done();
         int total = sa == null ? 0 : sa.total();
+        boolean subtaskMine = viewerSubtaskParentIds != null && t.getId() != null
+                && viewerSubtaskParentIds.contains(t.getId());
         return AreaTaskResponseDto.builder()
                 .id(t.getId())
                 .areaId(t.getAreaId())
@@ -186,6 +232,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 .sortOrder(t.getSortOrder())
                 .subtaskDone(done)
                 .subtaskTotal(total)
+                .subtaskAssignedToViewer(subtaskMine)
                 .createdAt(t.getCreatedAt())
                 .updatedAt(t.getUpdatedAt())
                 .build();
@@ -214,14 +261,14 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 .build();
     }
 
-    private List<AreaTaskResponseDto> toDtos(List<AreaTask> tasks) {
+    private List<AreaTaskResponseDto> toDtos(List<AreaTask> tasks, Set<Long> viewerSubtaskParentIds) {
         if (tasks.isEmpty()) {
             return List.of();
         }
         Set<Long> ids = tasks.stream().map(AreaTask::getAreaId).collect(Collectors.toSet());
         Map<Long, String> names = areaNamesForIds(ids);
         Map<Long, SubtaskAgg> subMap = loadSubtaskAggregates(tasks);
-        return tasks.stream().map(t -> toDto(t, names, subMap)).toList();
+        return tasks.stream().map(t -> toDto(t, names, subMap, viewerSubtaskParentIds)).toList();
     }
 
     @Override
@@ -237,8 +284,10 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                         filters.onlyWithoutWorkspace(),
                         filters.priority(),
                         filters.ownerUserId());
+        Set<Long> viewerSubtaskParents = new HashSet<>(
+                areaTaskSubtaskRepository.findDistinctParentTaskIdsByAssignedUserId(userId));
         return AreaTasksSummaryResponseDto.builder()
-                .tasks(toDtos(tasks))
+                .tasks(toDtos(tasks, viewerSubtaskParents))
                 .kpis(buildKpis(tasks))
                 .build();
     }
@@ -283,7 +332,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 .build();
         applyPrivateTaskRules(userId, task);
         AreaTask saved = areaTaskRepository.save(task);
-        return toDtos(List.of(saved)).get(0);
+        return toDtos(List.of(saved), Set.of()).get(0);
     }
 
     @Override
@@ -292,7 +341,10 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         User user = areaTaskAccess.requireUser(userId);
         GanttTaskScope scope = areaTaskAccess.resolveScope(user);
         AreaTask task = areaTaskAccess.requireReadableTask(user, scope, taskId);
-        areaTaskAccess.assertCanMutateTask(user, scope, task);
+        boolean participantStatusOnly = isStatusOnlyUpdate(dto) && canUpdateTaskStatusAsParticipant(user, task);
+        if (!participantStatusOnly) {
+            areaTaskAccess.assertCanMutateTask(user, scope, task);
+        }
         AreaTaskFieldSnapshot beforeSnapshot = AreaTaskFieldSnapshot.from(task);
         if (dto.getTitle() != null) {
             task.setTitle(dto.getTitle().trim());
@@ -348,7 +400,9 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 && user.getAreaId() != null) {
             task.setAreaId(user.getAreaId());
         }
-        areaTaskAccess.assertCanManage(scope, task.getAreaId());
+        if (!participantStatusOnly) {
+            areaTaskAccess.assertCanManage(scope, task.getAreaId());
+        }
         Long creatorForRules = task.getCreatedByUserId() != null ? task.getCreatedByUserId() : userId;
         applyPrivateTaskRules(creatorForRules, task);
         if (task.getEndDate().isBefore(task.getStartDate())) {
@@ -356,7 +410,9 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         }
         AreaTask saved = areaTaskRepository.save(task);
         systemMessageRecorder.recordAfterTaskUpdate(userId, taskId, beforeSnapshot, saved);
-        return toDtos(List.of(saved)).get(0);
+        Set<Long> subParents = new HashSet<>(
+                areaTaskSubtaskRepository.findDistinctParentTaskIdsByAssignedUserId(userId));
+        return toDtos(List.of(saved), subParents).get(0);
     }
 
     @Override

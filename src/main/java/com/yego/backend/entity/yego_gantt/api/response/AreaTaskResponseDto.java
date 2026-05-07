@@ -36,6 +36,8 @@ public class AreaTaskResponseDto {
     private Integer sortOrder;
     private Integer subtaskDone;
     private Integer subtaskTotal;
+    /** Vista actual: el usuario tiene al menos una subtarea asignada (tablero / estado sin rol de gestión). */
+    private boolean subtaskAssignedToViewer;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -27,7 +27,8 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
           AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter
               OR :ownerUserIdFilter MEMBER OF t.assignedUserIds)
           AND (:skipPrivateVisibilityFilter = true OR t.privateTask = false
-              OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId))
+              OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId)
+              OR EXISTS (SELECT 1 FROM AreaTaskSubtask s WHERE s.parentTaskId = t.id AND s.assignedUserId = :viewerUserId))
         ORDER BY t.areaId ASC, t.sortOrder ASC, t.id ASC
         """)
     List<AreaTask> findAdminFiltered(
@@ -43,7 +44,8 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
         SELECT t FROM AreaTask t
         WHERE (t.areaId IN :areaIds
             OR t.assignedUserId = :viewerUserId
-            OR :viewerUserId MEMBER OF t.assignedUserIds)
+            OR :viewerUserId MEMBER OF t.assignedUserIds
+            OR EXISTS (SELECT 1 FROM AreaTaskSubtask s WHERE s.parentTaskId = t.id AND s.assignedUserId = :viewerUserId))
           AND (:areaIdFilter IS NULL OR t.areaId = :areaIdFilter)
           AND (
             (:onlyWithoutWorkspace = TRUE AND t.workspaceId IS NULL)
@@ -53,7 +55,8 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
           AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter
               OR :ownerUserIdFilter MEMBER OF t.assignedUserIds)
           AND (:skipPrivateVisibilityFilter = true OR t.privateTask = false
-              OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId))
+              OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId)
+              OR EXISTS (SELECT 1 FROM AreaTaskSubtask s WHERE s.parentTaskId = t.id AND s.assignedUserId = :viewerUserId))
         ORDER BY t.areaId ASC, t.sortOrder ASC, t.id ASC
         """)
     List<AreaTask> findScopedFiltered(
@@ -74,6 +77,7 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
             OR (t.privateTask = true AND t.createdByUserId = :viewerUserId AND t.workspaceId IS NOT NULL)
             OR (t.workspaceId IS NOT NULL
                 AND (t.assignedUserId = :viewerUserId OR :viewerUserId MEMBER OF t.assignedUserIds))
+            OR EXISTS (SELECT 1 FROM AreaTaskSubtask s WHERE s.parentTaskId = t.id AND s.assignedUserId = :viewerUserId)
           )
           AND (:priorityFilter IS NULL OR t.priority = :priorityFilter)
           AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter
@@ -90,7 +94,8 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
         SELECT t FROM AreaTask t
         WHERE (t.areaId IN :areaIds
             OR t.assignedUserId = :viewerUserId
-            OR :viewerUserId MEMBER OF t.assignedUserIds)
+            OR :viewerUserId MEMBER OF t.assignedUserIds
+            OR EXISTS (SELECT 1 FROM AreaTaskSubtask s WHERE s.parentTaskId = t.id AND s.assignedUserId = :viewerUserId))
           AND (:areaIdFilter IS NULL OR t.areaId = :areaIdFilter)
           AND (
             (t.workspaceId IS NULL AND t.createdByUserId = :viewerUserId)
@@ -99,6 +104,7 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
                 AND (t.assignedUserId = :viewerUserId OR :viewerUserId MEMBER OF t.assignedUserIds)
                 AND (t.privateTask = false
                     OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId)))
+            OR EXISTS (SELECT 1 FROM AreaTaskSubtask s WHERE s.parentTaskId = t.id AND s.assignedUserId = :viewerUserId)
           )
           AND (:priorityFilter IS NULL OR t.priority = :priorityFilter)
           AND (:ownerUserIdFilter IS NULL OR t.assignedUserId = :ownerUserIdFilter
@@ -119,9 +125,11 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
     @Query("""
         SELECT DISTINCT t.workspaceId FROM AreaTask t
         WHERE t.workspaceId IS NOT NULL
-          AND (t.assignedUserId = :viewerUserId OR :viewerUserId MEMBER OF t.assignedUserIds)
+          AND (t.assignedUserId = :viewerUserId OR :viewerUserId MEMBER OF t.assignedUserIds
+              OR EXISTS (SELECT 1 FROM AreaTaskSubtask s WHERE s.parentTaskId = t.id AND s.assignedUserId = :viewerUserId))
           AND (t.privateTask = false
-              OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId))
+              OR (t.createdByUserId IS NOT NULL AND t.createdByUserId = :viewerUserId)
+              OR EXISTS (SELECT 1 FROM AreaTaskSubtask s2 WHERE s2.parentTaskId = t.id AND s2.assignedUserId = :viewerUserId))
         """)
     List<Long> findDistinctWorkspaceIdsWhereUserIsAssignee(@Param("viewerUserId") Long viewerUserId);
 

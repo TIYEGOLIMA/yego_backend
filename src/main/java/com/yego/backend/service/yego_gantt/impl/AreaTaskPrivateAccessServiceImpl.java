@@ -2,6 +2,7 @@ package com.yego.backend.service.yego_gantt.impl;
 
 import com.yego.backend.entity.yego_gantt.entities.AreaTask;
 import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.repository.yego_gantt.AreaTaskSubtaskRepository;
 import com.yego.backend.service.yego_gantt.AreaTaskPrivateAccessService;
 import com.yego.backend.service.yego_gantt.GanttReadableAreasService;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class AreaTaskPrivateAccessServiceImpl implements AreaTaskPrivateAccessService {
 
     private final GanttReadableAreasService ganttReadableAreasService;
+    private final AreaTaskSubtaskRepository areaTaskSubtaskRepository;
 
     @Override
     public boolean canSeeTaskContent(User viewer, AreaTask task) {
@@ -23,7 +25,16 @@ public class AreaTaskPrivateAccessServiceImpl implements AreaTaskPrivateAccessSe
         if (ganttReadableAreasService.isPlatformAdmin(viewer)) {
             return true;
         }
-        return task.getCreatedByUserId() != null && task.getCreatedByUserId().equals(viewer.getId());
+        Long viewerId = viewer.getId();
+        if (task.getCreatedByUserId() != null && task.getCreatedByUserId().equals(viewerId)) {
+            return true;
+        }
+        Long taskId = task.getId();
+        if (taskId != null && viewerId != null
+                && areaTaskSubtaskRepository.existsByParentTaskIdAndAssignedUserId(taskId, viewerId)) {
+            return true;
+        }
+        return false;
     }
 
     @Override

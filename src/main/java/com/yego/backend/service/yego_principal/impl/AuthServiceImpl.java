@@ -65,6 +65,10 @@ public class AuthServiceImpl implements AuthService {
     
     @Value("${auth.password-policy.excluded-user-ids:1,4,5,6,27,37}")
     private String excludedUserIdsConfig;
+
+    /** Si false, no se fuerza cambio por antigüedad de contraseña (sin 403 PASSWORD_EXPIRED por caducidad). */
+    @Value("${auth.password-policy.weekly-renewal-enabled:false}")
+    private boolean weeklyPasswordRenewalEnabled;
     
     private java.util.Set<Long> getExcludedUserIdsPasswordPolicy() {
         if (excludedUserIdsConfig == null || excludedUserIdsConfig.isBlank()) {
@@ -511,6 +515,7 @@ public class AuthServiceImpl implements AuthService {
      * Usuarios con estos IDs no tienen obligación de cambiar contraseña cada semana.
      */
     private boolean shouldRequirePasswordChange(Long userId, java.time.LocalDateTime passwordChangedAt) {
+        if (!weeklyPasswordRenewalEnabled) return false;
         if (userId != null && getExcludedUserIdsPasswordPolicy().contains(userId)) return false;
         return isPasswordExpiredInternal(passwordChangedAt);
     }
@@ -528,6 +533,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(readOnly = true)
     public boolean isPasswordExpired(Long userId) {
+        if (!weeklyPasswordRenewalEnabled) return false;
         if (userId == null) return false;
         if (getExcludedUserIdsPasswordPolicy().contains(userId)) return false;
         return userRepository.findById(userId)
