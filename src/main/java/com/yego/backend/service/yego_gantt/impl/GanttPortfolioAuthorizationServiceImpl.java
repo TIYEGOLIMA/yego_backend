@@ -46,7 +46,7 @@ public class GanttPortfolioAuthorizationServiceImpl implements GanttPortfolioAut
     /**
      * Alineado con WorkOS/front: ADMIN, SUPERADMIN, SUPERVISOR, SUPERVISOR_LEAD, y roles tipo supervisor de lealtad.
      */
-    static boolean canManageWorkspacesByRole(User user) {
+    public static boolean canManageWorkspacesByRole(User user) {
         if (user == null || user.getRole() == null) {
             return false;
         }

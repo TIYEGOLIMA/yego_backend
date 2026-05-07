@@ -54,6 +54,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         }
         return dto.getWorkspaceId() == null
                 && dto.getSprintId() == null
+                && dto.getAreaId() == null
                 && dto.getTitle() == null
                 && dto.getDescription() == null
                 && dto.getStartDate() == null
@@ -121,7 +122,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         if (!scope.allAreas() && scope.areaIds().isEmpty()) {
             return List.of();
         }
-        boolean skipPrivate = ganttReadableAreasService.isPlatformAdmin(viewer);
+        boolean skipPrivate = ganttReadableAreasService.canOperateAllAreasInGantt(viewer);
         long viewerId = viewer.getId();
         if (scope.allAreas()) {
             return areaTaskRepository.findAdminFiltered(areaIdFilter, workspaceIdFilter, onlyWithoutWorkspace, priorityFilter,
@@ -395,7 +396,14 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         if (dto.getPriority() != null) {
             task.setPriority(dto.getPriority());
         }
-        if (task.isPrivateTask()
+        if (dto.getAreaId() != null && !participantStatusOnly) {
+            Long nid = dto.getAreaId();
+            if (!Objects.equals(task.getAreaId(), nid)) {
+                areaRepository.findById(nid)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Área no existe"));
+                task.setAreaId(nid);
+            }
+        } else if (task.isPrivateTask()
                 && Objects.equals(user.getId(), task.getCreatedByUserId())
                 && user.getAreaId() != null) {
             task.setAreaId(user.getAreaId());

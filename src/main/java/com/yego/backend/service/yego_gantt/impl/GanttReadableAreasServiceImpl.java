@@ -27,6 +27,11 @@ public class GanttReadableAreasServiceImpl implements GanttReadableAreasService 
     }
 
     @Override
+    public boolean canOperateAllAreasInGantt(User user) {
+        return isPlatformAdmin(user) || GanttPortfolioAuthorizationServiceImpl.canManageWorkspacesByRole(user);
+    }
+
+    @Override
     public Set<Long> readableAreaIdsForUser(User user) {
         if (user == null) {
             return Set.of();

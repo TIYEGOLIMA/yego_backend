@@ -23,6 +23,9 @@ public class UpdateAreaTaskDto {
 
     private Long sprintId;
 
+    /** Nuevo equipo/área de la tarea (opcional). */
+    private Long areaId;
+
     @Size(max = 500)
     private String title;
 

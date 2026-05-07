@@ -11,6 +11,9 @@ public interface GanttReadableAreasService {
 
     boolean isPlatformAdmin(User user);
 
+    /** Admin/SUPERVISOR y variantes: alcance todas las áreas para operaciones WorkOS/Gantt (igual que {@code ganttHasFullTabAccess} en front). */
+    boolean canOperateAllAreasInGantt(User user);
+
     /** Jefe de al menos un área → esas áreas; si no, el área del usuario colaborador. */
     Set<Long> readableAreaIdsForUser(User user);
 }

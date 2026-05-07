@@ -17,7 +17,7 @@ public class GanttTaskScopeServiceImpl implements GanttTaskScopeService {
 
     @Override
     public GanttTaskScope resolve(User user) {
-        if (ganttReadableAreasService.isPlatformAdmin(user)) {
+        if (ganttReadableAreasService.canOperateAllAreasInGantt(user)) {
             return new GanttTaskScope(true, Set.of());
         }
         Set<Long> ids = ganttReadableAreasService.readableAreaIdsForUser(user);
