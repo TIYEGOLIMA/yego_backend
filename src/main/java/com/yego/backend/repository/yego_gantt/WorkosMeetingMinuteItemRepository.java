@@ -2,6 +2,7 @@ package com.yego.backend.repository.yego_gantt;
 
 import com.yego.backend.entity.yego_gantt.entities.WorkosMeetingMinuteItem;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -29,4 +30,8 @@ public interface WorkosMeetingMinuteItemRepository extends JpaRepository<WorkosM
             @Param("cancelled") com.yego.backend.entity.yego_gantt.entities.enums.MeetingMinuteStatus cancelled);
 
     Optional<WorkosMeetingMinuteItem> findByIdAndMeetingMinute_Id(Long itemId, Long meetingMinuteId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE WorkosMeetingMinuteItem i SET i.convertedTaskId = null, i.convertedAt = null, i.convertedByUserId = null WHERE i.convertedTaskId = :taskId")
+    int clearConvertedTaskLinks(@Param("taskId") Long taskId);
 }

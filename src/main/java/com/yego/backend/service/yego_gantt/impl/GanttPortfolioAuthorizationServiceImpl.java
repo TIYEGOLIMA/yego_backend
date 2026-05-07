@@ -73,4 +73,9 @@ public class GanttPortfolioAuthorizationServiceImpl implements GanttPortfolioAut
         }
         throw new ResponseStatusException(HttpStatus.FORBIDDEN, forbiddenMessage);
     }
+
+    @Override
+    public boolean readsFullWorkspaceCatalog(User user) {
+        return ganttReadableAreasService.isPlatformAdmin(user) || canManageWorkspacesByRole(user);
+    }
 }

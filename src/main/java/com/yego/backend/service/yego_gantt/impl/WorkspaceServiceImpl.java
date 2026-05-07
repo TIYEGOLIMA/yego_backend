@@ -11,7 +11,6 @@ import com.yego.backend.repository.yego_gantt.ProjectMemberRepository;
 import com.yego.backend.repository.yego_gantt.ProjectRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_gantt.GanttPortfolioAuthorizationService;
-import com.yego.backend.service.yego_gantt.GanttReadableAreasService;
 import com.yego.backend.service.yego_gantt.WorkspaceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -37,7 +36,6 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     private final AreaTaskRepository areaTaskRepository;
     private final UserRepository userRepo;
     private final GanttPortfolioAuthorizationService ganttPortfolioAuthorizationService;
-    private final GanttReadableAreasService ganttReadableAreasService;
 
     @Override
     @Transactional
@@ -50,40 +48,21 @@ public class WorkspaceServiceImpl implements WorkspaceService {
                 .iconKey(normalizeIconKey(dto.getIconKey()))
                 .build();
         p = projectRepo.save(p);
-
-        if (dto.getMemberUserIds() != null) {
-            for (Long userId : dto.getMemberUserIds()) {
-                memberRepo.save(ProjectMember.builder()
-                        .workspaceId(p.getId())
-                        .userId(userId)
-                        .build());
-            }
-        }
+        appendMembersIfPresent(p.getId(), dto.getMemberUserIds());
         return toDto(p);
     }
 
     @Override
     public List<WorkspaceResponseDto> findAllActiveForUser(Long requesterId) {
-        User user = userRepo.findByIdWithRole(requesterId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
-        if (ganttReadableAreasService.isPlatformAdmin(user)) {
-            return projectRepo.findByActivoTrueOrderByNameAsc()
-                    .stream()
-                    .map(this::toDto)
-                    .toList();
+        User user = requireUser(requesterId);
+        if (ganttPortfolioAuthorizationService.readsFullWorkspaceCatalog(user)) {
+            return allActiveOrderedDtos();
         }
-
-        Set<Long> visibleIds = new LinkedHashSet<>(
-                areaTaskRepository.findDistinctWorkspaceIdsWhereUserIsAssignee(user.getId()));
-
-        if (visibleIds.isEmpty()) {
-            return List.of();
+        Set<Long> ids = collectWorkspaceIdsFromTasksAndMembership(user.getId());
+        if (ids.isEmpty()) {
+            return allActiveOrderedDtos();
         }
-        return projectRepo.findAllById(visibleIds).stream()
-                .filter(p -> Boolean.TRUE.equals(p.getActivo()))
-                .sorted(Comparator.comparing(Project::getName, String.CASE_INSENSITIVE_ORDER))
-                .map(this::toDto)
-                .toList();
+        return activeProjectsSubsetToDtos(ids);
     }
 
     @Override
@@ -91,24 +70,14 @@ public class WorkspaceServiceImpl implements WorkspaceService {
     public WorkspaceResponseDto update(Long requesterId, Long id, UpdateWorkspaceDto dto) {
         ganttPortfolioAuthorizationService.requireWorkspacePrivileged(requesterId,
                 "Sin permiso para editar espacios de trabajo");
-        Project p = projectRepo.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Espacio de trabajo no encontrado: " + id));
+        Project p = requireWorkspaceById(id);
 
         if (dto.getName() != null) p.setName(dto.getName().trim());
         if (dto.getDescription() != null) p.setDescription(dto.getDescription());
         if (dto.getIconKey() != null) p.setIconKey(normalizeIconKey(dto.getIconKey()));
 
         p = projectRepo.save(p);
-
-        if (dto.getMemberUserIds() != null) {
-            memberRepo.deleteByWorkspaceId(id);
-            for (Long userId : dto.getMemberUserIds()) {
-                memberRepo.save(ProjectMember.builder()
-                        .workspaceId(id)
-                        .userId(userId)
-                        .build());
-            }
-        }
+        replaceMembersIfPresent(id, dto.getMemberUserIds());
         return toDto(p);
     }
 
@@ -121,12 +90,59 @@ public class WorkspaceServiceImpl implements WorkspaceService {
         projectRepo.deleteById(id);
     }
 
-    private WorkspaceResponseDto toDto(Project p) {
-        List<Long> memberIds = memberRepo.findByWorkspaceId(p.getId())
-                .stream()
-                .map(ProjectMember::getUserId)
-                .toList();
+    private User requireUser(Long userId) {
+        return userRepo.findByIdWithRole(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+    }
 
+    private Project requireWorkspaceById(Long id) {
+        return projectRepo.findById(id).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.NOT_FOUND, "Espacio de trabajo no encontrado: " + id));
+    }
+
+    /** Si {@code memberUserIds} es {@code null}, no cambia membresías (el cliente no mandó la lista). */
+    private void replaceMembersIfPresent(Long workspaceId, List<Long> memberUserIds) {
+        if (memberUserIds == null) return;
+        memberRepo.deleteByWorkspaceId(workspaceId);
+        saveMembers(workspaceId, memberUserIds);
+    }
+
+    /** En alta de espacio: {@code null} → no hay miembros iniciales. */
+    private void appendMembersIfPresent(Long workspaceId, List<Long> memberUserIds) {
+        if (memberUserIds == null) return;
+        saveMembers(workspaceId, memberUserIds);
+    }
+
+    private void saveMembers(Long workspaceId, Iterable<Long> memberUserIds) {
+        for (Long userId : memberUserIds) {
+            memberRepo.save(ProjectMember.builder()
+                    .workspaceId(workspaceId)
+                    .userId(userId)
+                    .build());
+        }
+    }
+
+    private Set<Long> collectWorkspaceIdsFromTasksAndMembership(long userId) {
+        LinkedHashSet<Long> ids = new LinkedHashSet<>(
+                areaTaskRepository.findDistinctWorkspaceIdsWhereUserIsAssignee(userId));
+        memberRepo.findByUserId(userId).forEach(pm -> ids.add(pm.getWorkspaceId()));
+        return ids;
+    }
+
+    private List<WorkspaceResponseDto> activeProjectsSubsetToDtos(Set<Long> ids) {
+        return projectRepo.findAllById(ids).stream()
+                .filter(p -> Boolean.TRUE.equals(p.getActivo()))
+                .sorted(Comparator.comparing(Project::getName, String.CASE_INSENSITIVE_ORDER))
+                .map(this::toDto)
+                .toList();
+    }
+
+    private List<WorkspaceResponseDto> allActiveOrderedDtos() {
+        return projectRepo.findByActivoTrueOrderByNameAsc().stream().map(this::toDto).toList();
+    }
+
+    private WorkspaceResponseDto toDto(Project p) {
+        List<Long> memberIds = memberUserIdsOfWorkspace(p.getId());
         return WorkspaceResponseDto.builder()
                 .id(p.getId())
                 .name(p.getName())
@@ -137,6 +153,10 @@ public class WorkspaceServiceImpl implements WorkspaceService {
                 .createdAt(p.getCreatedAt())
                 .updatedAt(p.getUpdatedAt())
                 .build();
+    }
+
+    private List<Long> memberUserIdsOfWorkspace(Long workspaceId) {
+        return memberRepo.findByWorkspaceId(workspaceId).stream().map(ProjectMember::getUserId).toList();
     }
 
     private static String normalizeIconKey(String raw) {

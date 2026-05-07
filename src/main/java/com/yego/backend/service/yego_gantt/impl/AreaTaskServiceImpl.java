@@ -11,6 +11,8 @@ import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskStatus;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.repository.yego_gantt.AreaTaskRepository;
 import com.yego.backend.repository.yego_gantt.AreaTaskSubtaskRepository;
+import com.yego.backend.repository.yego_gantt.WorkosMeetingMinuteItemRepository;
+import com.yego.backend.repository.yego_gantt.WorkosTaskMessageRepository;
 import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.service.yego_gantt.AreaTaskListParams;
 import com.yego.backend.service.yego_gantt.AreaTaskService;
@@ -40,6 +42,8 @@ public class AreaTaskServiceImpl implements AreaTaskService {
 
     private final AreaTaskRepository areaTaskRepository;
     private final AreaTaskSubtaskRepository areaTaskSubtaskRepository;
+    private final WorkosTaskMessageRepository workosTaskMessageRepository;
+    private final WorkosMeetingMinuteItemRepository workosMeetingMinuteItemRepository;
     private final AreaRepository areaRepository;
     private final AreaTaskAccessHelper areaTaskAccess;
     private final SprintService sprintService;
@@ -132,19 +136,45 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 ownerUserIdFilter, viewerId, skipPrivate);
     }
 
-    /** Normaliza sprint y asignación: tarea privada siempre asignada al creador. */
-    private void applyPrivateTaskRules(Long creatorId, AreaTask task) {
+    /** Tareas privadas: sin sprint; asignaciones del DTO, con principal = primer elemento de la lista. */
+    private void applyPrivateTaskRules(AreaTask task) {
         if (!task.isPrivateTask()) {
             return;
         }
         task.setSprintId(null);
-        if (creatorId == null) {
-            task.setAssignedUserId(null);
-            task.setAssignedUserIds(new ArrayList<>());
+        List<Long> rawList = safeIds(task.getAssignedUserIds());
+        if (!rawList.isEmpty()) {
+            rawList = dedupePreserveOrder(rawList);
+            task.setAssignedUserIds(new ArrayList<>(rawList));
+            task.setAssignedUserId(rawList.get(0));
             return;
         }
-        task.setAssignedUserId(creatorId);
-        task.setAssignedUserIds(new ArrayList<>(List.of(creatorId)));
+        Long only = task.getAssignedUserId();
+        if (only != null) {
+            task.setAssignedUserIds(new ArrayList<>(List.of(only)));
+        } else {
+            task.setAssignedUserId(null);
+            task.setAssignedUserIds(new ArrayList<>());
+        }
+    }
+
+    private static List<Long> dedupePreserveOrder(List<Long> ids) {
+        List<Long> out = new ArrayList<>();
+        Set<Long> seen = new HashSet<>();
+        for (Long id : ids) {
+            if (id != null && seen.add(id)) {
+                out.add(id);
+            }
+        }
+        return out;
+    }
+
+    private void requireAreaActiva(Long areaId) {
+        if (areaId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debe indicar un área");
+        }
+        areaRepository.findByIdAndActivoTrue(areaId).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.BAD_REQUEST, "El área no existe o está inactiva"));
     }
 
     private Map<Long, String> areaNamesForIds(Set<Long> ids) {
@@ -305,13 +335,14 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         boolean priv = dto.getPrivateTask() != null
                 ? dto.getPrivateTask()
                 : ganttTaskTagPrivacyService.tagsIndicatePrivate(tagList);
-        Long effectiveAreaId = (priv && user.getAreaId() != null)
-                ? user.getAreaId()
+        Long effectiveAreaId = priv
+                ? (dto.getAreaId() != null ? dto.getAreaId() : user.getAreaId())
                 : dto.getAreaId();
-        areaTaskAccess.assertCanManage(scope, effectiveAreaId);
-        areaRepository.findById(effectiveAreaId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Área no existe"));
-        sprintService.assertSprintOpenForNewTasks(dto.getSprintId());
+        requireAreaActiva(effectiveAreaId);
+        if (!priv) {
+            areaTaskAccess.assertCanManage(scope, effectiveAreaId);
+            sprintService.assertSprintOpenForNewTasks(dto.getSprintId());
+        }
         List<String> tagsStored = ganttTaskTagPrivacyService.stripPrivacyTagLabels(tagList);
         AreaTask task = AreaTask.builder()
                 .areaId(effectiveAreaId)
@@ -331,7 +362,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
                 .privateTask(priv)
                 .createdByUserId(userId)
                 .build();
-        applyPrivateTaskRules(userId, task);
+        applyPrivateTaskRules(task);
         AreaTask saved = areaTaskRepository.save(task);
         return toDtos(List.of(saved), Set.of()).get(0);
     }
@@ -399,20 +430,21 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         if (dto.getAreaId() != null && !participantStatusOnly) {
             Long nid = dto.getAreaId();
             if (!Objects.equals(task.getAreaId(), nid)) {
-                areaRepository.findById(nid)
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Área no existe"));
+                requireAreaActiva(nid);
                 task.setAreaId(nid);
             }
-        } else if (task.isPrivateTask()
+        } else if (dto.getAreaId() == null
+                && task.isPrivateTask()
                 && Objects.equals(user.getId(), task.getCreatedByUserId())
                 && user.getAreaId() != null) {
+            requireAreaActiva(user.getAreaId());
             task.setAreaId(user.getAreaId());
         }
-        if (!participantStatusOnly) {
+        requireAreaActiva(task.getAreaId());
+        if (!participantStatusOnly && !task.isPrivateTask()) {
             areaTaskAccess.assertCanManage(scope, task.getAreaId());
         }
-        Long creatorForRules = task.getCreatedByUserId() != null ? task.getCreatedByUserId() : userId;
-        applyPrivateTaskRules(creatorForRules, task);
+        applyPrivateTaskRules(task);
         if (task.getEndDate().isBefore(task.getStartDate())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha fin no puede ser anterior al inicio");
         }
@@ -430,6 +462,9 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         GanttTaskScope scope = areaTaskAccess.resolveScope(user);
         AreaTask task = areaTaskAccess.requireReadableTask(user, scope, taskId);
         areaTaskAccess.assertCanMutateTask(user, scope, task);
+        workosMeetingMinuteItemRepository.clearConvertedTaskLinks(taskId);
+        workosTaskMessageRepository.deleteAllByTaskId(taskId);
+        areaTaskSubtaskRepository.deleteByParentTaskId(taskId);
         areaTaskRepository.delete(task);
     }
 }

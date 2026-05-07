@@ -34,6 +34,8 @@ public interface AreaRepository extends JpaRepository<Area, Long> {
     @Query("SELECT a FROM Area a WHERE a.activo = true ORDER BY a.name ASC")
     List<Area> findAllActivas();
 
+    Optional<Area> findByIdAndActivoTrue(Long id);
+
     List<Area> findByManagerId(Long managerId);
 
     List<Area> findBySupervisorId(Long supervisorId);

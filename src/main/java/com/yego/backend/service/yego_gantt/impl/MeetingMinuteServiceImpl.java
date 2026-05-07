@@ -55,12 +55,22 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
         return ganttTaskScopeService.resolve(user);
     }
 
-    private void assertHasScope(GanttTaskScope scope, User user) {
-        if (ganttReadableAreasService.isPlatformAdmin(user)) {
+    private void requireMeetingItemAreaActiveIfPresent(Long areaId) {
+        if (areaId == null) {
             return;
         }
-        if (!scope.allAreas() && scope.areaIds().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Sin ámbito WorkOS para actas");
+        areaRepository.findByIdAndActivoTrue(areaId).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.BAD_REQUEST, "El área no existe o está inactiva"));
+    }
+
+    /** Fechas nuevas/edición de actas: no permitidas antes del día civil actual (servidor). */
+    private static void assertActaCalendarNotBeforeToday(LocalDate d, String etiquetaUsuario) {
+        if (d == null) return;
+        LocalDate today = LocalDate.now();
+        if (d.isBefore(today)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    etiquetaUsuario + " no puede ser anterior al día de hoy");
         }
     }
 
@@ -361,7 +371,6 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             Pageable pageable) {
         User user = requireUser(userId);
         GanttTaskScope sc = scope(user);
-        assertHasScope(sc, user);
         boolean admin = ganttReadableAreasService.isPlatformAdmin(user);
         Specification<WorkosMeetingMinute> spec = Specification.allOf(
                 MeetingMinuteSpecifications.notDeleted(),
@@ -391,7 +400,8 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     public MeetingMinuteResponse create(long userId, CreateMeetingMinuteRequest req) {
         User user = requireUser(userId);
         GanttTaskScope sc = scope(user);
-        assertHasScope(sc, user);
+        assertActaCalendarNotBeforeToday(req.getMeetingDate(), "La fecha del acta");
+        assertActaCalendarNotBeforeToday(req.getNextMeetingDate(), "La fecha de próxima reunión");
         MeetingMinuteStatus st = req.getStatus() != null ? req.getStatus() : MeetingMinuteStatus.ABIERTA;
         WorkosMeetingMinute m = WorkosMeetingMinute.builder()
                 .title(req.getTitle().trim())
@@ -420,6 +430,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             m.setTitle(req.getTitle().trim());
         }
         if (req.getMeetingDate() != null) {
+            assertActaCalendarNotBeforeToday(req.getMeetingDate(), "La fecha del acta");
             m.setMeetingDate(req.getMeetingDate());
         }
         if (req.getMeetingType() != null) {
@@ -432,6 +443,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             m.setOwnerUserId(req.getOwnerUserId());
         }
         if (req.getNextMeetingDate() != null) {
+            assertActaCalendarNotBeforeToday(req.getNextMeetingDate(), "La fecha de próxima reunión");
             m.setNextMeetingDate(req.getNextMeetingDate());
         }
         if (req.getStatus() != null) {
@@ -474,9 +486,9 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
         for (CreateMeetingMinuteItemRequest r : reqs) {
             order++;
             int effectiveOrder = r.getItemOrder() != null ? r.getItemOrder() : order;
-            if (r.getAreaId() != null && !ganttReadableAreasService.isPlatformAdmin(user) && !sc.canAccessArea(r.getAreaId())) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Área no permitida en el ítem");
-            }
+            requireMeetingItemAreaActiveIfPresent(r.getAreaId());
+            assertActaCalendarNotBeforeToday(r.getStartDate(), "La fecha de inicio del ítem");
+            assertActaCalendarNotBeforeToday(r.getDeadline(), "La fecha fin del ítem");
             WorkosMeetingMinuteItem it = WorkosMeetingMinuteItem.builder()
                     .meetingMinute(m)
                     .itemOrder(effectiveOrder)
@@ -517,9 +529,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ítem ya convertido; no editable aquí");
         }
         if (req.getAreaId() != null) {
-            if (!ganttReadableAreasService.isPlatformAdmin(user) && !sc.canAccessArea(req.getAreaId())) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Área no permitida");
-            }
+            requireMeetingItemAreaActiveIfPresent(req.getAreaId());
             it.setAreaId(req.getAreaId());
         }
         if (req.getAreaNameSnapshot() != null) {
@@ -553,9 +563,11 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             it.setResponsibleNameSnapshot(req.getResponsibleNameSnapshot());
         }
         if (req.getStartDate() != null) {
+            assertActaCalendarNotBeforeToday(req.getStartDate(), "La fecha de inicio del ítem");
             it.setStartDate(req.getStartDate());
         }
         if (req.getDeadline() != null) {
+            assertActaCalendarNotBeforeToday(req.getDeadline(), "La fecha fin del ítem");
             it.setDeadline(req.getDeadline());
         }
         if (req.getPriority() != null) {
@@ -622,6 +634,8 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
         if (end.isBefore(start)) {
             end = start;
         }
+        assertActaCalendarNotBeforeToday(start, "La fecha de inicio");
+        assertActaCalendarNotBeforeToday(end, "La fecha fin");
         AreaTaskPriority pr = req.getPriority() != null ? req.getPriority() : mapPriority(it.getPriority());
         AreaTaskStatus st = req.getStatus() != null ? req.getStatus() : mapItemStatusToTask(it.getStatus());
         List<Long> assignees = req.getAssignedUserIds();

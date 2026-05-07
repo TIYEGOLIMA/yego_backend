@@ -2,6 +2,7 @@ package com.yego.backend.repository.yego_gantt;
 
 import com.yego.backend.entity.yego_gantt.entities.WorkosTaskMessage;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -47,4 +48,8 @@ public interface WorkosTaskMessageRepository extends JpaRepository<WorkosTaskMes
 
     @Query("SELECT m FROM WorkosTaskMessage m WHERE m.id = :id AND m.taskId = :taskId AND NOT m.isDeleted")
     Optional<WorkosTaskMessage> findVisibleByIdAndTaskId(@Param("id") Long id, @Param("taskId") Long taskId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM WorkosTaskMessage m WHERE m.taskId = :taskId")
+    void deleteAllByTaskId(@Param("taskId") Long taskId);
 }

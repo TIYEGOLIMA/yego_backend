@@ -44,7 +44,9 @@ public class AreaTaskAccessHelper {
     }
 
     public void assertCanMutateTask(User user, GanttTaskScope scope, AreaTask task) {
-        assertCanManage(scope, task.getAreaId());
+        if (!task.isPrivateTask()) {
+            assertCanManage(scope, task.getAreaId());
+        }
         areaTaskPrivateAccessService.assertCanMutatePrivateTask(user, task);
     }
 
