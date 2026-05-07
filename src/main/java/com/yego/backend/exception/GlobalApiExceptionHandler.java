@@ -9,7 +9,10 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.server.ResponseStatusException;
+
+import org.apache.catalina.connector.ClientAbortException;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -79,6 +82,39 @@ public class GlobalApiExceptionHandler {
                 .status(HttpStatus.BAD_REQUEST)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(errorBody("BAD_REQUEST", msg));
+    }
+
+    /**
+     * Cliente cerró la conexión (timeout, navegación, proxy) mientras el servidor enviaba el cuerpo.
+     * Típico al serializar listas grandes; no indica fallo interno del servicio.
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleAsyncBrokenPipe(AsyncRequestNotUsableException ex) {
+        Throwable deepest = deepestCause(ex);
+        if (deepest instanceof java.io.IOException) {
+            log.warn("Cliente desconectó durante la respuesta ({})", shorten(deepest.getMessage()));
+            return;
+        }
+        log.warn("Petición asíncrona no usable ({})", shorten(ex.getMessage()));
+    }
+
+    /** Tomcat: mismo escenario cuando el navegador cancela antes de tiempo. */
+    @ExceptionHandler(ClientAbortException.class)
+    public void handleTomcatClientAbort(ClientAbortException ex) {
+        log.warn("Cliente cerró la conexión durante la respuesta ({})", shorten(ex.getMessage()));
+    }
+
+    private static Throwable deepestCause(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+        }
+        return cur;
+    }
+
+    private static String shorten(String s) {
+        if (s == null) return "";
+        return s.length() > 120 ? s.substring(0, 117) + "..." : s;
     }
 
     @ExceptionHandler(Exception.class)
