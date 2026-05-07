@@ -11,6 +11,7 @@ import org.apache.hc.client5.http.socket.PlainConnectionSocketFactory;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
 import org.apache.hc.core5.http.config.Registry;
 import org.apache.hc.core5.http.config.RegistryBuilder;
+import org.apache.hc.core5.http.io.SocketConfig;
 import org.apache.hc.core5.util.Timeout;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -40,6 +41,8 @@ public class YangoExternalRestTemplateConfig {
         connectionManager = new PoolingHttpClientConnectionManager(reg);
         connectionManager.setMaxTotal(80);
         connectionManager.setDefaultMaxPerRoute(24);
+        connectionManager.setDefaultSocketConfig(
+                SocketConfig.custom().setTcpNoDelay(true).build());
 
         RequestConfig requestConfig = RequestConfig.custom()
                 .setConnectTimeout(Timeout.ofSeconds(12))

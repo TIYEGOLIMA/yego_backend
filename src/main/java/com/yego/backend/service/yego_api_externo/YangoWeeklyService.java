@@ -75,13 +75,11 @@ public class YangoWeeklyService {
                 ? req.getParkId().trim()
                 : YangoClient.DEFAULT_PARK_ID;
 
-        String queryText = resolveQueryText(req);
-        rejectNameOnlyLookup(queryText);
         LocalDate anchor = resolveAnchor(req);
         PeriodRange weeklyPeriod = resolveWeeklyPeriod(anchor);
         PeriodRange monthlyPeriod = resolveLastMonthPeriod(anchor);
 
-        String contractorId = resolveContractor(queryText, parkId);
+        String contractorId = resolveContractorId(req, parkId);
 
         // Todas las llamadas a Yango se disparan en paralelo en el mismo nivel (no anidadas).
         CompletableFuture<YangoIncomeSummary> weeklyIncomeFuture =
@@ -102,6 +100,10 @@ public class YangoWeeklyService {
                 CompletableFuture.supplyAsync(
                         () -> postDriverCardJson(driverCommonUrl, contractorId, parkId, "common"),
                         YANGO_IO);
+
+        CompletableFuture.allOf(
+                        weeklyIncomeFuture, monthlyIncomeFuture, goalsFuture, detailsFuture, commonFuture)
+                .join();
 
         YangoIncomeSummary weeklyIncome = weeklyIncomeFuture.join();
         YangoIncomeSummary monthlyIncome = monthlyIncomeFuture.join();
@@ -125,6 +127,18 @@ public class YangoWeeklyService {
     }
 
     // ── resolvers ──
+
+    /**
+     * Resuelve el ID de contratista vía {@code contractor_id} directo (rápido) o búsqueda suggestions.
+     */
+    private String resolveContractorId(YangoSummaryRequest req, String parkId) {
+        if (req.getContractorId() != null && !req.getContractorId().isBlank()) {
+            return req.getContractorId().trim();
+        }
+        String queryText = resolveQueryText(req);
+        rejectNameOnlyLookup(queryText);
+        return resolveContractor(queryText, parkId);
+    }
 
     private String resolveContractor(String queryText, String parkId) {
         YangoSuggestionsBody suggestionsBody;
@@ -496,14 +510,56 @@ public class YangoWeeklyService {
         JsonNode orders = root.get("orders");
         JsonNode balances = root.get("balances");
 
+        double cashCollected = r2(doubleOr0(balances, "cash_collected"));
+        double nonCashPayment =
+                r2(doubleOr0(balances, "platform_card") + doubleOr0(balances, "partner_cashless"));
+        double corporate = r2(doubleOr0(balances, "platform_corporate"));
+        double promotionCompensation = r2(doubleOr0(balances, "platform_promotion"));
+        double bonificacion = r2(doubleOr0(balances, "platform_bonus"));
+        double tips = r2(tipsFromBalances(balances));
+        double platformFees = r2(doubleOr0(balances, "platform_fees"));
+        double partnerFees = r2(doubleOr0(balances, "partner_fees"));
+        double platformGas = r2(doubleOr0(balances, "platform_gas"));
+        double platformOther = r2(doubleOr0(balances, "platform_other"));
+        double mandatoryTaxesFee = r2(doubleOr0(balances, "mandatory_taxes_fee"));
+        double platformMarketingOther = r2(doubleOr0(balances, "platform_marketing_other"));
+        double partnerContractorOther = r2(doubleOr0(balances, "partner_contractor_other"));
+        double priceYangoPro =
+                r2(cashCollected
+                        + nonCashPayment
+                        + corporate
+                        + tips
+                        + promotionCompensation
+                        + bonificacion);
+
         return YangoIncomeSummary.builder()
                 .countCompleted(intOr0(orders, "count_completed"))
                 .total(doubleOrNullRounded(balances, "total"))
-                .cashCollected(r2(doubleOr0(balances, "cash_collected")))
-                .nonCashPayment(r2(doubleOr0(balances, "platform_card") + doubleOr0(balances, "partner_cashless")))
-                .corporate(r2(doubleOr0(balances, "platform_corporate")))
-                .promotionCompensation(r2(doubleOr0(balances, "platform_promotion")))
+                .cashCollected(cashCollected)
+                .nonCashPayment(nonCashPayment)
+                .corporate(corporate)
+                .promotionCompensation(promotionCompensation)
+                .bonificacion(bonificacion)
+                .tips(tips)
+                .platformFees(platformFees)
+                .partnerFees(partnerFees)
+                .platformGas(platformGas)
+                .platformOther(platformOther)
+                .mandatoryTaxesFee(mandatoryTaxesFee)
+                .platformMarketingOther(platformMarketingOther)
+                .partnerContractorOther(partnerContractorOther)
+                .priceYangoPro(priceYangoPro)
                 .build();
+    }
+
+    /** Suma de campos de propinas habituales en {@code balances} de la tarjeta de ingresos. */
+    private static double tipsFromBalances(JsonNode balances) {
+        if (balances == null) {
+            return 0.0;
+        }
+        return doubleOr0(balances, "tip")
+                + doubleOr0(balances, "platform_tip")
+                + doubleOr0(balances, "partner_ride_tip");
     }
 
     private static double r2(double v) {
