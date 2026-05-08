@@ -24,10 +24,14 @@ import java.time.YearMonth;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -38,7 +42,8 @@ public class YangoWeeklyService {
 
     /**
      * Hilos dedicados para llamadas HTTP a Yango (no bloquear ForkJoinPool.commonPool()).
-     * Por consulta lanzamos hasta 5 calls en paralelo (weekly, monthly, goals, details, common).
+     * Por consulta lanzamos hasta 6 llamadas en paralelo (weekly, monthly + resta objetivo transactions, goals,
+     * details, common).
      */
     private static final Executor YANGO_IO = Executors.newFixedThreadPool(16, r -> {
         Thread t = new Thread(r, "yango-external-io");
@@ -51,23 +56,33 @@ public class YangoWeeklyService {
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
     private static final DateTimeFormatter DAY = DateTimeFormatter.ISO_LOCAL_DATE;
 
+    /** Texto Fleet para excluir del neto de bonificación (normalizado NFD + sin marcas + minúsculas). */
+    private static final String OBJECTIVE_BONUS_DESCRIPTION_NORMALIZED =
+            Normalizer.normalize("Bonificación por cumplir objetivo", Normalizer.Form.NFD)
+                    .replaceAll("\\p{M}+", "")
+                    .toLowerCase(Locale.ROOT);
+
     private final YangoClient yangoClient;
     private final ObjectMapper objectMapper;
     private final String incomeUrl;
     private final String driverDetailsUrl;
     private final String driverCommonUrl;
+    private final String driverTransactionsListUrl;
 
     public YangoWeeklyService(
             YangoClient yangoClient,
             ObjectMapper objectMapper,
             @Value("${yego.yango.driver-income-url:https://fleet.yango.com/api/v1/cards/driver/income}") String incomeUrl,
             @Value("${yego.yango.driver-details-url:https://fleet.yango.com/api/v1/cards/driver/details}") String driverDetailsUrl,
-            @Value("${yego.yango.driver-common-url:https://fleet.yango.com/api/fleet/router/v1/cards/driver/common}") String driverCommonUrl) {
+            @Value("${yego.yango.driver-common-url:https://fleet.yango.com/api/fleet/router/v1/cards/driver/common}") String driverCommonUrl,
+            @Value("${yego.yango.driver-transactions-list-url:https://fleet.yango.com/api/v1/reports/transactions/driver/list}")
+                    String driverTransactionsListUrl) {
         this.yangoClient = yangoClient;
         this.objectMapper = objectMapper;
         this.incomeUrl = incomeUrl;
         this.driverDetailsUrl = driverDetailsUrl;
         this.driverCommonUrl = driverCommonUrl;
+        this.driverTransactionsListUrl = driverTransactionsListUrl;
     }
 
     public YangoSummaryResponse summarize(YangoSummaryRequest req) {
@@ -81,12 +96,24 @@ public class YangoWeeklyService {
 
         String contractorId = resolveContractorId(req, parkId);
 
+        log.info(
+                "[YangoWeeklyService] Yango upstream: income + monthly + POST {} (Bonificación cumplir objetivo → restar)"
+                        + " + goals + details + common. parkId={} contractorId={}",
+                driverTransactionsListUrl,
+                parkId,
+                contractorId);
+
         // Todas las llamadas a Yango se disparan en paralelo en el mismo nivel (no anidadas).
         CompletableFuture<YangoIncomeSummary> weeklyIncomeFuture =
                 CompletableFuture.supplyAsync(() -> fetchIncome(contractorId, weeklyPeriod, parkId), YANGO_IO);
 
         CompletableFuture<YangoIncomeSummary> monthlyIncomeFuture =
                 CompletableFuture.supplyAsync(() -> fetchIncome(contractorId, monthlyPeriod, parkId), YANGO_IO);
+
+        CompletableFuture<Optional<Double>> objetivoSubtractFuture =
+                CompletableFuture.supplyAsync(
+                        () -> tryFetchSumAmountBonificacionCumplirObjetivo(contractorId, parkId, weeklyPeriod),
+                        YANGO_IO);
 
         CompletableFuture<GoalsResult> goalsFuture =
                 CompletableFuture.supplyAsync(() -> fetchGoals(contractorId, parkId), YANGO_IO);
@@ -102,10 +129,31 @@ public class YangoWeeklyService {
                         YANGO_IO);
 
         CompletableFuture.allOf(
-                        weeklyIncomeFuture, monthlyIncomeFuture, goalsFuture, detailsFuture, commonFuture)
+                        weeklyIncomeFuture,
+                        monthlyIncomeFuture,
+                        objetivoSubtractFuture,
+                        goalsFuture,
+                        detailsFuture,
+                        commonFuture)
                 .join();
 
         YangoIncomeSummary weeklyIncome = weeklyIncomeFuture.join();
+        Optional<Double> restaBonifObjetivo = objetivoSubtractFuture.join();
+        if (restaBonifObjetivo.isPresent()) {
+            double bonifTarjeta = d0(weeklyIncome != null ? weeklyIncome.getBonificacion() : null);
+            double resta = restaBonifObjetivo.get();
+            double nuevaBonif = r2(bonifTarjeta - resta);
+            log.info(
+                    "[YangoWeeklyService] platform_bonus (tarjeta)={} menos sum(amount) líneas «Bonificación por cumplir objetivo»={} → bonificación semanal={}",
+                    bonifTarjeta,
+                    resta,
+                    nuevaBonif);
+            weeklyIncome = withWeeklyBonificacionOnly(weeklyIncome, nuevaBonif);
+        } else {
+            log.debug(
+                    "[YangoWeeklyService] Sin LIST transactions o error; bonificación semanal = sólo tarjeta income.");
+        }
+
         YangoIncomeSummary monthlyIncome = monthlyIncomeFuture.join();
         GoalsResult goals = goalsFuture.join();
         YangoDriverSnapshot driverSnapshot = buildDriverSnapshot(detailsFuture.join(), commonFuture.join());
@@ -218,6 +266,161 @@ public class YangoWeeklyService {
             throw new YangoWeeklyException(
                     HttpStatus.BAD_GATEWAY, "YANGO_UPSTREAM_ERROR", "Income upstream error");
         }
+    }
+
+    /**
+     * Una sola llamada a {@code reports/transactions/driver/list}: mismo rango semanal que la tarjeta income,
+     * {@code driver_profile.id} = ID de conductor ya resuelto. Suma {@code amount} solo si la fila coincide con
+     * «Bonificación por cumplir objetivo» y esa suma se resta después de {@code platform_bonus}.
+     */
+    private Optional<Double> tryFetchSumAmountBonificacionCumplirObjetivo(
+            String driverProfileId, String parkId, PeriodRange weeklySameAsIncome) {
+        Map<String, Object> txn = new LinkedHashMap<>();
+        txn.put("event_at", Map.of("from", weeklySameAsIncome.dateFrom, "to", weeklySameAsIncome.dateTo));
+        txn.put("category_ids", List.of("bonus", "bonus_discount", "platform_bonus_fee"));
+        Map<String, Object> query = new LinkedHashMap<>();
+        query.put("park", Map.of("driver_profile", Map.of("id", driverProfileId)));
+        query.put("transaction", txn);
+
+        double sumAmountBonifCumplirObjetivo = 0.0;
+        int filasTextoObjetivo = 0;
+        String nextCursor = null;
+        String ultimoPayload = null;
+        try {
+            log.info(
+                    "[YangoWeeklyService] POST driver transactions list driver_profile.id={} event_at=[{}, {}]",
+                    driverProfileId,
+                    weeklySameAsIncome.dateFrom,
+                    weeklySameAsIncome.dateTo);
+            do {
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("query", query);
+                body.put("limit", 500);
+                if (nextCursor != null && !nextCursor.isBlank()) {
+                    body.put("cursor", nextCursor);
+                }
+                ultimoPayload = objectMapper.writeValueAsString(body);
+                ResponseEntity<String> resp = yangoClient.postFleet(driverTransactionsListUrl, ultimoPayload, parkId);
+                if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
+                    log.warn(
+                            "[YangoWeeklyService] driver transactions list HTTP {} — payload={}",
+                            resp.getStatusCode(),
+                            ultimoPayload);
+                    return Optional.empty();
+                }
+                JsonNode root = objectMapper.readTree(resp.getBody());
+                JsonNode list = root.get("transactions");
+                if (list != null && list.isArray()) {
+                    for (JsonNode tx : list) {
+                        String desc = readTransactionDescription(tx);
+                        if (!isObjectiveCompletionBonusDescription(desc)) {
+                            continue;
+                        }
+                        sumAmountBonifCumplirObjetivo += readTransactionAmount(tx);
+                        filasTextoObjetivo++;
+                    }
+                }
+                nextCursor =
+                        root.hasNonNull("cursor") && root.get("cursor").isTextual()
+                                ? root.get("cursor").asText().trim()
+                                : "";
+                if (nextCursor.isBlank()) {
+                    nextCursor = null;
+                }
+            } while (nextCursor != null);
+            double suma = r2(sumAmountBonifCumplirObjetivo);
+            log.info(
+                    "[YangoWeeklyService] Listado: #filas «Bonificación por cumplir objetivo»={} sum(amount) a restar de platform_bonus={}",
+                    filasTextoObjetivo,
+                    suma);
+            return Optional.of(suma);
+        } catch (Exception e) {
+            log.warn(
+                    "[YangoWeeklyService] driver transactions list error: {} payload={}",
+                    e.getMessage(),
+                    ultimoPayload);
+            return Optional.empty();
+        }
+    }
+
+    /** Lee {@code amount} tal como viene en Fleet (número, texto o objeto con valor numérico). */
+    private static double readTransactionAmount(JsonNode tx) {
+        if (tx == null || !tx.has("amount") || tx.get("amount").isNull()) {
+            return 0.0;
+        }
+        JsonNode a = tx.get("amount");
+        if (a.isNumber()) {
+            return a.asDouble();
+        }
+        if (a.isTextual()) {
+            return parseAmountText(a);
+        }
+        if (a.isObject()) {
+            JsonNode value = a.get("value");
+            if (value != null && value.isNumber()) {
+                return value.asDouble();
+            }
+            if (value != null && value.isTextual()) {
+                return parseAmountText(value);
+            }
+        }
+        return 0.0;
+    }
+
+    private static String readTransactionDescription(JsonNode tx) {
+        if (tx == null || !tx.hasNonNull("description")) {
+            return "";
+        }
+        JsonNode d = tx.get("description");
+        return d.isTextual() ? d.asText().trim() : "";
+    }
+
+    private static double parseAmountText(JsonNode n) {
+        if (n == null || !n.isTextual()) {
+            return 0.0;
+        }
+        try {
+            return Double.parseDouble(n.asText().trim().replace(",", "."));
+        } catch (NumberFormatException ignored) {
+            return 0.0;
+        }
+    }
+
+    private static boolean isObjectiveCompletionBonusDescription(String description) {
+        if (description == null || description.isBlank()) {
+            return false;
+        }
+        String folded =
+                Normalizer.normalize(description.trim(), Normalizer.Form.NFD)
+                        .replaceAll("\\p{M}+", "")
+                        .toLowerCase(Locale.ROOT);
+        return OBJECTIVE_BONUS_DESCRIPTION_NORMALIZED.equals(folded);
+    }
+
+    /** Solo sobrescribe {@code bonificacion}; el resto del resumen permanece igual al de la tarjeta income. */
+    private static YangoIncomeSummary withWeeklyBonificacionOnly(YangoIncomeSummary income, double newBonificacion) {
+        if (income == null) {
+            return null;
+        }
+        double b = r2(newBonificacion);
+        return YangoIncomeSummary.builder()
+                .countCompleted(income.getCountCompleted())
+                .total(income.getTotal())
+                .cashCollected(income.getCashCollected())
+                .nonCashPayment(income.getNonCashPayment())
+                .corporate(income.getCorporate())
+                .promotionCompensation(income.getPromotionCompensation())
+                .bonificacion(b)
+                .tips(income.getTips())
+                .platformFees(income.getPlatformFees())
+                .partnerFees(income.getPartnerFees())
+                .platformGas(income.getPlatformGas())
+                .platformOther(income.getPlatformOther())
+                .mandatoryTaxesFee(income.getMandatoryTaxesFee())
+                .platformMarketingOther(income.getPlatformMarketingOther())
+                .partnerContractorOther(income.getPartnerContractorOther())
+                .priceYangoPro(income.getPriceYangoPro())
+                .build();
     }
 
     private GoalsResult fetchGoals(String contractorId, String parkId) {
@@ -564,6 +767,10 @@ public class YangoWeeklyService {
 
     private static double r2(double v) {
         return Math.round(v * 100.0) / 100.0;
+    }
+
+    private static double d0(Double v) {
+        return v == null ? 0.0 : v;
     }
 
     private static int intOr0(JsonNode parent, String field) {

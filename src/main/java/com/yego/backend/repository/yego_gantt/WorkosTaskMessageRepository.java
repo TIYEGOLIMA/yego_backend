@@ -52,4 +52,28 @@ public interface WorkosTaskMessageRepository extends JpaRepository<WorkosTaskMes
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM WorkosTaskMessage m WHERE m.taskId = :taskId")
     void deleteAllByTaskId(@Param("taskId") Long taskId);
+
+    /** Reasigna mensajes de hilo de subtarea al nuevo padre (misma fila en area_task_subtasks). */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+            value =
+                    "UPDATE workos_task_messages SET task_id = :newTaskId, updated_at = NOW() "
+                            + "WHERE subtask_id = :subtaskId AND task_id = :oldTaskId AND is_deleted = FALSE",
+            nativeQuery = true)
+    int reassignSubtaskThreadToParent(
+            @Param("oldTaskId") long oldTaskId,
+            @Param("subtaskId") long subtaskId,
+            @Param("newTaskId") long newTaskId);
+
+    /** Reasigna mensajes de hilo de una tarea a su nueva entidad subtarea. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+            value =
+                    "UPDATE workos_task_messages SET task_id = :newParentTaskId, subtask_id = :newSubtaskId, updated_at = NOW() "
+                            + "WHERE task_id = :oldTaskId",
+            nativeQuery = true)
+    int reassignTaskThreadToSubtask(
+            @Param("oldTaskId") long oldTaskId,
+            @Param("newParentTaskId") long newParentTaskId,
+            @Param("newSubtaskId") long newSubtaskId);
 }

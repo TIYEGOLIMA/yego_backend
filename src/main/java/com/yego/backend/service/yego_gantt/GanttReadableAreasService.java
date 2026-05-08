@@ -5,7 +5,8 @@ import com.yego.backend.entity.yego_principal.entities.User;
 import java.util.Set;
 
 /**
- * Ámbito ADMIN/SUPERADMIN y áreas legibles por usuario para WorkOS/Gantt.
+ * Ámbito ADMIN/SUPERADMIN y lectura de equipos activos para WorkOS/Gantt.
+ * El alcance por usuario incluye todas las áreas activas (colaboración entre equipos).
  */
 public interface GanttReadableAreasService {
 
@@ -14,6 +15,6 @@ public interface GanttReadableAreasService {
     /** Admin/SUPERVISOR y variantes: alcance todas las áreas para operaciones WorkOS/Gantt (igual que {@code ganttHasFullTabAccess} en front). */
     boolean canOperateAllAreasInGantt(User user);
 
-    /** Jefe de al menos un área → esas áreas; si no, el área del usuario colaborador. */
+    /** Ids de áreas activas con visibilidad Gantt para el usuario autenticado (alcance equipos cargados). */
     Set<Long> readableAreaIdsForUser(User user);
 }

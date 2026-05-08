@@ -1,6 +1,7 @@
 package com.yego.backend.controller.yego_gantt;
 
 import com.yego.backend.entity.yego_gantt.api.request.CreateAreaTaskSubtaskDto;
+import com.yego.backend.entity.yego_gantt.api.request.MoveAreaTaskSubtaskDto;
 import com.yego.backend.entity.yego_gantt.api.request.UpdateAreaTaskSubtaskDto;
 import com.yego.backend.entity.yego_gantt.api.response.AreaTaskSubtaskResponseDto;
 import com.yego.backend.service.yego_gantt.AreaTaskSubtaskService;
@@ -47,5 +48,19 @@ public class AreaTaskSubtaskController {
                                       @PathVariable Long subtaskId) {
         subtaskService.delete(Long.parseLong(authentication.getName()), taskId, subtaskId);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{subtaskId}/move")
+    public ResponseEntity<AreaTaskSubtaskResponseDto> moveToParent(
+            Authentication authentication,
+            @PathVariable Long taskId,
+            @PathVariable Long subtaskId,
+            @Valid @RequestBody MoveAreaTaskSubtaskDto dto) {
+        return ResponseEntity.ok(
+                subtaskService.moveToParent(
+                        Long.parseLong(authentication.getName()),
+                        taskId,
+                        subtaskId,
+                        dto));
     }
 }

@@ -17,6 +17,9 @@ public class UpdateAreaTaskSubtaskDto {
     @Size(max = 500)
     private String title;
 
+    @Size(max = 4000)
+    private String description;
+
     @DecimalMin(value = "0.0001", inclusive = true)
     private BigDecimal weight;
 
@@ -31,4 +34,11 @@ public class UpdateAreaTaskSubtaskDto {
     private LocalDate dueDate;
 
     private Boolean clearDueDate;
+
+    private Long areaId;
+
+    private Long workspaceId;
+
+    /** Quitar proyecto explícito; la subtarea hereda del padre. */
+    private Boolean clearWorkspace;
 }

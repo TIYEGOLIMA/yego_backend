@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -140,6 +141,10 @@ public interface AreaTaskRepository extends JpaRepository<AreaTask, Long> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("UPDATE AreaTask t SET t.progressPercent = :pct WHERE t.id = :id")
     int updateProgressPercentById(@Param("id") Long id, @Param("pct") Integer pct);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE AreaTask t SET t.endDate = :endDate WHERE t.id = :id")
+    int updateEndDateById(@Param("id") Long id, @Param("endDate") LocalDate endDate);
 
     /** Evita N+1 al evaluar si el usuario es asignado (colección cargada en la misma consulta). */
     @Query("SELECT DISTINCT t FROM AreaTask t LEFT JOIN FETCH t.assignedUserIds WHERE t.id = :id")

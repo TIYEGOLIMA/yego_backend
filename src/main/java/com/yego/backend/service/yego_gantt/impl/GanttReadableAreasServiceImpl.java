@@ -36,12 +36,11 @@ public class GanttReadableAreasServiceImpl implements GanttReadableAreasService 
         if (user == null) {
             return Set.of();
         }
-        List<Area> managed = areaRepository.findByManagerId(user.getId());
-        if (managed != null && !managed.isEmpty()) {
-            return managed.stream().map(Area::getId).collect(Collectors.toSet());
-        }
-        if (user.getAreaId() != null) {
-            return Set.of(user.getAreaId());
+        // Gantt/colaboración: cualquier usuario con acceso puede ver y operar tareas por equipo
+        // en todas las áreas activas; el equipo de la persona sigue mostrándose en la UI.
+        List<Area> activas = areaRepository.findAllActivas();
+        if (activas != null && !activas.isEmpty()) {
+            return activas.stream().map(Area::getId).collect(Collectors.toSet());
         }
         return Set.of();
     }

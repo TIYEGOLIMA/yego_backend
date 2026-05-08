@@ -31,6 +31,9 @@ public class AreaTaskSubtask {
     @Column(nullable = false, length = 500)
     private String title;
 
+    @Column(length = 4000)
+    private String description;
+
     @Column(name = "sort_order", nullable = false)
     @Builder.Default
     private Integer sortOrder = 0;
@@ -57,6 +60,14 @@ public class AreaTaskSubtask {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    /** Nullable: si es null, UI/API muestran el área del padre. */
+    @Column(name = "area_id")
+    private Long areaId;
+
+    /** Nullable: si es null, UI/API muestran el {@code workspaceId / project_id} del padre. */
+    @Column(name = "project_id")
+    private Long workspaceId;
 
     @PrePersist
     void prePersist() {

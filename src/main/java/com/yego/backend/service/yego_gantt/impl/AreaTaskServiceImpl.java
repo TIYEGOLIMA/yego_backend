@@ -1,11 +1,14 @@
 package com.yego.backend.service.yego_gantt.impl;
 
+import com.yego.backend.entity.yego_gantt.api.request.ConvertTaskToSubtaskDto;
 import com.yego.backend.entity.yego_gantt.api.request.CreateAreaTaskDto;
 import com.yego.backend.entity.yego_gantt.api.request.UpdateAreaTaskDto;
 import com.yego.backend.entity.yego_gantt.api.response.AreaTaskResponseDto;
+import com.yego.backend.entity.yego_gantt.api.response.AreaTaskSubtaskResponseDto;
 import com.yego.backend.entity.yego_gantt.api.response.AreaTasksSummaryResponseDto;
 import com.yego.backend.entity.yego_gantt.api.response.AreaTasksSummaryResponseDto.SummaryKpis;
 import com.yego.backend.entity.yego_gantt.entities.AreaTask;
+import com.yego.backend.entity.yego_gantt.entities.AreaTaskSubtask;
 import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskPriority;
 import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskStatus;
 import com.yego.backend.entity.yego_principal.entities.User;
@@ -18,7 +21,6 @@ import com.yego.backend.service.yego_gantt.AreaTaskListParams;
 import com.yego.backend.service.yego_gantt.AreaTaskService;
 import com.yego.backend.service.yego_gantt.AreaTaskVisibilityService;
 import com.yego.backend.service.yego_gantt.GanttReadableAreasService;
-import com.yego.backend.service.yego_gantt.GanttTaskTagPrivacyService;
 import com.yego.backend.service.yego_gantt.GanttTaskScope;
 import com.yego.backend.service.yego_gantt.SprintService;
 import lombok.RequiredArgsConstructor;
@@ -27,10 +29,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -49,7 +54,6 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     private final SprintService sprintService;
     private final WorkosTaskSystemMessageRecorder systemMessageRecorder;
     private final GanttReadableAreasService ganttReadableAreasService;
-    private final GanttTaskTagPrivacyService ganttTaskTagPrivacyService;
     private final AreaTaskVisibilityService areaTaskVisibilityService;
 
     private static boolean isStatusOnlyUpdate(UpdateAreaTaskDto dto) {
@@ -197,6 +201,23 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         return tags.stream().map(String::trim).filter(s -> !s.isEmpty()).toList();
     }
 
+    /** Etiquetas que antes implicaban «privada»; no se persisten (privacidad = columna {@code private_task}). */
+    private static boolean isReservedPrivacyTagLabel(String tag) {
+        if (tag == null) {
+            return false;
+        }
+        String t = tag.trim().toLowerCase(Locale.ROOT);
+        return "privada".equals(t) || "privado".equals(t) || "private".equals(t)
+                || t.startsWith("privada:") || t.startsWith("private:");
+    }
+
+    private static List<String> stripPrivacyTagLabels(List<String> tags) {
+        if (tags == null || tags.isEmpty()) {
+            return List.of();
+        }
+        return tags.stream().filter(tag -> !isReservedPrivacyTagLabel(tag)).toList();
+    }
+
     private static List<Long> detachedUserIds(AreaTask t) {
         List<Long> raw = t.getAssignedUserIds();
         if (raw == null || raw.isEmpty()) {
@@ -332,9 +353,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha fin no puede ser anterior al inicio");
         }
         List<String> tagList = safeTags(dto.getTags());
-        boolean priv = dto.getPrivateTask() != null
-                ? dto.getPrivateTask()
-                : ganttTaskTagPrivacyService.tagsIndicatePrivate(tagList);
+        boolean priv = Boolean.TRUE.equals(dto.getPrivateTask());
         Long effectiveAreaId = priv
                 ? (dto.getAreaId() != null ? dto.getAreaId() : user.getAreaId())
                 : dto.getAreaId();
@@ -343,7 +362,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
             areaTaskAccess.assertCanManage(scope, effectiveAreaId);
             sprintService.assertSprintOpenForNewTasks(dto.getSprintId());
         }
-        List<String> tagsStored = ganttTaskTagPrivacyService.stripPrivacyTagLabels(tagList);
+        List<String> tagsStored = stripPrivacyTagLabels(tagList);
         AreaTask task = AreaTask.builder()
                 .areaId(effectiveAreaId)
                 .workspaceId(dto.getWorkspaceId())
@@ -413,10 +432,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         }
         if (dto.getTags() != null) {
             List<String> raw = safeTags(dto.getTags());
-            if (dto.getPrivateTask() == null) {
-                task.setPrivateTask(ganttTaskTagPrivacyService.tagsIndicatePrivate(raw));
-            }
-            task.setTags(new ArrayList<>(ganttTaskTagPrivacyService.stripPrivacyTagLabels(raw)));
+            task.setTags(new ArrayList<>(stripPrivacyTagLabels(raw)));
         }
         if (dto.getPrivateTask() != null) {
             task.setPrivateTask(dto.getPrivateTask());
@@ -466,5 +482,99 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         workosTaskMessageRepository.deleteAllByTaskId(taskId);
         areaTaskSubtaskRepository.deleteByParentTaskId(taskId);
         areaTaskRepository.delete(task);
+    }
+
+    @Override
+    @Transactional
+    public AreaTaskSubtaskResponseDto convertTaskToSubtask(Long userId, Long taskId, ConvertTaskToSubtaskDto dto) {
+        User user = areaTaskAccess.requireUser(userId);
+        GanttTaskScope scope = areaTaskAccess.resolveScope(user);
+
+        // 1. Origen
+        AreaTask sourceTask = areaTaskAccess.requireReadableTask(user, scope, taskId);
+        areaTaskAccess.assertCanMutateTask(user, scope, sourceTask);
+
+        // Verificamos que la tarea origen no tenga subtareas
+        long subtaskCount = areaTaskSubtaskRepository.countByParentTaskId(taskId);
+        if (subtaskCount > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "No se puede convertir a subtarea porque esta tarea ya tiene subtareas hijas.");
+        }
+
+        // 2. Destino
+        Long targetParentId = dto.getTargetParentTaskId();
+        if (targetParentId == null || targetParentId.equals(taskId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tarea destino inválida");
+        }
+        AreaTask targetParentTask = areaTaskAccess.requireReadableTask(user, scope, targetParentId);
+        areaTaskAccess.assertCanMutateTask(user, scope, targetParentTask);
+
+        // Si la tarea origen tiene una fecha anterior al padre, esto podría romper reglas. Pero lo forzaremos
+        // al igual que se hace al crear subtareas, asumiendo que el UI no dejará hacerlo si hay errores graves, o dejamos que valide:
+        if (sourceTask.getEndDate() != null && sourceTask.getEndDate().isBefore(targetParentTask.getStartDate())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La fecha fin de la tarea es anterior al inicio de la tarea padre destino.");
+        }
+
+        // 3. Crear Subtarea
+        Integer nextOrder = areaTaskSubtaskRepository.findMaxSortOrderByParentTaskId(targetParentId);
+        int sortOrder = (nextOrder != null ? nextOrder : 0) + 1;
+
+        AreaTaskSubtask newSubtask = AreaTaskSubtask.builder()
+                .parentTaskId(targetParentId)
+                .title(sourceTask.getTitle())
+                .description(sourceTask.getDescription())
+                .weight(BigDecimal.ONE)
+                .sortOrder(sortOrder)
+                .done(sourceTask.getStatus() == AreaTaskStatus.DONE)
+                .assignedUserId(sourceTask.getAssignedUserId())
+                .dueDate(sourceTask.getEndDate())
+                .createdByUserId(sourceTask.getCreatedByUserId() != null ? sourceTask.getCreatedByUserId() : userId)
+                .areaId(null) // heredará del padre
+                .workspaceId(null) // heredará del padre
+                .build();
+
+        AreaTaskSubtask savedSubtask = areaTaskSubtaskRepository.save(newSubtask);
+
+        // 4. Migrar mensajes y limpiar referencias
+        workosMeetingMinuteItemRepository.clearConvertedTaskLinks(taskId);
+        workosTaskMessageRepository.reassignTaskThreadToSubtask(taskId, targetParentId, savedSubtask.getId());
+
+        // 5. Eliminar la tarea origen
+        areaTaskRepository.delete(sourceTask);
+
+        // 6. Sincronizar fechas y progreso del nuevo padre
+        // Como AreaTaskSubtaskService maneja la sincronización compleja, aquí replicamos el cálculo simple:
+        Integer computed = areaTaskSubtaskRepository.computeWeightedProgressPercent(targetParentId);
+        int pct = computed != null ? computed : 0;
+        areaTaskRepository.updateProgressPercentById(targetParentId, pct);
+        
+        java.util.Optional<java.time.LocalDate> maxDueOpt = areaTaskSubtaskRepository.findMaxDueDateByParentTaskId(targetParentId);
+        if (maxDueOpt.isPresent()) {
+            java.time.LocalDate maxDue = maxDueOpt.get();
+            java.time.LocalDate newEnd = maxDue.isBefore(targetParentTask.getStartDate()) ? targetParentTask.getStartDate() : maxDue;
+            if (!newEnd.equals(targetParentTask.getEndDate())) {
+                areaTaskRepository.updateEndDateById(targetParentId, newEnd);
+            }
+        }
+
+        // Formatear DTO de respuesta
+        Long aid = savedSubtask.getAreaId() != null ? savedSubtask.getAreaId() : targetParentTask.getAreaId();
+        Long ws = savedSubtask.getWorkspaceId() != null ? savedSubtask.getWorkspaceId() : targetParentTask.getWorkspaceId();
+
+        return AreaTaskSubtaskResponseDto.builder()
+                .id(savedSubtask.getId())
+                .parentTaskId(savedSubtask.getParentTaskId())
+                .title(savedSubtask.getTitle())
+                .description(savedSubtask.getDescription())
+                .sortOrder(savedSubtask.getSortOrder())
+                .done(savedSubtask.getDone())
+                .weight(savedSubtask.getWeight())
+                .assignedUserId(savedSubtask.getAssignedUserId())
+                .dueDate(savedSubtask.getDueDate())
+                .createdByUserId(savedSubtask.getCreatedByUserId())
+                .createdAt(savedSubtask.getCreatedAt())
+                .updatedAt(savedSubtask.getUpdatedAt())
+                .areaId(aid)
+                .workspaceId(ws)
+                .build();
     }
 }

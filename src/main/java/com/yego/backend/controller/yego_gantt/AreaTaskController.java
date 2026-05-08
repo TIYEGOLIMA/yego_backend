@@ -1,8 +1,10 @@
 package com.yego.backend.controller.yego_gantt;
 
 import com.yego.backend.entity.yego_gantt.api.request.CreateAreaTaskDto;
+import com.yego.backend.entity.yego_gantt.api.request.ConvertTaskToSubtaskDto;
 import com.yego.backend.entity.yego_gantt.api.request.UpdateAreaTaskDto;
 import com.yego.backend.entity.yego_gantt.api.response.AreaTaskResponseDto;
+import com.yego.backend.entity.yego_gantt.api.response.AreaTaskSubtaskResponseDto;
 import com.yego.backend.entity.yego_gantt.api.response.AreaTasksSummaryResponseDto;
 import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskPriority;
 import com.yego.backend.service.yego_gantt.AreaTaskListParams;
@@ -70,5 +72,14 @@ public class AreaTaskController {
         Long userId = Long.parseLong(authentication.getName());
         areaTaskService.delete(userId, id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/convert-to-subtask")
+    public ResponseEntity<AreaTaskSubtaskResponseDto> convertToSubtask(
+            Authentication authentication,
+            @PathVariable Long id,
+            @Valid @RequestBody ConvertTaskToSubtaskDto dto) {
+        Long userId = Long.parseLong(authentication.getName());
+        return ResponseEntity.ok(areaTaskService.convertTaskToSubtask(userId, id, dto));
     }
 }

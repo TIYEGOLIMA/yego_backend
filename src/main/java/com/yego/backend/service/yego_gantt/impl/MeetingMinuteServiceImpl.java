@@ -74,6 +74,18 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
         }
     }
 
+    /** Inicio/fin del punto de acta: si ambos vienen, fin no antes que inicio. */
+    private static void assertActaItemDeadlineNotBeforeStart(LocalDate start, LocalDate deadline) {
+        if (start == null || deadline == null) {
+            return;
+        }
+        if (deadline.isBefore(start)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La fecha fin del ítem no puede ser anterior a la fecha de inicio");
+        }
+    }
+
     /** Acta completa (todos los ítems y KPIs): admin, quien la creó o el dueño. */
     private boolean hasFullActaVisibility(User user, WorkosMeetingMinute m) {
         if (ganttReadableAreasService.isPlatformAdmin(user)) {
@@ -489,6 +501,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             requireMeetingItemAreaActiveIfPresent(r.getAreaId());
             assertActaCalendarNotBeforeToday(r.getStartDate(), "La fecha de inicio del ítem");
             assertActaCalendarNotBeforeToday(r.getDeadline(), "La fecha fin del ítem");
+            assertActaItemDeadlineNotBeforeStart(r.getStartDate(), r.getDeadline());
             WorkosMeetingMinuteItem it = WorkosMeetingMinuteItem.builder()
                     .meetingMinute(m)
                     .itemOrder(effectiveOrder)
@@ -570,6 +583,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             assertActaCalendarNotBeforeToday(req.getDeadline(), "La fecha fin del ítem");
             it.setDeadline(req.getDeadline());
         }
+        assertActaItemDeadlineNotBeforeStart(it.getStartDate(), it.getDeadline());
         if (req.getPriority() != null) {
             it.setPriority(req.getPriority());
         }
@@ -619,7 +633,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
                 : (it.getTaskTitle() != null && !it.getTaskTitle().isBlank() ? it.getTaskTitle().trim() : "Tarea desde acta");
         String desc = req.getDescription();
         if (desc == null || desc.isBlank()) {
-            desc = Stream.of(it.getTaskDescription(), it.getSituation(), it.getDecision())
+            desc = Stream.of(it.getSituation(), it.getDecision(), it.getTaskDescription())
                     .filter(s -> s != null && !s.isBlank())
                     .collect(Collectors.joining("\n\n"));
         }

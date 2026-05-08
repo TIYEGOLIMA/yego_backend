@@ -34,4 +34,13 @@ public class CreateAreaTaskSubtaskDto {
     private Long assignedUserId;
 
     private LocalDate dueDate;
+
+    @Size(max = 4000)
+    private String description;
+
+    /** Opcional; por defecto se usa el equipo de la tarea padre. */
+    private Long areaId;
+
+    /** Opcional (espacio de trabajo / proyecto); por defecto el del padre. */
+    private Long workspaceId;
 }

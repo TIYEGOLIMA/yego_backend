@@ -27,12 +27,16 @@ final class AreaTaskSubtaskPolicies {
     /** {@code true} si el DTO solicita cambiar algo más que solo el flag {@code done}. */
     static boolean updateTouchesNonDoneFields(UpdateAreaTaskSubtaskDto dto) {
         return dto.getTitle() != null
+                || dto.getDescription() != null
                 || dto.getWeight() != null
                 || dto.getSortOrder() != null
                 || dto.getAssignedUserId() != null
                 || Boolean.TRUE.equals(dto.getUnassignUser())
                 || dto.getDueDate() != null
-                || Boolean.TRUE.equals(dto.getClearDueDate());
+                || Boolean.TRUE.equals(dto.getClearDueDate())
+                || dto.getAreaId() != null
+                || dto.getWorkspaceId() != null
+                || Boolean.TRUE.equals(dto.getClearWorkspace());
     }
 
     /** Quién puede enviar un PATCH solo con {@code done} sin ser gestor del padre. */

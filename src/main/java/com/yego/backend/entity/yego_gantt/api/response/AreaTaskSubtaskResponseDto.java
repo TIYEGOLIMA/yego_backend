@@ -17,6 +17,7 @@ public class AreaTaskSubtaskResponseDto {
     private Long id;
     private Long parentTaskId;
     private String title;
+    private String description;
     private Integer sortOrder;
     private Boolean done;
     private BigDecimal weight;
@@ -25,4 +26,7 @@ public class AreaTaskSubtaskResponseDto {
     private Long createdByUserId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    /** Efectivos (nullable en BD ⇒ se resolvió desde el padre al serializar). */
+    private Long areaId;
+    private Long workspaceId;
 }
