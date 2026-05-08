@@ -2,6 +2,7 @@ package com.yego.backend.controller.yego_gantt;
 
 import com.yego.backend.entity.yego_gantt.api.request.CreateAreaTaskSubtaskDto;
 import com.yego.backend.entity.yego_gantt.api.request.MoveAreaTaskSubtaskDto;
+import com.yego.backend.entity.yego_gantt.api.request.ReorderAreaTaskSubtasksDto;
 import com.yego.backend.entity.yego_gantt.api.request.UpdateAreaTaskSubtaskDto;
 import com.yego.backend.entity.yego_gantt.api.response.AreaTaskSubtaskResponseDto;
 import com.yego.backend.service.yego_gantt.AreaTaskSubtaskService;
@@ -21,17 +22,41 @@ public class AreaTaskSubtaskController {
 
     private final AreaTaskSubtaskService subtaskService;
 
+    private static long requesterId(Authentication authentication) {
+        return GanttControllerAuth.userId(authentication);
+    }
+
     @GetMapping
     public ResponseEntity<List<AreaTaskSubtaskResponseDto>> list(Authentication authentication,
                                                                   @PathVariable Long taskId) {
-        return ResponseEntity.ok(subtaskService.list(GanttControllerAuth.userId(authentication), taskId));
+        return ResponseEntity.ok(subtaskService.list(requesterId(authentication), taskId));
+    }
+
+    @PutMapping(value = "/order", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<List<AreaTaskSubtaskResponseDto>> reorder(
+            Authentication authentication,
+            @PathVariable Long taskId,
+            @Valid @RequestBody ReorderAreaTaskSubtasksDto dto) {
+        return ResponseEntity.ok(
+                subtaskService.reorder(
+                        requesterId(authentication),
+                        taskId,
+                        dto.getOrderedSubtaskIds()));
+    }
+
+    @GetMapping("/{subtaskId}")
+    public ResponseEntity<AreaTaskSubtaskResponseDto> get(Authentication authentication,
+                                                          @PathVariable Long taskId,
+                                                          @PathVariable Long subtaskId) {
+        return ResponseEntity.ok(
+                subtaskService.get(requesterId(authentication), taskId, subtaskId));
     }
 
     @PostMapping
     public ResponseEntity<AreaTaskSubtaskResponseDto> create(Authentication authentication,
                                                           @PathVariable Long taskId,
                                                           @Valid @RequestBody CreateAreaTaskSubtaskDto dto) {
-        return ResponseEntity.status(201).body(subtaskService.create(GanttControllerAuth.userId(authentication), taskId, dto));
+        return ResponseEntity.status(201).body(subtaskService.create(requesterId(authentication), taskId, dto));
     }
 
     @PutMapping("/{subtaskId}")
@@ -39,14 +64,14 @@ public class AreaTaskSubtaskController {
                                                             @PathVariable Long taskId,
                                                             @PathVariable Long subtaskId,
                                                             @Valid @RequestBody UpdateAreaTaskSubtaskDto dto) {
-        return ResponseEntity.ok(subtaskService.update(GanttControllerAuth.userId(authentication), taskId, subtaskId, dto));
+        return ResponseEntity.ok(subtaskService.update(requesterId(authentication), taskId, subtaskId, dto));
     }
 
     @DeleteMapping("/{subtaskId}")
     public ResponseEntity<Void> delete(Authentication authentication,
                                       @PathVariable Long taskId,
                                       @PathVariable Long subtaskId) {
-        subtaskService.delete(GanttControllerAuth.userId(authentication), taskId, subtaskId);
+        subtaskService.delete(requesterId(authentication), taskId, subtaskId);
         return ResponseEntity.noContent().build();
     }
 
@@ -58,7 +83,7 @@ public class AreaTaskSubtaskController {
             @Valid @RequestBody MoveAreaTaskSubtaskDto dto) {
         return ResponseEntity.ok(
                 subtaskService.moveToParent(
-                        GanttControllerAuth.userId(authentication),
+                        requesterId(authentication),
                         taskId,
                         subtaskId,
                         dto));

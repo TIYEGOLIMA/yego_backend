@@ -1,5 +1,7 @@
 package com.yego.backend.entity.yego_gantt.entities;
 
+import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskStatus;
+
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -34,6 +36,14 @@ public class AreaTaskSubtask {
     @Column(length = 4000)
     private String description;
 
+    /** Objetivos / resultado esperado de la subtarea (texto libre). */
+    @Column(length = 4000)
+    private String objectives;
+
+    /** Lista de checklist serializada como JSON (array de { id?, text, done }). */
+    @Column(name = "checklist_json", columnDefinition = "TEXT")
+    private String checklistJson;
+
     @Column(name = "sort_order", nullable = false)
     @Builder.Default
     private Integer sortOrder = 0;
@@ -41,6 +51,14 @@ public class AreaTaskSubtask {
     @Column(nullable = false)
     @Builder.Default
     private Boolean done = false;
+
+    /**
+     * Columna/agrupación Kanban por subtarea, independiente del estado del proyecto padre.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "kanban_status", nullable = false, length = 32)
+    @Builder.Default
+    private AreaTaskStatus kanbanStatus = AreaTaskStatus.PENDING;
 
     @Column(nullable = false, precision = 12, scale = 4)
     @Builder.Default
@@ -76,10 +94,28 @@ public class AreaTaskSubtask {
         if (weight == null) weight = BigDecimal.ONE;
         if (sortOrder == null) sortOrder = 0;
         if (done == null) done = false;
+        if (kanbanStatus == null) {
+            kanbanStatus = AreaTaskStatus.PENDING;
+        }
+        if (Boolean.TRUE.equals(done) && kanbanStatus != AreaTaskStatus.DONE) {
+            kanbanStatus = AreaTaskStatus.DONE;
+        }
     }
 
     @PreUpdate
     void preUpdate() {
         updatedAt = LocalDateTime.now();
+        if (weight == null) weight = BigDecimal.ONE;
+        if (sortOrder == null) sortOrder = 0;
+        if (done == null) done = false;
+        if (kanbanStatus == null) {
+            kanbanStatus = AreaTaskStatus.PENDING;
+        }
+        if (kanbanStatus == AreaTaskStatus.DONE) {
+            done = true;
+        }
+        if (Boolean.TRUE.equals(done) && kanbanStatus != AreaTaskStatus.DONE) {
+            kanbanStatus = AreaTaskStatus.DONE;
+        }
     }
 }

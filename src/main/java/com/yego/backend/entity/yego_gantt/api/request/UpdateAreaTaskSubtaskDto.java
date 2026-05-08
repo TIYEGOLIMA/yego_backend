@@ -1,5 +1,9 @@
 package com.yego.backend.entity.yego_gantt.api.request;
 
+import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskStatus;
+
+import com.yego.backend.entity.yego_gantt.api.AreaTaskSubtaskChecklistItemDto;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
@@ -8,6 +12,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -27,6 +32,9 @@ public class UpdateAreaTaskSubtaskDto {
 
     private Boolean done;
 
+    /** Columna/agrupación independiente del padre en tableros (PENDING | IN_PROGRESS | BLOCKED | DONE). */
+    private AreaTaskStatus status;
+
     private Long assignedUserId;
 
     private Boolean unassignUser;
@@ -41,4 +49,11 @@ public class UpdateAreaTaskSubtaskDto {
 
     /** Quitar proyecto explícito; la subtarea hereda del padre. */
     private Boolean clearWorkspace;
+
+    @Size(max = 4000)
+    private String objectives;
+
+    @Valid
+    @Size(max = 80)
+    private List<AreaTaskSubtaskChecklistItemDto> checklist;
 }

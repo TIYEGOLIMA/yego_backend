@@ -1,11 +1,13 @@
 package com.yego.backend.service.yego_gantt.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_gantt.api.request.CreateAreaTaskSubtaskDto;
 import com.yego.backend.entity.yego_gantt.api.request.MoveAreaTaskSubtaskDto;
 import com.yego.backend.entity.yego_gantt.api.request.UpdateAreaTaskSubtaskDto;
 import com.yego.backend.entity.yego_gantt.api.response.AreaTaskSubtaskResponseDto;
 import com.yego.backend.entity.yego_gantt.entities.AreaTask;
 import com.yego.backend.entity.yego_gantt.entities.AreaTaskSubtask;
+import com.yego.backend.entity.yego_gantt.entities.enums.AreaTaskStatus;
 import com.yego.backend.entity.yego_gantt.entities.Project;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.repository.yego_gantt.AreaTaskRepository;
@@ -25,8 +27,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -39,6 +42,9 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
     private final AreaTaskAccessHelper areaTaskAccessHelper;
     private final AreaTaskPrivateAccessService areaTaskPrivateAccessService;
     private final WorkosTaskMessageRepository workosTaskMessageRepository;
+    private final ObjectMapper objectMapper;
+    private final AreaTaskSubtaskChecklistCodec checklistCodec;
+    private final AreaTaskSubtaskParentFieldsReconciler parentFieldsReconciler;
 
     private record ParentContext(User user, GanttTaskScope scope, AreaTask parent) {}
 
@@ -117,71 +123,24 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
         }
     }
 
-    private static String normalizeSubtaskDescription(String raw) {
-        if (raw == null) {
-            return null;
-        }
-        String t = raw.trim();
-        return t.isEmpty() ? null : t;
-    }
-
-    /** Si alguna subtarea tiene due_date, la fin del padre pasa a ser max(inicio_padre, max(due_date)). Sin due dates no se altera la fin del padre. */
-    private void syncParentEndDateFromSubtaskDues(Long parentTaskId) {
-        Optional<LocalDate> maxDueOpt = subtaskRepo.findMaxDueDateByParentTaskId(parentTaskId);
-        if (maxDueOpt.isEmpty()) {
-            return;
-        }
-        AreaTask parent = taskRepo.findById(parentTaskId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarea padre no encontrada"));
-        LocalDate maxDue = maxDueOpt.get();
-        LocalDate newEnd = maxDue.isBefore(parent.getStartDate()) ? parent.getStartDate() : maxDue;
-        if (!newEnd.equals(parent.getEndDate())) {
-            int n = taskRepo.updateEndDateById(parentTaskId, newEnd);
-            if (n == 0) {
-                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarea padre no encontrada");
-            }
-        }
-    }
-
-    private void recalcAndPersistParentProgress(Long parentTaskId) {
-        Integer computed = subtaskRepo.computeWeightedProgressPercent(parentTaskId);
-        int pct = computed != null ? computed : 0;
-        int updated = taskRepo.updateProgressPercentById(parentTaskId, pct);
-        if (updated == 0) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Tarea padre no encontrada");
-        }
-    }
-
-    /**
-     * Tras cualquier cambio en subtareas: opcionalmente recalcula % del padre y siempre revisa fin por due dates.
-     */
-    private void maybeRecalcParentProgressThenSyncEnd(Long parentTaskId, boolean recalcProgressPercent) {
-        if (recalcProgressPercent) {
-            recalcAndPersistParentProgress(parentTaskId);
-        }
-        syncParentEndDateFromSubtaskDues(parentTaskId);
-    }
-
-    /** Crear/borrar/mover subtarea: progreso y fin del padre siempre coherentes con la lista actual. */
-    private void reconcileParentDerivedFieldsFully(Long parentTaskId) {
-        maybeRecalcParentProgressThenSyncEnd(parentTaskId, true);
-    }
-
     private int nextSubtaskSortOrder(Long parentTaskId) {
         return subtaskRepo.findMaxSortOrderByParentTaskId(parentTaskId) + 1;
     }
 
     private void assertAuthorizedForUpdate(ParentContext ctx, AreaTaskSubtask entity, UpdateAreaTaskSubtaskDto dto) {
-        boolean structural = AreaTaskSubtaskPolicies.updateTouchesNonDoneFields(dto);
+        boolean heavyStructural = AreaTaskSubtaskPolicies.updateTouchesHeavyStructuralFields(dto);
         boolean declaresDone = dto.getDone() != null;
-        if (structural) {
+        boolean declaresStatus = dto.getStatus() != null;
+        boolean declaresChecklist = dto.getChecklist() != null;
+        if (heavyStructural) {
             assertCanManageParent(ctx);
             return;
         }
-        if (declaresDone) {
+        if (declaresDone || declaresStatus || declaresChecklist) {
             Long uid = ctx.user().getId();
             if (!AreaTaskSubtaskPolicies.mayToggleDone(uid, ctx.parent(), entity)) {
-                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puede marcar esta subtarea");
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "No tiene permiso para actualizar esta subtarea (solo responsables pueden marcar estado o checklist ligero)");
             }
             return;
         }
@@ -195,7 +154,7 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
             entity.setTitle(dto.getTitle().trim());
         }
         if (dto.getDescription() != null) {
-            entity.setDescription(normalizeSubtaskDescription(dto.getDescription()));
+            entity.setDescription(AreaTaskSubtaskScalars.normalizeDescriptionOrNull(dto.getDescription()));
         }
         if (dto.getWeight() != null) {
             entity.setWeight(dto.getWeight());
@@ -203,8 +162,16 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
         if (dto.getSortOrder() != null) {
             entity.setSortOrder(dto.getSortOrder());
         }
-        if (dto.getDone() != null) {
+        if (dto.getStatus() != null) {
+            entity.setKanbanStatus(dto.getStatus());
+            entity.setDone(dto.getStatus() == AreaTaskStatus.DONE);
+        } else if (dto.getDone() != null) {
             entity.setDone(dto.getDone());
+            if (Boolean.TRUE.equals(dto.getDone())) {
+                entity.setKanbanStatus(AreaTaskStatus.DONE);
+            } else if (entity.getKanbanStatus() == AreaTaskStatus.DONE) {
+                entity.setKanbanStatus(AreaTaskStatus.PENDING);
+            }
         }
         if (Boolean.TRUE.equals(dto.getUnassignUser())) {
             entity.setAssignedUserId(null);
@@ -234,6 +201,12 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
                             ? null
                             : dto.getWorkspaceId());
         }
+        if (dto.getObjectives() != null) {
+            entity.setObjectives(AreaTaskSubtaskScalars.objectivesOrNull(dto.getObjectives()));
+        }
+        if (dto.getChecklist() != null) {
+            entity.setChecklistJson(checklistCodec.checklistJsonOrNull(dto.getChecklist()));
+        }
         boolean touchedAreaWorkspace =
                 dto.getAreaId() != null
                         || Boolean.TRUE.equals(dto.getClearWorkspace())
@@ -248,8 +221,16 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
     public List<AreaTaskSubtaskResponseDto> list(Long requesterId, Long parentTaskId) {
         ParentContext ctx = requireReadableParent(requesterId, parentTaskId);
         return subtaskRepo.findByParentTaskIdOrderBySortOrderAscIdAsc(parentTaskId).stream()
-                .map(s -> AreaTaskSubtaskDtoMapper.toDto(s, ctx.parent()))
+                .map(s -> AreaTaskSubtaskDtoMapper.toDto(s, ctx.parent(), objectMapper))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AreaTaskSubtaskResponseDto get(Long requesterId, Long parentTaskId, Long subtaskId) {
+        ParentContext ctx = requireReadableParent(requesterId, parentTaskId);
+        AreaTaskSubtask entity = requireSubtask(parentTaskId, subtaskId);
+        return AreaTaskSubtaskDtoMapper.toDto(entity, ctx.parent(), objectMapper);
     }
 
     @Override
@@ -274,23 +255,40 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
         int nextOrder = nextSubtaskSortOrder(parentTaskId);
         BigDecimal w = dto.getWeight() != null ? dto.getWeight() : BigDecimal.ONE;
 
+        AreaTaskStatus ks = dto.getStatus() != null ? dto.getStatus() : AreaTaskStatus.PENDING;
+        Boolean doneInDto = dto.getDone();
+        boolean doneFlag;
+        if (doneInDto != null) {
+            doneFlag = Boolean.TRUE.equals(doneInDto);
+            if (doneFlag) {
+                ks = AreaTaskStatus.DONE;
+            } else if (ks == AreaTaskStatus.DONE) {
+                ks = AreaTaskStatus.PENDING;
+            }
+        } else {
+            doneFlag = ks == AreaTaskStatus.DONE;
+        }
+
         AreaTaskSubtask entity = AreaTaskSubtask.builder()
                 .parentTaskId(parentTaskId)
                 .title(dto.getTitle().trim())
                 .weight(w)
                 .sortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : nextOrder)
-                .done(Boolean.TRUE.equals(dto.getDone()))
+                .done(doneFlag)
+                .kanbanStatus(ks)
                 .assignedUserId(effectiveAssignee)
                 .dueDate(dto.getDueDate())
-                .description(normalizeSubtaskDescription(dto.getDescription()))
+                .description(AreaTaskSubtaskScalars.normalizeDescriptionOrNull(dto.getDescription()))
+                .objectives(AreaTaskSubtaskScalars.objectivesOrNull(dto.getObjectives()))
+                .checklistJson(checklistCodec.checklistJsonOrNull(dto.getChecklist()))
                 .createdByUserId(requesterId)
                 .areaId(areaDb)
                 .workspaceId(wsDb)
                 .build();
 
         AreaTaskSubtask saved = subtaskRepo.save(entity);
-        reconcileParentDerivedFieldsFully(parentTaskId);
-        return AreaTaskSubtaskDtoMapper.toDto(saved, parent);
+        parentFieldsReconciler.reconcileFully(parentTaskId);
+        return AreaTaskSubtaskDtoMapper.toDto(saved, parent, objectMapper);
     }
 
     @Override
@@ -302,9 +300,10 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
         applyUpdateDto(dto, entity, ctx);
 
         AreaTaskSubtask saved = subtaskRepo.save(entity);
-        boolean progressShaped = dto.getDone() != null || dto.getWeight() != null;
-        maybeRecalcParentProgressThenSyncEnd(parentTaskId, progressShaped);
-        return AreaTaskSubtaskDtoMapper.toDto(saved, ctx.parent());
+        boolean progressShaped =
+                dto.getDone() != null || dto.getWeight() != null || dto.getStatus() != null;
+        parentFieldsReconciler.reconcileAfterSubtaskPatch(parentTaskId, progressShaped);
+        return AreaTaskSubtaskDtoMapper.toDto(saved, ctx.parent(), objectMapper);
     }
 
     @Override
@@ -315,7 +314,7 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
         if (removed == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Subtarea no encontrada");
         }
-        reconcileParentDerivedFieldsFully(parentTaskId);
+        parentFieldsReconciler.reconcileFully(parentTaskId);
     }
 
     @Override
@@ -331,7 +330,7 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
 
         if (fromParentTaskId.equals(toParentTaskId)) {
             AreaTaskSubtask entity = requireSubtask(fromParentTaskId, subtaskId);
-            return AreaTaskSubtaskDtoMapper.toDto(entity, fromCtx.parent());
+            return AreaTaskSubtaskDtoMapper.toDto(entity, fromCtx.parent(), objectMapper);
         }
 
         AreaTaskSubtask entity = requireSubtask(fromParentTaskId, subtaskId);
@@ -348,14 +347,36 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
         workosTaskMessageRepository.reassignSubtaskThreadToParent(
                 fromParentTaskId, subtaskId, toParentTaskId);
 
-        reconcileParentDerivedFieldsFully(fromParentTaskId);
-        reconcileParentDerivedFieldsFully(toParentTaskId);
-        return AreaTaskSubtaskDtoMapper.toDto(saved, newParent);
+        parentFieldsReconciler.reconcileFully(fromParentTaskId);
+        parentFieldsReconciler.reconcileFully(toParentTaskId);
+        return AreaTaskSubtaskDtoMapper.toDto(saved, newParent, objectMapper);
+    }
+
+    @Override
+    @Transactional
+    public List<AreaTaskSubtaskResponseDto> reorder(
+            Long requesterId, Long parentTaskId, List<Long> orderedSubtaskIds) {
+        ParentContext ctx = requireReadableAndManageableParent(requesterId, parentTaskId);
+        AreaTask parent = ctx.parent();
+        List<AreaTaskSubtask> existing =
+                subtaskRepo.findByParentTaskIdOrderBySortOrderAscIdAsc(parentTaskId);
+        AreaTaskSubtaskReorderValidator.assertValidReorderPayload(orderedSubtaskIds, existing);
+        Map<Long, AreaTaskSubtask> byId =
+                existing.stream().collect(Collectors.toMap(AreaTaskSubtask::getId, s -> s));
+        int i = 0;
+        for (Long sid : orderedSubtaskIds) {
+            Objects.requireNonNull(byId.get(sid)).setSortOrder(i++);
+        }
+        subtaskRepo.saveAll(existing);
+        parentFieldsReconciler.reconcileFully(parentTaskId);
+        return subtaskRepo.findByParentTaskIdOrderBySortOrderAscIdAsc(parentTaskId).stream()
+                .map(s -> AreaTaskSubtaskDtoMapper.toDto(s, parent, objectMapper))
+                .toList();
     }
 
     @Override
     @Transactional
     public void reconcileParentDerivedFields(Long parentTaskId) {
-        reconcileParentDerivedFieldsFully(parentTaskId);
+        parentFieldsReconciler.reconcileFully(parentTaskId);
     }
 }

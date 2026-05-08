@@ -1,5 +1,6 @@
 package com.yego.backend.service.yego_gantt.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_gantt.api.request.ConvertTaskToSubtaskDto;
 import com.yego.backend.entity.yego_gantt.api.request.CreateAreaTaskDto;
 import com.yego.backend.entity.yego_gantt.api.request.UpdateAreaTaskDto;
@@ -57,6 +58,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     private final GanttReadableAreasService ganttReadableAreasService;
     private final AreaTaskVisibilityService areaTaskVisibilityService;
     private final AreaTaskSubtaskService areaTaskSubtaskService;
+    private final ObjectMapper objectMapper;
 
     private static boolean isStatusOnlyUpdate(UpdateAreaTaskDto dto) {
         if (dto == null || dto.getStatus() == null) {
@@ -512,13 +514,16 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         Integer nextOrder = areaTaskSubtaskRepository.findMaxSortOrderByParentTaskId(targetParentId);
         int sortOrder = (nextOrder != null ? nextOrder : 0) + 1;
 
+        AreaTaskStatus ks = sourceTask.getStatus() != null ? sourceTask.getStatus() : AreaTaskStatus.PENDING;
+
         AreaTaskSubtask newSubtask = AreaTaskSubtask.builder()
                 .parentTaskId(targetParentId)
                 .title(sourceTask.getTitle())
                 .description(sourceTask.getDescription())
                 .weight(BigDecimal.ONE)
                 .sortOrder(sortOrder)
-                .done(sourceTask.getStatus() == AreaTaskStatus.DONE)
+                .done(ks == AreaTaskStatus.DONE)
+                .kanbanStatus(ks)
                 .assignedUserId(sourceTask.getAssignedUserId())
                 .dueDate(sourceTask.getEndDate())
                 .createdByUserId(sourceTask.getCreatedByUserId() != null ? sourceTask.getCreatedByUserId() : userId)
@@ -538,6 +543,6 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         // 6. Sincronizar fechas y progreso del nuevo padre (misma lógica que create/delete subtarea)
         areaTaskSubtaskService.reconcileParentDerivedFields(targetParentId);
 
-        return AreaTaskSubtaskDtoMapper.toDto(savedSubtask, targetParentTask);
+        return AreaTaskSubtaskDtoMapper.toDto(savedSubtask, targetParentTask, objectMapper);
     }
 }

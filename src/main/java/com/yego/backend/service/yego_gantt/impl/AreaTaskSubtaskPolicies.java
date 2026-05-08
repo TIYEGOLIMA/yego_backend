@@ -24,10 +24,14 @@ final class AreaTaskSubtaskPolicies {
         return parent.getAssignedUserId();
     }
 
-    /** {@code true} si el DTO solicita cambiar algo más que solo el flag {@code done}. */
-    static boolean updateTouchesNonDoneFields(UpdateAreaTaskSubtaskDto dto) {
+    /**
+     * Campos «pesados» que requieren gestión del proyecto padre. La checklist cuenta como actualización ligera:
+     * quien puede marcar la subtarea como hecha (responsable, creadores, líder principal) también puede cambiar checklist.
+     */
+    static boolean updateTouchesHeavyStructuralFields(UpdateAreaTaskSubtaskDto dto) {
         return dto.getTitle() != null
                 || dto.getDescription() != null
+                || dto.getObjectives() != null
                 || dto.getWeight() != null
                 || dto.getSortOrder() != null
                 || dto.getAssignedUserId() != null
