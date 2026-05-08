@@ -23,24 +23,24 @@ public class WorkspaceController {
     @PostMapping
     public ResponseEntity<WorkspaceResponseDto> create(Authentication authentication,
                                                        @Valid @RequestBody CreateWorkspaceDto dto) {
-        return ResponseEntity.status(201).body(workspaceService.create(Long.parseLong(authentication.getName()), dto));
+        return ResponseEntity.status(201).body(workspaceService.create(GanttControllerAuth.userId(authentication), dto));
     }
 
     @GetMapping
     public ResponseEntity<List<WorkspaceResponseDto>> findAllActive(Authentication authentication) {
-        return ResponseEntity.ok(workspaceService.findAllActiveForUser(Long.parseLong(authentication.getName())));
+        return ResponseEntity.ok(workspaceService.findAllActiveForUser(GanttControllerAuth.userId(authentication)));
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<WorkspaceResponseDto> update(Authentication authentication,
                                                       @PathVariable Long id,
                                                       @Valid @RequestBody UpdateWorkspaceDto dto) {
-        return ResponseEntity.ok(workspaceService.update(Long.parseLong(authentication.getName()), id, dto));
+        return ResponseEntity.ok(workspaceService.update(GanttControllerAuth.userId(authentication), id, dto));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(Authentication authentication, @PathVariable Long id) {
-        workspaceService.delete(Long.parseLong(authentication.getName()), id);
+        workspaceService.delete(GanttControllerAuth.userId(authentication), id);
         return ResponseEntity.noContent().build();
     }
 }

@@ -120,38 +120,6 @@
             <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
 
-        
-        <!-- OpenCSV para manejo de CSV -->
-        <dependency>
-            <groupId>com.opencsv</groupId>
-            <artifactId>opencsv</artifactId>
-            <version>5.8</version>
-        </dependency>
-        
-        <!-- Apache Commons CSV -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-csv</artifactId>
-            <version>1.10.0</version>
-        </dependency>
-        
-        <!-- Para generación de imágenes -->
-        <dependency>
-            <groupId>org.apache.xmlgraphics</groupId>
-            <artifactId>batik-svg-dom</artifactId>
-            <version>1.17</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.xmlgraphics</groupId>
-            <artifactId>batik-transcoder</artifactId>
-            <version>1.17</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.xmlgraphics</groupId>
-            <artifactId>batik-codec</artifactId>
-            <version>1.17</version>
-        </dependency>
-
         <!-- Development Tools -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

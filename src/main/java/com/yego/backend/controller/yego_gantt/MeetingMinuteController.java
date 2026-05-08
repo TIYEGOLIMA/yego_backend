@@ -37,33 +37,33 @@ public class MeetingMinuteController {
             @RequestParam(required = false) Long projectId,
             @RequestParam(required = false) Long areaId,
             @PageableDefault(size = 20, sort = "meetingDate", direction = Sort.Direction.DESC) Pageable pageable) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(meetingMinuteService.list(
                 uid, status, meetingType, dateFrom, dateTo, ownerUserId, projectId, areaId, pageable));
     }
 
     @GetMapping("/dashboard-kpis")
     public ResponseEntity<MeetingMinutesDashboardKpisResponse> dashboardKpis(Authentication authentication) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(meetingMinuteService.dashboardKpis(uid));
     }
 
     @GetMapping("/unconverted-items")
     public ResponseEntity<List<MeetingMinuteItemResponse>> unconverted(Authentication authentication) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(meetingMinuteService.listUnconverted(uid));
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<MeetingMinuteResponse> getById(Authentication authentication, @PathVariable Long id) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(meetingMinuteService.getById(uid, id));
     }
 
     @PostMapping
     public ResponseEntity<MeetingMinuteResponse> create(Authentication authentication,
                                                         @Valid @RequestBody CreateMeetingMinuteRequest req) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         return ResponseEntity.status(201).body(meetingMinuteService.create(uid, req));
     }
 
@@ -71,7 +71,7 @@ public class MeetingMinuteController {
     public ResponseEntity<MeetingMinuteResponse> update(Authentication authentication,
                                                       @PathVariable Long id,
                                                       @Valid @RequestBody UpdateMeetingMinuteRequest req) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(meetingMinuteService.update(uid, id, req));
     }
 
@@ -79,14 +79,14 @@ public class MeetingMinuteController {
     public ResponseEntity<Void> patchStatus(Authentication authentication,
                                             @PathVariable Long id,
                                             @Valid @RequestBody PatchMeetingMinuteStatusRequest req) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         meetingMinuteService.patchStatus(uid, id, req);
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> softDelete(Authentication authentication, @PathVariable Long id) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         meetingMinuteService.softDelete(uid, id);
         return ResponseEntity.noContent().build();
     }
@@ -95,7 +95,7 @@ public class MeetingMinuteController {
     public ResponseEntity<MeetingMinuteResponse> addItems(Authentication authentication,
                                                           @PathVariable Long id,
                                                           @Valid @RequestBody List<CreateMeetingMinuteItemRequest> items) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         return ResponseEntity.status(201).body(meetingMinuteService.addItems(uid, id, items));
     }
 
@@ -104,7 +104,7 @@ public class MeetingMinuteController {
                                                             @PathVariable Long id,
                                                             @PathVariable Long itemId,
                                                             @Valid @RequestBody UpdateMeetingMinuteItemRequest req) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(meetingMinuteService.updateItem(uid, id, itemId, req));
     }
 
@@ -112,7 +112,7 @@ public class MeetingMinuteController {
     public ResponseEntity<Void> deleteItem(Authentication authentication,
                                            @PathVariable Long id,
                                            @PathVariable Long itemId) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         meetingMinuteService.deleteItem(uid, id, itemId);
         return ResponseEntity.noContent().build();
     }
@@ -122,7 +122,7 @@ public class MeetingMinuteController {
                                                                           @PathVariable Long id,
                                                                           @PathVariable Long itemId,
                                                                           @Valid @RequestBody ConvertMeetingItemToTaskRequest req) {
-        long uid = Long.parseLong(authentication.getName());
+        long uid = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(meetingMinuteService.convertItemToTask(uid, id, itemId, req));
     }
 }

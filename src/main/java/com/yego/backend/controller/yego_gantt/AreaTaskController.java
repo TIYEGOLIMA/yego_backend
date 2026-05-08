@@ -44,7 +44,7 @@ public class AreaTaskController {
                                                                @RequestParam(required = false) AreaTaskPriority priority,
                                                                @RequestParam(required = false) Boolean onlyWithoutWorkspace,
                                                                @RequestParam(required = false) Boolean mySpace) {
-        Long userId = Long.parseLong(authentication.getName());
+        long userId = GanttControllerAuth.userId(authentication);
         boolean mySpaceFlag = Boolean.TRUE.equals(mySpace);
         boolean onlyNoWs = !mySpaceFlag && Boolean.TRUE.equals(onlyWithoutWorkspace);
         return ResponseEntity.ok(areaTaskService.summary(
@@ -55,7 +55,7 @@ public class AreaTaskController {
     @PostMapping
     public ResponseEntity<AreaTaskResponseDto> create(Authentication authentication,
                                                       @Valid @RequestBody CreateAreaTaskDto dto) {
-        Long userId = Long.parseLong(authentication.getName());
+        long userId = GanttControllerAuth.userId(authentication);
         return ResponseEntity.status(201).body(areaTaskService.create(userId, dto));
     }
 
@@ -63,13 +63,13 @@ public class AreaTaskController {
     public ResponseEntity<AreaTaskResponseDto> update(Authentication authentication,
                                                       @PathVariable Long id,
                                                       @Valid @RequestBody UpdateAreaTaskDto dto) {
-        Long userId = Long.parseLong(authentication.getName());
+        long userId = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(areaTaskService.update(userId, id, dto));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(Authentication authentication, @PathVariable Long id) {
-        Long userId = Long.parseLong(authentication.getName());
+        long userId = GanttControllerAuth.userId(authentication);
         areaTaskService.delete(userId, id);
         return ResponseEntity.noContent().build();
     }
@@ -79,7 +79,7 @@ public class AreaTaskController {
             Authentication authentication,
             @PathVariable Long id,
             @Valid @RequestBody ConvertTaskToSubtaskDto dto) {
-        Long userId = Long.parseLong(authentication.getName());
+        long userId = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(areaTaskService.convertTaskToSubtask(userId, id, dto));
     }
 }

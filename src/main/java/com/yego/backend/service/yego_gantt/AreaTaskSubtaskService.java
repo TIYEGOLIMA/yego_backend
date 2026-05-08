@@ -20,4 +20,7 @@ public interface AreaTaskSubtaskService {
     /** Mueve la subtarea a otra tarea padre; recalcula progreso y fechas en ambos padres. */
     AreaTaskSubtaskResponseDto moveToParent(
             Long requesterId, Long fromParentTaskId, Long subtaskId, MoveAreaTaskSubtaskDto dto);
+
+    /** Tras crear/borrar/mover subtareas o convertir una tarea en subtarea: alinea % y fin del padre con la lista actual. */
+    void reconcileParentDerivedFields(Long parentTaskId);
 }

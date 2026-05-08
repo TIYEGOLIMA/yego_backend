@@ -19,6 +19,7 @@ import com.yego.backend.repository.yego_gantt.WorkosTaskMessageRepository;
 import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.service.yego_gantt.AreaTaskListParams;
 import com.yego.backend.service.yego_gantt.AreaTaskService;
+import com.yego.backend.service.yego_gantt.AreaTaskSubtaskService;
 import com.yego.backend.service.yego_gantt.AreaTaskVisibilityService;
 import com.yego.backend.service.yego_gantt.GanttReadableAreasService;
 import com.yego.backend.service.yego_gantt.GanttTaskScope;
@@ -55,6 +56,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
     private final WorkosTaskSystemMessageRecorder systemMessageRecorder;
     private final GanttReadableAreasService ganttReadableAreasService;
     private final AreaTaskVisibilityService areaTaskVisibilityService;
+    private final AreaTaskSubtaskService areaTaskSubtaskService;
 
     private static boolean isStatusOnlyUpdate(UpdateAreaTaskDto dto) {
         if (dto == null || dto.getStatus() == null) {
@@ -171,14 +173,6 @@ public class AreaTaskServiceImpl implements AreaTaskService {
             }
         }
         return out;
-    }
-
-    private void requireAreaActiva(Long areaId) {
-        if (areaId == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debe indicar un área");
-        }
-        areaRepository.findByIdAndActivoTrue(areaId).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.BAD_REQUEST, "El área no existe o está inactiva"));
     }
 
     private Map<Long, String> areaNamesForIds(Set<Long> ids) {
@@ -357,7 +351,7 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         Long effectiveAreaId = priv
                 ? (dto.getAreaId() != null ? dto.getAreaId() : user.getAreaId())
                 : dto.getAreaId();
-        requireAreaActiva(effectiveAreaId);
+        areaTaskAccess.requireAreaActiva(effectiveAreaId);
         if (!priv) {
             areaTaskAccess.assertCanManage(scope, effectiveAreaId);
             sprintService.assertSprintOpenForNewTasks(dto.getSprintId());
@@ -446,17 +440,17 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         if (dto.getAreaId() != null && !participantStatusOnly) {
             Long nid = dto.getAreaId();
             if (!Objects.equals(task.getAreaId(), nid)) {
-                requireAreaActiva(nid);
+                areaTaskAccess.requireAreaActiva(nid);
                 task.setAreaId(nid);
             }
         } else if (dto.getAreaId() == null
                 && task.isPrivateTask()
                 && Objects.equals(user.getId(), task.getCreatedByUserId())
                 && user.getAreaId() != null) {
-            requireAreaActiva(user.getAreaId());
+            areaTaskAccess.requireAreaActiva(user.getAreaId());
             task.setAreaId(user.getAreaId());
         }
-        requireAreaActiva(task.getAreaId());
+        areaTaskAccess.requireAreaActiva(task.getAreaId());
         if (!participantStatusOnly && !task.isPrivateTask()) {
             areaTaskAccess.assertCanManage(scope, task.getAreaId());
         }
@@ -541,40 +535,9 @@ public class AreaTaskServiceImpl implements AreaTaskService {
         // 5. Eliminar la tarea origen
         areaTaskRepository.delete(sourceTask);
 
-        // 6. Sincronizar fechas y progreso del nuevo padre
-        // Como AreaTaskSubtaskService maneja la sincronización compleja, aquí replicamos el cálculo simple:
-        Integer computed = areaTaskSubtaskRepository.computeWeightedProgressPercent(targetParentId);
-        int pct = computed != null ? computed : 0;
-        areaTaskRepository.updateProgressPercentById(targetParentId, pct);
-        
-        java.util.Optional<java.time.LocalDate> maxDueOpt = areaTaskSubtaskRepository.findMaxDueDateByParentTaskId(targetParentId);
-        if (maxDueOpt.isPresent()) {
-            java.time.LocalDate maxDue = maxDueOpt.get();
-            java.time.LocalDate newEnd = maxDue.isBefore(targetParentTask.getStartDate()) ? targetParentTask.getStartDate() : maxDue;
-            if (!newEnd.equals(targetParentTask.getEndDate())) {
-                areaTaskRepository.updateEndDateById(targetParentId, newEnd);
-            }
-        }
+        // 6. Sincronizar fechas y progreso del nuevo padre (misma lógica que create/delete subtarea)
+        areaTaskSubtaskService.reconcileParentDerivedFields(targetParentId);
 
-        // Formatear DTO de respuesta
-        Long aid = savedSubtask.getAreaId() != null ? savedSubtask.getAreaId() : targetParentTask.getAreaId();
-        Long ws = savedSubtask.getWorkspaceId() != null ? savedSubtask.getWorkspaceId() : targetParentTask.getWorkspaceId();
-
-        return AreaTaskSubtaskResponseDto.builder()
-                .id(savedSubtask.getId())
-                .parentTaskId(savedSubtask.getParentTaskId())
-                .title(savedSubtask.getTitle())
-                .description(savedSubtask.getDescription())
-                .sortOrder(savedSubtask.getSortOrder())
-                .done(savedSubtask.getDone())
-                .weight(savedSubtask.getWeight())
-                .assignedUserId(savedSubtask.getAssignedUserId())
-                .dueDate(savedSubtask.getDueDate())
-                .createdByUserId(savedSubtask.getCreatedByUserId())
-                .createdAt(savedSubtask.getCreatedAt())
-                .updatedAt(savedSubtask.getUpdatedAt())
-                .areaId(aid)
-                .workspaceId(ws)
-                .build();
+        return AreaTaskSubtaskDtoMapper.toDto(savedSubtask, targetParentTask);
     }
 }

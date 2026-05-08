@@ -24,14 +24,14 @@ public class AreaTaskSubtaskController {
     @GetMapping
     public ResponseEntity<List<AreaTaskSubtaskResponseDto>> list(Authentication authentication,
                                                                   @PathVariable Long taskId) {
-        return ResponseEntity.ok(subtaskService.list(Long.parseLong(authentication.getName()), taskId));
+        return ResponseEntity.ok(subtaskService.list(GanttControllerAuth.userId(authentication), taskId));
     }
 
     @PostMapping
     public ResponseEntity<AreaTaskSubtaskResponseDto> create(Authentication authentication,
                                                           @PathVariable Long taskId,
                                                           @Valid @RequestBody CreateAreaTaskSubtaskDto dto) {
-        return ResponseEntity.status(201).body(subtaskService.create(Long.parseLong(authentication.getName()), taskId, dto));
+        return ResponseEntity.status(201).body(subtaskService.create(GanttControllerAuth.userId(authentication), taskId, dto));
     }
 
     @PutMapping("/{subtaskId}")
@@ -39,14 +39,14 @@ public class AreaTaskSubtaskController {
                                                             @PathVariable Long taskId,
                                                             @PathVariable Long subtaskId,
                                                             @Valid @RequestBody UpdateAreaTaskSubtaskDto dto) {
-        return ResponseEntity.ok(subtaskService.update(Long.parseLong(authentication.getName()), taskId, subtaskId, dto));
+        return ResponseEntity.ok(subtaskService.update(GanttControllerAuth.userId(authentication), taskId, subtaskId, dto));
     }
 
     @DeleteMapping("/{subtaskId}")
     public ResponseEntity<Void> delete(Authentication authentication,
                                       @PathVariable Long taskId,
                                       @PathVariable Long subtaskId) {
-        subtaskService.delete(Long.parseLong(authentication.getName()), taskId, subtaskId);
+        subtaskService.delete(GanttControllerAuth.userId(authentication), taskId, subtaskId);
         return ResponseEntity.noContent().build();
     }
 
@@ -58,7 +58,7 @@ public class AreaTaskSubtaskController {
             @Valid @RequestBody MoveAreaTaskSubtaskDto dto) {
         return ResponseEntity.ok(
                 subtaskService.moveToParent(
-                        Long.parseLong(authentication.getName()),
+                        GanttControllerAuth.userId(authentication),
                         taskId,
                         subtaskId,
                         dto));

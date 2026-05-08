@@ -14,6 +14,7 @@ import com.yego.backend.repository.yego_gantt.WorkosMeetingMinuteItemRepository;
 import com.yego.backend.repository.yego_gantt.WorkosMeetingMinuteRepository;
 import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
+import com.yego.backend.service.yego_gantt.impl.AreaTaskAccessHelper;
 import com.yego.backend.service.yego_gantt.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -45,22 +46,10 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     private final SprintService sprintService;
     private final GanttTaskScopeService ganttTaskScopeService;
     private final GanttReadableAreasService ganttReadableAreasService;
-
-    private User requireUser(long userId) {
-        return userRepository.findByIdWithRole(userId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
-    }
+    private final AreaTaskAccessHelper areaTaskAccessHelper;
 
     private GanttTaskScope scope(User user) {
         return ganttTaskScopeService.resolve(user);
-    }
-
-    private void requireMeetingItemAreaActiveIfPresent(Long areaId) {
-        if (areaId == null) {
-            return;
-        }
-        areaRepository.findByIdAndActivoTrue(areaId).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.BAD_REQUEST, "El área no existe o está inactiva"));
     }
 
     /** Fechas nuevas/edición de actas: no permitidas antes del día civil actual (servidor). */
@@ -381,7 +370,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             Long projectId,
             Long areaId,
             Pageable pageable) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         boolean admin = ganttReadableAreasService.isPlatformAdmin(user);
         Specification<WorkosMeetingMinute> spec = Specification.allOf(
@@ -400,7 +389,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     @Override
     @Transactional(readOnly = true)
     public MeetingMinuteResponse getById(long userId, long minuteId) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         WorkosMeetingMinute m = requireMinute(minuteId, true);
         assertMinuteReadable(user, sc, m);
@@ -410,7 +399,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     @Override
     @Transactional
     public MeetingMinuteResponse create(long userId, CreateMeetingMinuteRequest req) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         assertActaCalendarNotBeforeToday(req.getMeetingDate(), "La fecha del acta");
         assertActaCalendarNotBeforeToday(req.getNextMeetingDate(), "La fecha de próxima reunión");
@@ -434,7 +423,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     @Override
     @Transactional
     public MeetingMinuteResponse update(long userId, long minuteId, UpdateMeetingMinuteRequest req) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         WorkosMeetingMinute m = requireMinute(minuteId, false);
         assertMinuteWritable(user, m);
@@ -468,7 +457,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     @Override
     @Transactional
     public void patchStatus(long userId, long minuteId, PatchMeetingMinuteStatusRequest req) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         WorkosMeetingMinute m = requireMinute(minuteId, false);
         assertMinuteWritable(user, m);
@@ -479,7 +468,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     @Override
     @Transactional
     public void softDelete(long userId, long minuteId) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         WorkosMeetingMinute m = requireMinute(minuteId, false);
         assertMinuteWritable(user, m);
@@ -490,7 +479,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     @Override
     @Transactional
     public MeetingMinuteResponse addItems(long userId, long minuteId, List<CreateMeetingMinuteItemRequest> reqs) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         WorkosMeetingMinute m = requireMinute(minuteId, false);
         assertMinuteWritable(user, m);
@@ -498,7 +487,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
         for (CreateMeetingMinuteItemRequest r : reqs) {
             order++;
             int effectiveOrder = r.getItemOrder() != null ? r.getItemOrder() : order;
-            requireMeetingItemAreaActiveIfPresent(r.getAreaId());
+            areaTaskAccessHelper.requireAreaActivaIfPresent(r.getAreaId());
             assertActaCalendarNotBeforeToday(r.getStartDate(), "La fecha de inicio del ítem");
             assertActaCalendarNotBeforeToday(r.getDeadline(), "La fecha fin del ítem");
             assertActaItemDeadlineNotBeforeStart(r.getStartDate(), r.getDeadline());
@@ -531,7 +520,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     @Override
     @Transactional
     public MeetingMinuteResponse updateItem(long userId, long minuteId, long itemId, UpdateMeetingMinuteItemRequest req) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         WorkosMeetingMinute m = requireMinute(minuteId, false);
         assertMinuteReadable(user, sc, m);
@@ -542,7 +531,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Ítem ya convertido; no editable aquí");
         }
         if (req.getAreaId() != null) {
-            requireMeetingItemAreaActiveIfPresent(req.getAreaId());
+            areaTaskAccessHelper.requireAreaActivaIfPresent(req.getAreaId());
             it.setAreaId(req.getAreaId());
         }
         if (req.getAreaNameSnapshot() != null) {
@@ -599,7 +588,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     @Override
     @Transactional
     public void deleteItem(long userId, long minuteId, long itemId) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         WorkosMeetingMinute m = requireMinute(minuteId, false);
         assertMinuteWritable(user, m);
@@ -618,7 +607,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
             long minuteId,
             long itemId,
             ConvertMeetingItemToTaskRequest req) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         WorkosMeetingMinute m = requireMinute(minuteId, false);
         assertMinuteReadable(user, sc, m);
@@ -703,7 +692,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     @Override
     @Transactional(readOnly = true)
     public List<MeetingMinuteItemResponse> listUnconverted(long userId) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         List<WorkosMeetingMinuteItem> raw = itemRepository.findAllUnconverted(MeetingMinuteStatus.CANCELADA);
         List<WorkosMeetingMinuteItem> filtered = raw.stream()
@@ -719,7 +708,7 @@ public class MeetingMinuteServiceImpl implements MeetingMinuteService {
     @Override
     @Transactional(readOnly = true)
     public MeetingMinutesDashboardKpisResponse dashboardKpis(long userId) {
-        User user = requireUser(userId);
+        User user = areaTaskAccessHelper.requireUser(userId);
         GanttTaskScope sc = scope(user);
         boolean admin = ganttReadableAreasService.isPlatformAdmin(user);
         Specification<WorkosMeetingMinute> spec = Specification.allOf(

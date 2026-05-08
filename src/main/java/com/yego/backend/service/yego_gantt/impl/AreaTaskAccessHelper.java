@@ -4,6 +4,7 @@ import com.yego.backend.entity.yego_gantt.entities.AreaTask;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.repository.yego_gantt.AreaTaskRepository;
 import com.yego.backend.repository.yego_gantt.AreaTaskSubtaskRepository;
+import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_gantt.AreaTaskPrivateAccessService;
 import com.yego.backend.service.yego_gantt.AreaTaskVisibilityService;
@@ -23,6 +24,7 @@ public class AreaTaskAccessHelper {
 
     private final AreaTaskRepository areaTaskRepository;
     private final AreaTaskSubtaskRepository areaTaskSubtaskRepository;
+    private final AreaRepository areaRepository;
     private final UserRepository userRepository;
     private final GanttTaskScopeService ganttTaskScopeService;
     private final AreaTaskVisibilityService areaTaskVisibilityService;
@@ -31,6 +33,22 @@ public class AreaTaskAccessHelper {
     public User requireUser(Long userId) {
         return userRepository.findByIdWithRole(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Usuario no encontrado"));
+    }
+
+    /** Área obligatoria: existe en catálogo y está activa. */
+    public void requireAreaActiva(Long areaId) {
+        if (areaId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debe indicar un área válida");
+        }
+        areaRepository.findByIdAndActivoTrue(areaId).orElseThrow(() ->
+                new ResponseStatusException(HttpStatus.BAD_REQUEST, "El área no existe o está inactiva"));
+    }
+
+    /** Solo valida cuando {@code areaId != null} (p. ej. ítem de acta con área opcional). */
+    public void requireAreaActivaIfPresent(Long areaId) {
+        if (areaId != null) {
+            requireAreaActiva(areaId);
+        }
     }
 
     public GanttTaskScope resolveScope(User user) {

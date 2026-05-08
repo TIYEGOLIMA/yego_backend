@@ -28,7 +28,7 @@ public class WorkosTaskMessageController {
             Authentication authentication,
             @PathVariable Long taskId,
             @RequestParam(required = false) Long subtaskId) {
-        long userId = Long.parseLong(authentication.getName());
+        long userId = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(workosTaskMessageService.list(userId, taskId, subtaskId));
     }
 
@@ -38,7 +38,7 @@ public class WorkosTaskMessageController {
             Authentication authentication,
             @PathVariable Long taskId,
             @Valid @RequestBody WorkosTaskMessageCreateRequest request) {
-        long userId = Long.parseLong(authentication.getName());
+        long userId = GanttControllerAuth.userId(authentication);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(workosTaskMessageService.create(userId, taskId, request));
     }
@@ -48,7 +48,7 @@ public class WorkosTaskMessageController {
             Authentication authentication,
             @PathVariable Long taskId,
             @PathVariable Long messageId) {
-        long userId = Long.parseLong(authentication.getName());
+        long userId = GanttControllerAuth.userId(authentication);
         workosTaskMessageService.softDelete(userId, taskId, messageId);
         return ResponseEntity.noContent().build();
     }
@@ -59,7 +59,7 @@ public class WorkosTaskMessageController {
             @PathVariable Long taskId,
             @PathVariable Long messageId,
             @Valid @RequestBody WorkosTaskMessageUpdateRequest request) {
-        long userId = Long.parseLong(authentication.getName());
+        long userId = GanttControllerAuth.userId(authentication);
         return ResponseEntity.ok(workosTaskMessageService.update(userId, taskId, messageId, request));
     }
 }

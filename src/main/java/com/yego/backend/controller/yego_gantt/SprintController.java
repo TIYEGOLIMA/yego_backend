@@ -23,7 +23,7 @@ public class SprintController {
     @PostMapping
     public ResponseEntity<SprintResponseDto> create(Authentication authentication,
                                                     @Valid @RequestBody CreateSprintDto dto) {
-        return ResponseEntity.status(201).body(sprintService.create(Long.parseLong(authentication.getName()), dto));
+        return ResponseEntity.status(201).body(sprintService.create(GanttControllerAuth.userId(authentication), dto));
     }
 
     @GetMapping("/by-workspace/{workspaceId}")
@@ -37,12 +37,12 @@ public class SprintController {
     public ResponseEntity<SprintResponseDto> update(Authentication authentication,
                                                     @PathVariable Long id,
                                                     @Valid @RequestBody UpdateSprintDto dto) {
-        return ResponseEntity.ok(sprintService.update(Long.parseLong(authentication.getName()), id, dto));
+        return ResponseEntity.ok(sprintService.update(GanttControllerAuth.userId(authentication), id, dto));
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(Authentication authentication, @PathVariable Long id) {
-        sprintService.delete(Long.parseLong(authentication.getName()), id);
+        sprintService.delete(GanttControllerAuth.userId(authentication), id);
         return ResponseEntity.noContent().build();
     }
 }

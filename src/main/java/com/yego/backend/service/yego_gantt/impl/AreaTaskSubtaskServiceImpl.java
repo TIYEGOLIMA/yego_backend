@@ -12,7 +12,6 @@ import com.yego.backend.repository.yego_gantt.AreaTaskRepository;
 import com.yego.backend.repository.yego_gantt.AreaTaskSubtaskRepository;
 import com.yego.backend.repository.yego_gantt.ProjectRepository;
 import com.yego.backend.repository.yego_gantt.WorkosTaskMessageRepository;
-import com.yego.backend.repository.yego_principal.AreaRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_gantt.AreaTaskPrivateAccessService;
 import com.yego.backend.service.yego_gantt.AreaTaskSubtaskService;
@@ -36,7 +35,6 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
     private final AreaTaskSubtaskRepository subtaskRepo;
     private final AreaTaskRepository taskRepo;
     private final UserRepository userRepository;
-    private final AreaRepository areaRepository;
     private final ProjectRepository projectRepository;
     private final AreaTaskAccessHelper areaTaskAccessHelper;
     private final AreaTaskPrivateAccessService areaTaskPrivateAccessService;
@@ -74,35 +72,6 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
         return s;
     }
 
-    private static AreaTaskSubtaskResponseDto toDto(AreaTaskSubtask s, AreaTask parent) {
-        Long aid = s.getAreaId() != null ? s.getAreaId() : parent.getAreaId();
-        Long ws = s.getWorkspaceId() != null ? s.getWorkspaceId() : parent.getWorkspaceId();
-        return AreaTaskSubtaskResponseDto.builder()
-                .id(s.getId())
-                .parentTaskId(s.getParentTaskId())
-                .title(s.getTitle())
-                .description(s.getDescription())
-                .sortOrder(s.getSortOrder())
-                .done(s.getDone())
-                .weight(s.getWeight())
-                .assignedUserId(s.getAssignedUserId())
-                .dueDate(s.getDueDate())
-                .createdByUserId(s.getCreatedByUserId())
-                .createdAt(s.getCreatedAt())
-                .updatedAt(s.getUpdatedAt())
-                .areaId(aid)
-                .workspaceId(ws)
-                .build();
-    }
-
-    private void requireAreaActiva(Long areaId) {
-        if (areaId == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Área inválida");
-        }
-        areaRepository.findByIdAndActivoTrue(areaId).orElseThrow(() ->
-                new ResponseStatusException(HttpStatus.BAD_REQUEST, "Área inexistente o inactiva"));
-    }
-
     private void assertWorkspaceIfPresent(Long workspaceId) {
         if (workspaceId == null) {
             return;
@@ -120,7 +89,7 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
     private void assertSubtaskAreaAndWorkspace(ParentContext ctx, AreaTask parent, Long areaIdDb, Long workspaceIdDb) {
         Long effArea = areaIdDb != null ? areaIdDb : parent.getAreaId();
         Long effWs = workspaceIdDb != null ? workspaceIdDb : parent.getWorkspaceId();
-        requireAreaActiva(effArea);
+        areaTaskAccessHelper.requireAreaActiva(effArea);
         assertWorkspaceIfPresent(effWs);
         if (!parent.isPrivateTask()) {
             areaTaskAccessHelper.assertCanManage(ctx.scope(), effArea);
@@ -250,7 +219,7 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
             entity.setDueDate(dto.getDueDate());
         }
         if (dto.getAreaId() != null) {
-            requireAreaActiva(dto.getAreaId());
+            areaTaskAccessHelper.requireAreaActiva(dto.getAreaId());
             if (!parent.isPrivateTask()) {
                 areaTaskAccessHelper.assertCanManage(ctx.scope(), dto.getAreaId());
             }
@@ -279,7 +248,7 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
     public List<AreaTaskSubtaskResponseDto> list(Long requesterId, Long parentTaskId) {
         ParentContext ctx = requireReadableParent(requesterId, parentTaskId);
         return subtaskRepo.findByParentTaskIdOrderBySortOrderAscIdAsc(parentTaskId).stream()
-                .map(s -> toDto(s, ctx.parent()))
+                .map(s -> AreaTaskSubtaskDtoMapper.toDto(s, ctx.parent()))
                 .toList();
     }
 
@@ -321,7 +290,7 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
 
         AreaTaskSubtask saved = subtaskRepo.save(entity);
         reconcileParentDerivedFieldsFully(parentTaskId);
-        return toDto(saved, parent);
+        return AreaTaskSubtaskDtoMapper.toDto(saved, parent);
     }
 
     @Override
@@ -335,7 +304,7 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
         AreaTaskSubtask saved = subtaskRepo.save(entity);
         boolean progressShaped = dto.getDone() != null || dto.getWeight() != null;
         maybeRecalcParentProgressThenSyncEnd(parentTaskId, progressShaped);
-        return toDto(saved, ctx.parent());
+        return AreaTaskSubtaskDtoMapper.toDto(saved, ctx.parent());
     }
 
     @Override
@@ -362,7 +331,7 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
 
         if (fromParentTaskId.equals(toParentTaskId)) {
             AreaTaskSubtask entity = requireSubtask(fromParentTaskId, subtaskId);
-            return toDto(entity, fromCtx.parent());
+            return AreaTaskSubtaskDtoMapper.toDto(entity, fromCtx.parent());
         }
 
         AreaTaskSubtask entity = requireSubtask(fromParentTaskId, subtaskId);
@@ -381,6 +350,12 @@ public class AreaTaskSubtaskServiceImpl implements AreaTaskSubtaskService {
 
         reconcileParentDerivedFieldsFully(fromParentTaskId);
         reconcileParentDerivedFieldsFully(toParentTaskId);
-        return toDto(saved, newParent);
+        return AreaTaskSubtaskDtoMapper.toDto(saved, newParent);
+    }
+
+    @Override
+    @Transactional
+    public void reconcileParentDerivedFields(Long parentTaskId) {
+        reconcileParentDerivedFieldsFully(parentTaskId);
     }
 }
