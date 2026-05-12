@@ -4,6 +4,7 @@ import com.yego.backend.entity.yego_ticketerera.api.request.CrearModuloAtencionR
 import com.yego.backend.entity.yego_ticketerera.entities.ModuloAtencion;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.entity.yego_ticketerera.api.response.ModuloAtencionResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.ModuloOcupadoResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.ModuloUsuarioResponse;
 import com.yego.backend.entity.yego_ticketerera.entities.Sede;
 import com.yego.backend.handler.yego_ticketerera.TicketNotificationHandler;
@@ -155,10 +156,15 @@ public class ModuloAtencionServiceImpl implements ModuloAtencionService {
                             .filter(m -> sedeId == null || Objects.equals(sedeId, m.getSedeId()))
                             .toList();
 
+            List<ModuloOcupadoResponse> ocupadosFiltrados =
+                    estadoModulos.getModulosOcupados().stream()
+                            .filter(m -> sedeId == null || Objects.equals(sedeId, m.getSedeId()))
+                            .toList();
+
             response = ModuloUsuarioResponse.builder()
                     .tieneModuloAsignado(false)
                     .modulosDisponibles(disponiblesFiltrados)
-                    .modulosOcupados(estadoModulos.getModulosOcupados())
+                    .modulosOcupados(ocupadosFiltrados)
                     .build();
         }
 

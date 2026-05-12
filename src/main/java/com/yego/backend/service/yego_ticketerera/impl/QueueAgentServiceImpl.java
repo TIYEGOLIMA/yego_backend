@@ -117,6 +117,11 @@ public class QueueAgentServiceImpl implements QueueAgentService {
                 : moduloAtencionRepository.findAllById(moduleIdsOcupados).stream()
                         .collect(Collectors.toMap(ModuloAtencion::getId, ModuloAtencion::getName));
 
+        Map<Long, Long> sedeIdModulo = moduleIdsOcupados.isEmpty()
+                ? Map.of()
+                : moduloAtencionRepository.findAllById(moduleIdsOcupados).stream()
+                        .collect(Collectors.toMap(ModuloAtencion::getId, ModuloAtencion::getSedeId));
+
         Map<Long, String> usuariosMap = userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(
                         User::getId,
@@ -127,6 +132,7 @@ public class QueueAgentServiceImpl implements QueueAgentService {
                 .map(agente -> ModuloOcupadoResponse.builder()
                         .moduleId(agente.getModuleId())
                         .moduleName(nombresModulo.get(agente.getModuleId()))
+                        .sedeId(sedeIdModulo.get(agente.getModuleId()))
                         .userId(agente.getUserId())
                         .userName(usuariosMap.getOrDefault(agente.getUserId(), "Usuario " + agente.getUserId()))
                         .status(agente.getStatus())
