@@ -63,6 +63,11 @@ public class TicketNotificationHandler {
         log.info("[TicketNotificationHandler] Enviando ticket completado por WebSocket: {}", ticketCompleto.getTicketNumber());
         filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
         filteredWebSocketService.convertAndSend("/topic/ticket-completed", ticketCompleto);
+        if (ticketCompleto.getSedeId() != null) {
+            String sedeTopic = "/topic/ticketera/sede/" + ticketCompleto.getSedeId() + "/rating";
+            filteredWebSocketService.convertAndSend(sedeTopic, ticketCompleto);
+            log.info("[TicketNotificationHandler] Enviando rating a tablet sede {}: {}", ticketCompleto.getSedeId(), sedeTopic);
+        }
     }
     
     /**
