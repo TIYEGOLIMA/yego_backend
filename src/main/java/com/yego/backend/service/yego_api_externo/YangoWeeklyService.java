@@ -393,9 +393,28 @@ public class YangoWeeklyService {
             return null;
         }
         double b = r2(newBonificacion);
+        double newTotal = r2(income.getCashCollected()
+                + income.getNonCashPayment()
+                + income.getCorporate()
+                + income.getPromotionCompensation()
+                + b
+                + income.getTips()
+                + income.getPlatformFees()
+                + income.getPartnerFees()
+                + income.getPlatformGas()
+                + income.getPlatformOther()
+                + income.getMandatoryTaxesFee()
+                + income.getPlatformMarketingOther()
+                + income.getPartnerContractorOther());
+        double newPriceYangoPro = r2(income.getCashCollected()
+                + income.getNonCashPayment()
+                + income.getCorporate()
+                + income.getPromotionCompensation()
+                + b
+                + income.getTips());
         return YangoIncomeSummary.builder()
                 .countCompleted(income.getCountCompleted())
-                .total(income.getTotal())
+                .total(newTotal)
                 .cashCollected(income.getCashCollected())
                 .nonCashPayment(income.getNonCashPayment())
                 .corporate(income.getCorporate())
@@ -409,7 +428,7 @@ public class YangoWeeklyService {
                 .mandatoryTaxesFee(income.getMandatoryTaxesFee())
                 .platformMarketingOther(income.getPlatformMarketingOther())
                 .partnerContractorOther(income.getPartnerContractorOther())
-                .priceYangoPro(income.getPriceYangoPro())
+                .priceYangoPro(newPriceYangoPro)
                 .build();
     }
 
