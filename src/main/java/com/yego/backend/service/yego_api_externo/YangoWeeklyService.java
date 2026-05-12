@@ -56,11 +56,7 @@ public class YangoWeeklyService {
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX");
     private static final DateTimeFormatter DAY = DateTimeFormatter.ISO_LOCAL_DATE;
 
-    /** Texto Fleet para excluir del neto de bonificación (normalizado NFD + sin marcas + minúsculas). */
-    private static final String OBJECTIVE_BONUS_DESCRIPTION_NORMALIZED =
-            Normalizer.normalize("Bonificación por cumplir objetivo", Normalizer.Form.NFD)
-                    .replaceAll("\\p{M}+", "")
-                    .toLowerCase(Locale.ROOT);
+    private static final String OBJECTIVE_BONUS_DESC = "Bonificación por cumplir objetivo";
 
     private final YangoClient yangoClient;
     private final ObjectMapper objectMapper;
@@ -278,9 +274,11 @@ public class YangoWeeklyService {
         Map<String, Object> txn = new LinkedHashMap<>();
         txn.put("event_at", Map.of("from", weeklySameAsIncome.dateFrom, "to", weeklySameAsIncome.dateTo));
         txn.put("category_ids", List.of("bonus", "bonus_discount", "platform_bonus_fee"));
+        Map<String, Object> park = new LinkedHashMap<>();
+        park.put("driver_profile", Map.of("id", driverProfileId));
+        park.put("transaction", txn);
         Map<String, Object> query = new LinkedHashMap<>();
-        query.put("park", Map.of("driver_profile", Map.of("id", driverProfileId)));
-        query.put("transaction", txn);
+        query.put("park", park);
 
         double sumAmountBonifCumplirObjetivo = 0.0;
         int filasTextoObjetivo = 0;
@@ -295,7 +293,6 @@ public class YangoWeeklyService {
             do {
                 Map<String, Object> body = new LinkedHashMap<>();
                 body.put("query", query);
-                body.put("limit", 500);
                 if (nextCursor != null && !nextCursor.isBlank()) {
                     body.put("cursor", nextCursor);
                 }
@@ -387,14 +384,7 @@ public class YangoWeeklyService {
     }
 
     private static boolean isObjectiveCompletionBonusDescription(String description) {
-        if (description == null || description.isBlank()) {
-            return false;
-        }
-        String folded =
-                Normalizer.normalize(description.trim(), Normalizer.Form.NFD)
-                        .replaceAll("\\p{M}+", "")
-                        .toLowerCase(Locale.ROOT);
-        return OBJECTIVE_BONUS_DESCRIPTION_NORMALIZED.equals(folded);
+        return OBJECTIVE_BONUS_DESC.equals(description);
     }
 
     /** Solo sobrescribe {@code bonificacion}; el resto del resumen permanece igual al de la tarjeta income. */
