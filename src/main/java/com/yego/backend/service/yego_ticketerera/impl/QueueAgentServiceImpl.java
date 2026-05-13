@@ -141,10 +141,27 @@ public class QueueAgentServiceImpl implements QueueAgentService {
                         .build())
                 .toList();
 
+        Long sedeIdEvento = calcularSedeIdEvento(modulosDisponibles, modulosOcupados);
+
         return ModulosEstadoResponse.builder()
                 .modulosDisponibles(modulosDisponibles)
                 .modulosOcupados(modulosOcupados)
+                .sedeId(sedeIdEvento)
                 .build();
+    }
+
+    private Long calcularSedeIdEvento(List<ModuloAtencionResponse> disponibles, List<ModuloOcupadoResponse> ocupados) {
+        Set<Long> sedeIds = new java.util.HashSet<>();
+        for (ModuloAtencionResponse m : disponibles) {
+            if (m.getSedeId() != null) sedeIds.add(m.getSedeId());
+        }
+        for (ModuloOcupadoResponse m : ocupados) {
+            if (m.getSedeId() != null) sedeIds.add(m.getSedeId());
+        }
+        if (sedeIds.size() == 1) {
+            return sedeIds.iterator().next();
+        }
+        return null;
     }
 
     @Override

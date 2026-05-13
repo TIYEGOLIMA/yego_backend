@@ -16,8 +16,9 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ModulosEstadoResponse {
-    
+
     private List<ModuloAtencionResponse> modulosDisponibles;
     private List<ModuloOcupadoResponse> modulosOcupados;
+    private Long sedeId;
 }
 
