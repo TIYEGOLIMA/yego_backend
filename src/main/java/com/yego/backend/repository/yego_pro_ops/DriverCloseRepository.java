@@ -11,4 +11,6 @@ import java.util.Optional;
 public interface DriverCloseRepository extends JpaRepository<DriverClose, Long> {
 
     Optional<DriverClose> findFirstByDriverIdAndFechaOrderByIdDesc(String driverId, LocalDate fecha);
+
+    Optional<DriverClose> findFirstByDriverIdOrderByIdDesc(String driverId);
 }

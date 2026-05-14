@@ -67,6 +67,9 @@ public class CalculatedShift {
     @Column(name = "comisiones_servicio")
     private Double comisionesServicio;
 
+    @Column(name = "placa", length = 20)
+    private String placa;
+
     @Column(name = "pagado", nullable = false)
     @Builder.Default
     private Boolean pagado = false;

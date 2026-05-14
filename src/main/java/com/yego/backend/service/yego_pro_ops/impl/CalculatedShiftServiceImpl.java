@@ -369,6 +369,10 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         turno.setComisionesServicio(calcularComisionesServicio(viajes));
         turno.setEstado(CalculatedShift.EstadoTurno.finalizado);
 
+        if (turno.getPlaca() == null || turno.getPlaca().isEmpty()) {
+            turno.setPlaca(obtenerPlacaConductor(driverId, fecha));
+        }
+
         calculatedShiftRepository.save(turno);
     }
 
@@ -589,8 +593,17 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
 
         ConductorInfo info = infoConductores.getOrDefault(driverId, ConductorInfo.EMPTY);
         Integer cantidadViajes = calcularCantidadViajesTotal(turnos);
-        String placa = driverCloseRepository.findFirstByDriverIdAndFechaOrderByIdDesc(driverId, fecha)
-            .map(DriverClose::getPlaca).orElse(null);
+        String placa = turnos.stream()
+            .map(CalculatedShift::getPlaca)
+            .filter(p -> p != null && !p.isEmpty())
+            .findFirst()
+            .orElseGet(() -> driverCloseRepository.findFirstByDriverIdAndFechaOrderByIdDesc(driverId, fecha)
+                .map(DriverClose::getPlaca)
+                .filter(p -> p != null && !p.isEmpty())
+                .orElseGet(() -> driverCloseRepository.findFirstByDriverIdOrderByIdDesc(driverId)
+                    .map(DriverClose::getPlaca)
+                    .filter(p -> p != null && !p.isEmpty())
+                    .orElse(null)));
 
         return DriverPaymentSummaryResponse.ConductorPaymentInfo.builder()
             .driverId(driverId)
@@ -707,6 +720,16 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             return false;
         }
         return true;
+    }
+
+    private String obtenerPlacaConductor(String driverId, LocalDate fecha) {
+        return driverCloseRepository.findFirstByDriverIdAndFechaOrderByIdDesc(driverId, fecha)
+            .map(DriverClose::getPlaca)
+            .filter(p -> p != null && !p.isEmpty())
+            .orElseGet(() -> driverCloseRepository.findFirstByDriverIdOrderByIdDesc(driverId)
+                .map(DriverClose::getPlaca)
+                .filter(p -> p != null && !p.isEmpty())
+                .orElse(null));
     }
 
     private LocalDate parsearFecha(String fecha) {
