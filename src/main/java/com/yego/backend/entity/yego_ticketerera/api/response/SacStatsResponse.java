@@ -23,6 +23,18 @@ public class SacStatsResponse {
     private List<SacPerformanceResponse> sacPerformance;
     private List<SacPerformanceResponse> topPerformers;
     private List<RecentRatingResponse> recentRatings;
+    private List<HourlyDistribution> hourlyDistribution;
+    private List<HourlyBySede> hourlyBySede;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class HourlyBySede {
+        private Long sedeId;
+        private String sedeName;
+        private List<HourlyDistribution> hourlyDistribution;
+    }
     
     @Data
     @Builder
@@ -32,6 +44,8 @@ public class SacStatsResponse {
         private Long id;
         private String name;
         private String username;
+        private Long sedeId;
+        private String sedeName;
         private Integer totalTickets;
         private Integer completedTickets;
         private Double averageRating;
@@ -64,5 +78,15 @@ public class SacStatsResponse {
         private String comment;
         private String ticketNumber;
         private String date;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class HourlyDistribution {
+        private int hour;
+        private String label;
+        private long count;
     }
 }

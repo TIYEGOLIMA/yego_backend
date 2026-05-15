@@ -5,11 +5,14 @@ import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.RecentRatingResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.SacPerformanceResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.SacPerformanceResponse.RatingResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.HourlyDistribution;
 import com.yego.backend.entity.yego_ticketerera.entities.QueueRating;
+import com.yego.backend.entity.yego_ticketerera.entities.Sede;
 import com.yego.backend.entity.yego_ticketerera.entities.Ticket;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.repository.yego_ticketerera.QueueAgentRepository;
 import com.yego.backend.repository.yego_ticketerera.QueueRatingRepository;
+import com.yego.backend.repository.yego_ticketerera.SedeRepository;
 import com.yego.backend.repository.yego_ticketerera.TicketRepository;
 import com.yego.backend.service.yego_ticketerera.SacStatsService;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +41,7 @@ public class SacStatsServiceImpl implements SacStatsService {
     private final TicketRepository ticketRepository;
     private final QueueRatingRepository queueRatingRepository;
     private final QueueAgentRepository queueAgentRepository;
+    private final SedeRepository sedeRepository;
     
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter ISO_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -52,6 +56,10 @@ public class SacStatsServiceImpl implements SacStatsService {
     private SacStatsResponse calcularEstadisticas(String fechaInicio, String fechaFin, List<User> sacUsers, Long sedeId) {
         log.debug("Estadísticas SAC fecha inicio {} fin {} sedeId {}", fechaInicio, fechaFin, sedeId);
         long startTime = System.currentTimeMillis();
+
+        // Cargar todas las sedes activas en un mapa
+        Map<Long, String> sedeMap = sedeRepository.findByActiveTrueOrderByNameAsc().stream()
+                .collect(Collectors.toMap(Sede::getId, Sede::getName));
 
         // Parsear fechas si se proporcionan
         LocalDateTime fechaInicioDT = null;
@@ -157,7 +165,8 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .map(user -> calcularRendimientoSacOptimizado(
                     user, 
                     ticketsByUserId.getOrDefault(user.getId(), Collections.emptyList()),
-                    ratingsByTicketId
+                    ratingsByTicketId,
+                    sedeMap
                 ))
                 .collect(Collectors.toList());
         
@@ -180,6 +189,22 @@ public class SacStatsServiceImpl implements SacStatsService {
         
         long endTime = System.currentTimeMillis();
         log.debug("Estadísticas SAC calculadas en {} ms", (endTime - startTime));
+
+        // Distribución horaria de tickets
+        List<HourlyDistribution> hourlyDistribution = calcularDistribucionHoraria(allSacTickets);
+
+        // Distribución horaria por sede
+        Map<Long, List<Ticket>> ticketsBySede = allSacTickets.stream()
+                .filter(t -> t.getSedeId() != null)
+                .collect(Collectors.groupingBy(Ticket::getSedeId));
+        List<SacStatsResponse.HourlyBySede> hourlyBySede = ticketsBySede.entrySet().stream()
+                .map(entry -> SacStatsResponse.HourlyBySede.builder()
+                        .sedeId(entry.getKey())
+                        .sedeName(sedeMap.getOrDefault(entry.getKey(), "Sede " + entry.getKey()))
+                        .hourlyDistribution(calcularDistribucionHoraria(entry.getValue()))
+                        .build())
+                .sorted(Comparator.comparing(SacStatsResponse.HourlyBySede::getSedeName))
+                .collect(Collectors.toList());
         
         int totalSacsReportados = sedeId != null
                 ? (int) sacPerformance.stream().filter(sac -> sac.getTotalTickets() > 0).count()
@@ -193,6 +218,8 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .sacPerformance(sacPerformance)
                 .topPerformers(topPerformers)
                 .recentRatings(recentRatingsResponse)
+                .hourlyDistribution(hourlyDistribution)
+                .hourlyBySede(hourlyBySede)
                 .build();
     }
     
@@ -222,9 +249,15 @@ public class SacStatsServiceImpl implements SacStatsService {
     private SacPerformanceResponse calcularRendimientoSacOptimizado(
             User sacUser,
             List<Ticket> sacTickets,
-            Map<Long, List<QueueRating>> ratingsByTicketId) {
+            Map<Long, List<QueueRating>> ratingsByTicketId,
+            Map<Long, String> sedeMap) {
         
         Long userId = sacUser.getId();
+        
+        Long sedeId = sacUser.getSedeId();
+        String sedeName = (sedeId != null && sedeMap.containsKey(sedeId))
+                ? sedeMap.get(sedeId)
+                : "Sin sede";
         
         // Filtrar tickets completados y cancelados en memoria
         List<Ticket> completedTickets = sacTickets.stream()
@@ -268,6 +301,8 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .id(userId)
                 .name(sacUser.getName())
                 .username(sacUser.getUsername())
+                .sedeId(sedeId)
+                .sedeName(sedeName)
                 .totalTickets(totalTickets)
                 .completedTickets(completedTicketsCount)
                 .averageRating(Math.round(averageRating * 10.0) / 10.0)
@@ -355,5 +390,29 @@ public class SacStatsServiceImpl implements SacStatsService {
                             .build();
                 })
                 .collect(Collectors.toList());
+    }
+
+    private List<HourlyDistribution> calcularDistribucionHoraria(List<Ticket> tickets) {
+        long[] counts = new long[24];
+        for (Ticket ticket : tickets) {
+            if (ticket.getCreatedAt() != null) {
+                int hour = ticket.getCreatedAt().atZone(ZONE_ID).getHour();
+                counts[hour]++;
+            }
+        }
+
+        String[] labels = {"12am","01am","02am","03am","04am","05am","06am","07am","08am","09am",
+                           "10am","11am","12pm","01pm","02pm","03pm","04pm","05pm","06pm","07pm",
+                           "08pm","09pm","10pm","11pm"};
+
+        List<HourlyDistribution> result = new java.util.ArrayList<>();
+        for (int h = 0; h < 24; h++) {
+            result.add(HourlyDistribution.builder()
+                    .hour(h)
+                    .label(labels[h])
+                    .count(counts[h])
+                    .build());
+        }
+        return result;
     }
 }

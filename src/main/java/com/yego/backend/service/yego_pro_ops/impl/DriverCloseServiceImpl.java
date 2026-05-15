@@ -61,12 +61,17 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         List<Long> turnoIds = resolverTurnoIds(request.getTurnoIds(), turnos);
 
         DriverClose guardado = transactionTemplate.execute(status -> {
-            driverCloseRepository.findFirstByDriverIdAndFechaOrderByIdDesc(driverId, fecha)
-                .ifPresent(existente -> {
-                    log.warn("[DriverCloseService] cierre existente reemplazado driverId={} fecha={}", driverId, fecha);
-                    driverCloseRepository.delete(existente);
-                });
+            Optional<DriverClose> existenteOpt = driverCloseRepository.findFirstByDriverIdAndFechaOrderByIdDesc(driverId, fecha);
             if (!turnoIds.isEmpty()) marcarTurnosComoPagados(turnoIds);
+
+            if (existenteOpt.isPresent()) {
+                DriverClose existente = existenteOpt.get();
+                log.warn("[DriverCloseService] cierre existente actualizado driverId={} fecha={}", driverId, fecha);
+                aplicarCamposEditables(existente, request);
+                existente.setUserId(userId);
+                existente.setCalculatedShiftIds(joinIds(turnoIds));
+                return driverCloseRepository.save(existente);
+            }
             return driverCloseRepository.save(construirCierre(request, fecha, userId, turnoIds));
         });
 
