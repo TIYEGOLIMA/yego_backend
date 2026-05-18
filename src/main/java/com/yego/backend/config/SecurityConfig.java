@@ -119,7 +119,6 @@ public class SecurityConfig {
                 .requestMatchers("/api/modules/**").permitAll() // Módulos (CRUD módulos del sidebar)
                 .requestMatchers("/api/grupos/**").permitAll() // Grupos (agrupación de módulos)
                 .requestMatchers("/api/system/**").permitAll() // Sistema endpoints
-                .requestMatchers("/api/asistencia/**").permitAll() // Asistencia (marcación, historial, exportar, etc.)
                 .requestMatchers("/api/ticketera/**").permitAll() // Ticketera endpoints
                 .requestMatchers("/api/health").permitAll() // Health check
                 .requestMatchers("/api/yego-premium/**").permitAll() // Driver active stats endpoints
