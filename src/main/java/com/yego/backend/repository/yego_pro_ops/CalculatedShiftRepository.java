@@ -50,5 +50,8 @@ public interface CalculatedShiftRepository extends JpaRepository<CalculatedShift
 
     @Query("SELECT c.tipoTurno FROM CalculatedShift c WHERE c.id IN :ids")
     List<CalculatedShift.TipoTurno> findTipoTurnoByIdIn(@Param("ids") List<Long> ids);
+
+    @Query("SELECT c FROM CalculatedShift c WHERE c.fecha BETWEEN :inicio AND :fin ORDER BY c.driverId ASC, c.fecha ASC")
+    List<CalculatedShift> findByFechaBetween(@Param("inicio") LocalDate inicio, @Param("fin") LocalDate fin);
 }
 

@@ -27,11 +27,13 @@ spring:
     password: ${DB_PASSWORD:37>MNA&-35+}
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+      idle-timeout: 300000
+      max-lifetime: 600000
+      leak-detection-threshold: 15000
+      keepalive-time: 60000
   
   # JPA/Hibernate para producción - optimizado
   jpa:

@@ -9,9 +9,12 @@ import com.yego.backend.entity.yego_pro_ops.api.response.DriverSimpleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverPaymentSummaryResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverTripsSimplifiedResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.PaidShiftsResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.BillingConfigResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.ResumenSemanalResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
+import com.yego.backend.entity.yego_pro_ops.entities.FacturacionSemanal;
 import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
 import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
@@ -32,6 +35,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -152,6 +156,13 @@ public class FleetDriverController {
         return calculatedShiftService.obtenerTurnosPagados(fecha);
     }
 
+    @GetMapping("/drivers/resumen-semanal")
+    public ResumenSemanalResponse obtenerResumenSemanal(
+            @RequestParam String fechaInicio,
+            @RequestParam String fechaFin) {
+        return calculatedShiftService.obtenerResumenSemanal(fechaInicio, fechaFin);
+    }
+
     @GetMapping("/drivers")
     public DriverSimpleResponse obtenerListaConductores() {
         return fleetDriverService.obtenerListaConductoresSimplificada();
@@ -162,5 +173,31 @@ public class FleetDriverController {
             @PathVariable String parkId,
             @Valid @RequestBody ContractorSuggestionsRequest request) {
         return ResponseEntity.ok(fleetDriverService.getContractorSuggestions(parkId, request.getTelefono()));
+    }
+
+    @PostMapping("/drivers/facturacion-semanal")
+    public FacturacionSemanal registrarFacturacionSemanal(@Valid @RequestBody FacturacionSemanal facturacion) {
+        log.info("[FleetDriverController] registrar facturación semanal driverId={} semana={}/{} userId={}",
+            facturacion.getDriverId(), facturacion.getFechaInicio(), facturacion.getFechaFin(), facturacion.getUserId());
+        return calculatedShiftService.registrarFacturacionSemanal(facturacion);
+    }
+
+    @GetMapping("/drivers/facturacion-semanal/historial")
+    public List<FacturacionSemanal> obtenerHistorialFacturacion(
+            @RequestParam(required = false) String fechaInicio,
+            @RequestParam(required = false) String fechaFin) {
+        return calculatedShiftService.obtenerHistorialFacturacion(fechaInicio, fechaFin);
+    }
+
+    @GetMapping("/config/billing")
+    public BillingConfigResponse obtenerConfiguracionBilling() {
+        return calculatedShiftService.obtenerConfiguracionBilling();
+    }
+
+    @PutMapping("/config/billing")
+    public BillingConfigResponse guardarConfiguracionBilling(
+            @Valid @RequestBody BillingConfigResponse config,
+            @RequestParam Long userId) {
+        return calculatedShiftService.guardarConfiguracionBilling(config, userId);
     }
 }

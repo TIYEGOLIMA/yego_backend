@@ -148,6 +148,8 @@ public class DriverCloseServiceImpl implements DriverCloseService {
     }
 
     private DriverClose construirCierre(DriverCloseRequest req, LocalDate fecha, Long userId, List<Long> turnoIds) {
+        double ingresos = req.getTotalIngresos() != null ? req.getTotalIngresos() : 0;
+        double gastos = req.getTotalGastos() != null ? req.getTotalGastos() : 0;
         return DriverClose.builder()
             .driverId(req.getDriverId())
             .fecha(fecha)
@@ -160,9 +162,9 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .liquidaYape(toBigDecimal(req.getLiquidaYape()))
             .otrosGastos(toBigDecimal(req.getOtrosGastos()))
             .otrosGastosDescripcion(req.getOtrosGastosDescripcion())
-            .totalIngresos(toBigDecimal(req.getTotalIngresos()))
-            .totalGastos(toBigDecimal(req.getTotalGastos()))
-            .resta(toBigDecimal(req.getResta()))
+            .totalIngresos(toBigDecimal(ingresos))
+            .totalGastos(toBigDecimal(gastos))
+            .resta(BigDecimal.valueOf(ingresos - gastos))
             .placa(req.getPlaca())
             .odometroInicial(req.getOdometroInicial())
             .odometroFinal(req.getOdometroFinal())
@@ -172,21 +174,24 @@ public class DriverCloseServiceImpl implements DriverCloseService {
     }
 
     private void aplicarCamposEditables(DriverClose cierre, DriverCloseRequest req) {
-        cierre.setGnvM3(req.getGnvM3());
-        cierre.setGnvSoles(toBigDecimal(req.getGnvSoles()));
-        cierre.setGasolinaGalones(req.getGasolinaGalones());
-        cierre.setGasolinaSoles(toBigDecimal(req.getGasolinaSoles()));
-        cierre.setLiquidaEfectivo(toBigDecimal(req.getLiquidaEfectivo()));
-        cierre.setLiquidaYape(toBigDecimal(req.getLiquidaYape()));
-        cierre.setOtrosGastos(toBigDecimal(req.getOtrosGastos()));
-        cierre.setOtrosGastosDescripcion(req.getOtrosGastosDescripcion());
-        cierre.setTotalIngresos(toBigDecimal(req.getTotalIngresos()));
-        cierre.setTotalGastos(toBigDecimal(req.getTotalGastos()));
-        cierre.setResta(toBigDecimal(req.getResta()));
-        cierre.setPlaca(req.getPlaca());
-        cierre.setOdometroInicial(req.getOdometroInicial());
-        cierre.setOdometroFinal(req.getOdometroFinal());
-        cierre.setDiferenciaOdometro(req.getDiferenciaOdometro());
+        if (req.getGnvM3() != null) cierre.setGnvM3(req.getGnvM3());
+        if (req.getGnvSoles() != null) cierre.setGnvSoles(toBigDecimal(req.getGnvSoles()));
+        if (req.getGasolinaGalones() != null) cierre.setGasolinaGalones(req.getGasolinaGalones());
+        if (req.getGasolinaSoles() != null) cierre.setGasolinaSoles(toBigDecimal(req.getGasolinaSoles()));
+        if (req.getLiquidaEfectivo() != null) cierre.setLiquidaEfectivo(toBigDecimal(req.getLiquidaEfectivo()));
+        if (req.getLiquidaYape() != null) cierre.setLiquidaYape(toBigDecimal(req.getLiquidaYape()));
+        if (req.getOtrosGastos() != null) cierre.setOtrosGastos(toBigDecimal(req.getOtrosGastos()));
+        if (req.getOtrosGastosDescripcion() != null) cierre.setOtrosGastosDescripcion(req.getOtrosGastosDescripcion());
+        if (req.getTotalIngresos() != null && req.getTotalIngresos() > 0) cierre.setTotalIngresos(toBigDecimal(req.getTotalIngresos()));
+        if (req.getTotalGastos() != null) cierre.setTotalGastos(toBigDecimal(req.getTotalGastos()));
+        if (req.getPlaca() != null) cierre.setPlaca(req.getPlaca());
+        if (req.getOdometroInicial() != null) cierre.setOdometroInicial(req.getOdometroInicial());
+        if (req.getOdometroFinal() != null) cierre.setOdometroFinal(req.getOdometroFinal());
+        if (req.getDiferenciaOdometro() != null) cierre.setDiferenciaOdometro(req.getDiferenciaOdometro());
+
+        double ingresos = cierre.getTotalIngresos() != null ? cierre.getTotalIngresos().doubleValue() : 0;
+        double gastos = cierre.getTotalGastos() != null ? cierre.getTotalGastos().doubleValue() : 0;
+        cierre.setResta(BigDecimal.valueOf(ingresos - gastos));
     }
 
     private DriverCloseResponse convertirAResponse(DriverClose cierre) {

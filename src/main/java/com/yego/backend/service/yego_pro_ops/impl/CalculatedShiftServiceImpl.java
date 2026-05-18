@@ -6,10 +6,18 @@ import com.yego.backend.entity.yego_pro_ops.api.response.DriverPaymentSummaryRes
 import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.OrderInfoResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.PaidShiftsResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.BillingConfigResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.ResumenSemanalResponse;
+import com.yego.backend.entity.yego_pro_ops.entities.BonusThreshold;
 import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
+import com.yego.backend.entity.yego_pro_ops.entities.FacturacionSemanal;
+import com.yego.backend.entity.yego_pro_ops.entities.PaymentPercentage;
+import com.yego.backend.repository.yego_pro_ops.BonusThresholdRepository;
 import com.yego.backend.repository.yego_pro_ops.CalculatedShiftRepository;
 import com.yego.backend.repository.yego_pro_ops.DriverCloseRepository;
+import com.yego.backend.repository.yego_pro_ops.FacturacionSemanalRepository;
+import com.yego.backend.repository.yego_pro_ops.PaymentPercentageRepository;
 import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
 import com.yego.backend.service.yego_pro_ops.FleetDriverService;
@@ -18,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -56,6 +65,9 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     private static final int LOG_PROGRESO_CADA_N = 5;
     private static final long DETALLE_CACHE_TTL_MS = 60_000L;
     private static final long CONDUCTORES_DIR_CACHE_TTL_MS = 120_000L;
+    private static final long RESUMEN_SEMANAL_CACHE_TTL_MS = 90_000L;
+
+    private static final ConcurrentHashMap<String, CachedResponse<ResumenSemanalResponse>> resumenSemanalCache = new ConcurrentHashMap<>();
 
     private static final int SHIFT_EXECUTOR_THREADS = 8;
     private static final int BATCH_PARALELISMO = 4;
@@ -71,6 +83,9 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
 
     private final CalculatedShiftRepository calculatedShiftRepository;
     private final DriverCloseRepository driverCloseRepository;
+    private final FacturacionSemanalRepository facturacionSemanalRepository;
+    private final BonusThresholdRepository bonusThresholdRepository;
+    private final PaymentPercentageRepository paymentPercentageRepository;
     private final DriverOrdersService driverOrdersService;
     private final FleetDriverService fleetDriverService;
     private final ExecutorService shiftExecutor;
@@ -78,10 +93,16 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     public CalculatedShiftServiceImpl(
             CalculatedShiftRepository calculatedShiftRepository,
             DriverCloseRepository driverCloseRepository,
+            FacturacionSemanalRepository facturacionSemanalRepository,
+            BonusThresholdRepository bonusThresholdRepository,
+            PaymentPercentageRepository paymentPercentageRepository,
             @Lazy DriverOrdersService driverOrdersService,
             FleetDriverService fleetDriverService) {
         this.calculatedShiftRepository = calculatedShiftRepository;
         this.driverCloseRepository = driverCloseRepository;
+        this.facturacionSemanalRepository = facturacionSemanalRepository;
+        this.bonusThresholdRepository = bonusThresholdRepository;
+        this.paymentPercentageRepository = paymentPercentageRepository;
         this.driverOrdersService = driverOrdersService;
         this.fleetDriverService = fleetDriverService;
         this.shiftExecutor = Executors.newFixedThreadPool(SHIFT_EXECUTOR_THREADS, namedFactory("shift-worker"));
@@ -292,6 +313,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         resumenPagosCache.remove(fecha);
         turnosPagadosCache.remove(fecha);
         directorioConductoresCache = null;
+        resumenSemanalCache.clear();
     }
 
     private List<OrderInfoResponse> obtenerViajesDelDia(String driverId, LocalDate fecha) {
@@ -756,5 +778,358 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         boolean isExpired() {
             return System.currentTimeMillis() > expiresAt;
         }
+    }
+
+    // ─── Facturación Semanal ─────────────────────────────────────────
+
+    private static final String[] DIAS_SEMANA = {"Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"};
+
+    @Override
+    public ResumenSemanalResponse obtenerResumenSemanal(String fechaInicio, String fechaFin) {
+        String cacheKey = fechaInicio + "_" + fechaFin;
+        CachedResponse<ResumenSemanalResponse> cached = resumenSemanalCache.get(cacheKey);
+        if (cached != null && !cached.isExpired()) {
+            log.info("[ResumenSemanal] cache hit para {}/{}", fechaInicio, fechaFin);
+            return cached.response();
+        }
+
+        long t0 = System.currentTimeMillis();
+        LocalDate inicio = parsearFecha(fechaInicio);
+        LocalDate fin = parsearFecha(fechaFin);
+        if (inicio == null || fin == null) {
+            throw new IllegalArgumentException("Fechas inválidas. Formato esperado: YYYY-MM-DD");
+        }
+        if (inicio.isAfter(fin)) {
+            throw new IllegalArgumentException("fechaInicio no puede ser posterior a fechaFin");
+        }
+
+        long t1 = System.currentTimeMillis();
+        List<CalculatedShift> turnosSemana = calculatedShiftRepository.findByFechaBetween(inicio, fin);
+        long t2 = System.currentTimeMillis();
+        log.info("[ResumenSemanal] findByFechaBetween shifts: {}ms, {} turnos", t2 - t1, turnosSemana.size());
+
+        if (turnosSemana.isEmpty()) {
+            ResumenSemanalResponse vacia = ResumenSemanalResponse.builder()
+                .fechaInicio(inicio.toString()).fechaFin(fin.toString())
+                .conductores(List.of()).build();
+            resumenSemanalCache.put(cacheKey, CachedResponse.of(vacia, RESUMEN_SEMANAL_CACHE_TTL_MS));
+            return vacia;
+        }
+
+        Map<String, List<CalculatedShift>> turnosPorConductor = turnosSemana.stream()
+            .collect(Collectors.groupingBy(CalculatedShift::getDriverId));
+
+        long t3 = System.currentTimeMillis();
+        Map<String, ConductorInfo> infoConductores = obtenerInfoConductores();
+        long t4 = System.currentTimeMillis();
+        log.info("[ResumenSemanal] obtenerInfoConductores: {}ms", t4 - t3);
+
+        long t5 = System.currentTimeMillis();
+        List<DriverClose> todosCierres = driverCloseRepository.findByFechaBetween(inicio, fin);
+        long t6 = System.currentTimeMillis();
+        log.info("[ResumenSemanal] findByFechaBetween cierres: {}ms, {} cierres", t6 - t5, todosCierres.size());
+
+        Map<String, Map<LocalDate, DriverClose>> cierresPorConductor = new HashMap<>();
+        for (DriverClose c : todosCierres) {
+            if (c.getFecha() != null) {
+                cierresPorConductor
+                    .computeIfAbsent(c.getDriverId(), k -> new HashMap<>())
+                    .put(c.getFecha(), c);
+            }
+        }
+
+        long t7 = System.currentTimeMillis();
+        List<ResumenSemanalResponse.ConductorSemanalInfo> conductoresInfo = turnosPorConductor.entrySet().stream()
+            .map(e -> construirConductorSemanal(e.getKey(), e.getValue(), infoConductores,
+                cierresPorConductor.getOrDefault(e.getKey(), Map.of()), inicio, fin))
+            .collect(Collectors.toList());
+        long t8 = System.currentTimeMillis();
+        log.info("[ResumenSemanal] construir conductores: {}ms, {} conductores", t8 - t7, conductoresInfo.size());
+
+        int totalViajes = conductoresInfo.stream().mapToInt(ResumenSemanalResponse.ConductorSemanalInfo::getTotalViajes).sum();
+        double totalProduccion = conductoresInfo.stream().mapToDouble(ResumenSemanalResponse.ConductorSemanalInfo::getMontoTotalProducido).sum();
+        double totalComision = conductoresInfo.stream().mapToDouble(ResumenSemanalResponse.ConductorSemanalInfo::getComisionApp).sum();
+        double totalCombustible = conductoresInfo.stream().mapToDouble(ResumenSemanalResponse.ConductorSemanalInfo::getGastoCombustible).sum();
+        double totalPagar = conductoresInfo.stream().mapToDouble(ResumenSemanalResponse.ConductorSemanalInfo::getPagoTotal).sum();
+        double totalPagado = conductoresInfo.stream().mapToDouble(ResumenSemanalResponse.ConductorSemanalInfo::getTotalPagado).sum();
+        double totalBonos = conductoresInfo.stream().mapToDouble(ResumenSemanalResponse.ConductorSemanalInfo::getBono).sum();
+        double totalUtilidad = conductoresInfo.stream().mapToDouble(ResumenSemanalResponse.ConductorSemanalInfo::getUtilidad).sum();
+        int totalTurnos = conductoresInfo.stream().mapToInt(c -> c.getDatosPorDia() != null
+            ? c.getDatosPorDia().stream().mapToInt(ResumenSemanalResponse.DiaSemanalInfo::getCantidadTurnos).sum() : 0).sum();
+
+        long t9 = System.currentTimeMillis();
+        log.info("[ResumenSemanal] TOTAL: {}ms", t9 - t0);
+
+        ResumenSemanalResponse response = ResumenSemanalResponse.builder()
+            .fechaInicio(inicio.toString()).fechaFin(fin.toString())
+            .totalConductores(conductoresInfo.size())
+            .totalViajes(totalViajes).totalProduccion(round2(totalProduccion))
+            .totalComision(round2(totalComision)).totalCombustible(round2(totalCombustible))
+            .totalPagar(round2(totalPagar)).totalPagado(round2(totalPagado))
+            .totalPendiente(round2(Math.max(0, totalPagar - totalPagado)))
+            .totalBonos(round2(totalBonos)).totalUtilidad(round2(totalUtilidad))
+            .totalTurnos(totalTurnos)
+            .conductores(conductoresInfo)
+            .build();
+
+        resumenSemanalCache.put(cacheKey, CachedResponse.of(response, RESUMEN_SEMANAL_CACHE_TTL_MS));
+        return response;
+    }
+
+    private ResumenSemanalResponse.ConductorSemanalInfo construirConductorSemanal(
+            String driverId, List<CalculatedShift> turnos, Map<String, ConductorInfo> infoConductores,
+            Map<LocalDate, DriverClose> cierresPorFecha, LocalDate inicio, LocalDate fin) {
+
+        ConductorInfo info = infoConductores.getOrDefault(driverId, ConductorInfo.EMPTY);
+
+        int totalViajes = 0;
+        int viajesValidos = 0;
+        double horasTrabajo = 0;
+        double montoTotalProducido = 0;
+        double comisionApp = 0;
+        double kmRecorrido = 0;
+        double gastoCombustible = 0;
+        double totalPagadoAcumulado = 0;
+        int diasTrabajados = 0;
+        int diasLiquidados = 0;
+        int diurnoCount = 0;
+        int nocturnoCount = 0;
+
+        Map<LocalDate, List<CalculatedShift>> turnosPorFecha = turnos.stream()
+            .collect(Collectors.groupingBy(CalculatedShift::getFecha));
+
+        List<ResumenSemanalResponse.DiaSemanalInfo> datosPorDia = new ArrayList<>();
+
+        for (LocalDate dia = inicio; !dia.isAfter(fin); dia = dia.plusDays(1)) {
+            List<CalculatedShift> turnosDia = turnosPorFecha.getOrDefault(dia, List.of());
+            if (turnosDia.isEmpty()) continue;
+
+            diasTrabajados++;
+            int viajesDia = turnosDia.stream().mapToInt(t -> t.getCantidadViajes() != null ? t.getCantidadViajes() : 0).sum();
+            double prodDia = sumarProduccionTotal(turnosDia);
+            double comisionDia = sumarComisionesServicio(turnosDia);
+            double horasDia = turnosDia.stream().mapToInt(t -> t.getDuracionMinutos() != null ? t.getDuracionMinutos() : 0).sum() / 60.0;
+
+            totalViajes += viajesDia;
+            viajesValidos += viajesDia;
+            montoTotalProducido += prodDia;
+            comisionApp += comisionDia;
+            horasTrabajo += horasDia;
+
+            for (CalculatedShift t : turnosDia) {
+                if (t.getTipoTurno() == CalculatedShift.TipoTurno.manana) diurnoCount++;
+                if (t.getTipoTurno() == CalculatedShift.TipoTurno.tarde) nocturnoCount++;
+            }
+
+            double montoPagarDia = calcularMontoTotalPagar(turnosDia);
+            double montoPagadoDia = turnosDia.stream()
+                .filter(t -> Boolean.TRUE.equals(t.getPagado()))
+                .mapToDouble(t -> t.getMontoTotal() != null ? t.getMontoTotal() : 0.0).sum();
+            totalPagadoAcumulado += montoPagadoDia;
+
+            DriverClose cierre = cierresPorFecha.get(dia);
+            double combustibleDia = 0;
+            double liquidaEfectivo = 0;
+            double liquidaYape = 0;
+            double otrosGastos = 0;
+            Integer odometroInicial = null;
+            Integer odometroFinal = null;
+            double kmDia = 0;
+            boolean liquidado = false;
+
+            if (cierre != null) {
+                combustibleDia = toDouble(cierre.getGnvSoles()) + toDouble(cierre.getGasolinaSoles());
+                liquidaEfectivo = toDouble(cierre.getLiquidaEfectivo());
+                liquidaYape = toDouble(cierre.getLiquidaYape());
+                otrosGastos = toDouble(cierre.getOtrosGastos());
+                odometroInicial = cierre.getOdometroInicial();
+                odometroFinal = cierre.getOdometroFinal();
+                if (odometroInicial != null && odometroFinal != null && odometroFinal > odometroInicial) {
+                    kmDia = odometroFinal - odometroInicial;
+                }
+                gastoCombustible += combustibleDia;
+                kmRecorrido += kmDia;
+                diasLiquidados++;
+                liquidado = true;
+            }
+
+            String diaNombre = DIAS_SEMANA[dia.getDayOfWeek().getValue() - 1];
+            StringBuilder tiposBuilder = new StringBuilder();
+            for (CalculatedShift t : turnosDia) {
+                if (tiposBuilder.length() > 0) tiposBuilder.append(", ");
+                tiposBuilder.append(t.getTipoTurno() == CalculatedShift.TipoTurno.manana ? "D" : "N");
+            }
+            String turnosTipo = tiposBuilder.toString();
+
+            datosPorDia.add(ResumenSemanalResponse.DiaSemanalInfo.builder()
+                .fecha(dia.toString()).diaSemana(diaNombre)
+                .cantidadViajes(viajesDia).cantidadTurnos(turnosDia.size())
+                .turnosTipo(turnosTipo)
+                .produccionTotal(round2(prodDia)).comisionesServicio(round2(comisionDia))
+                .montoTotalPagar(round2(montoPagarDia)).montoTotalPagado(round2(montoPagadoDia))
+                .gastoCombustible(round2(combustibleDia))
+                .liquidaEfectivo(round2(liquidaEfectivo)).liquidaYape(round2(liquidaYape))
+                .otrosGastos(round2(otrosGastos))
+                .odometroInicial(odometroInicial).odometroFinal(odometroFinal)
+                .kmRecorrido(round2(kmDia)).liquidado(liquidado)
+                .build());
+        }
+
+        String placa = turnos.stream()
+            .map(CalculatedShift::getPlaca).filter(p -> p != null && !p.isEmpty())
+            .findFirst()
+            .orElseGet(() -> cierresPorFecha.values().stream()
+                .map(DriverClose::getPlaca).filter(p -> p != null && !p.isEmpty())
+                .findFirst().orElse(null));
+
+        double montoNeto = round2(montoTotalProducido - comisionApp);
+        double tph = horasTrabajo > 0 ? round2(totalViajes / horasTrabajo) : 0;
+        double gastoMantenimiento = round2(kmRecorrido * 0.15);
+        double bonoYangoAcum = 0;
+        double produccionBonificable = round2(montoNeto + bonoYangoAcum - (gastoCombustible + gastoMantenimiento));
+        int bonoAdicViajes = calcularBonoAdic(totalViajes, inicio);
+        double bono = round2(produccionBonificable - bonoAdicViajes);
+        double porcentajePago = calcularPorcentaje(viajesValidos, inicio);
+        double pago = round2(bono * porcentajePago);
+        double pagoTotal = round2(pago + bonoAdicViajes);
+        double utilidad = round2(pagoTotal - bono);
+        double utilidadPorViaje = totalViajes > 0 ? round2(utilidad / totalViajes) : 0;
+        double pagoPorViaje = totalViajes > 0 ? round2(pagoTotal / totalViajes) : 0;
+
+        String turno;
+        if (diurnoCount > 0 && nocturnoCount == 0) turno = "diurno";
+        else if (nocturnoCount > 0 && diurnoCount == 0) turno = "nocturno";
+        else if (diurnoCount > 0 && nocturnoCount > 0) turno = "D, N";
+        else turno = "diurno";
+
+        boolean completamenteLiquidado = montoTotalProducido > 0 && diasLiquidados >= diasTrabajados;
+
+        return ResumenSemanalResponse.ConductorSemanalInfo.builder()
+            .driverId(driverId).avatarUrl(info.avatarUrl()).nombre(info.nombre())
+            .telefono(info.telefono()).placa(placa).turno(turno)
+            .diasTrabajados(diasTrabajados).diasLiquidados(diasLiquidados)
+            .totalViajes(totalViajes).viajesValidos(viajesValidos)
+            .horasTrabajo(round2(horasTrabajo)).tph(tph)
+            .montoTotalProducido(round2(montoTotalProducido)).comisionApp(round2(comisionApp))
+            .montoNeto(montoNeto).kmRecorrido(round2(kmRecorrido))
+            .gastoCombustible(round2(gastoCombustible))
+            .bonoYango(bonoYangoAcum)
+            .gastoMantenimiento(gastoMantenimiento)
+            .produccionBonificable(produccionBonificable)
+            .bonoAdicViajes(bonoAdicViajes).bono(bono)
+            .porcentajePago(porcentajePago).pago(pago)
+            .pagoTotal(pagoTotal)
+            .totalPagado(round2(totalPagadoAcumulado))
+            .utilidad(utilidad).utilidadPorViaje(utilidadPorViaje).pagoPorViaje(pagoPorViaje)
+            .completamenteLiquidado(completamenteLiquidado)
+            .datosPorDia(datosPorDia)
+            .build();
+    }
+
+    private int calcularBonoAdic(int totalViajes, LocalDate fechaReferencia) {
+        List<BonusThreshold> thresholds = bonusThresholdRepository.findApplicableForDate(fechaReferencia);
+        for (BonusThreshold t : thresholds) {
+            if (totalViajes >= t.getMinTrips()) return t.getBonusAmount().intValue();
+        }
+        return 0;
+    }
+
+    private double calcularPorcentaje(int viajesValidos, LocalDate fechaReferencia) {
+        List<PaymentPercentage> percentages = paymentPercentageRepository.findApplicableForDate(fechaReferencia);
+        for (PaymentPercentage p : percentages) {
+            if (viajesValidos >= p.getMinValidatedTrips()) return p.getPercentage();
+        }
+        return 0.2;
+    }
+
+    private static double toDouble(BigDecimal value) {
+        return value != null ? value.doubleValue() : 0.0;
+    }
+
+    private static BigDecimal toBigDecimal(double value) {
+        return BigDecimal.valueOf(round2(value));
+    }
+
+    private static BigDecimal toBigDecimal(int value) {
+        return BigDecimal.valueOf(value);
+    }
+
+    @Override
+    public FacturacionSemanal registrarFacturacionSemanal(FacturacionSemanal facturacion) {
+        Optional<FacturacionSemanal> existente = facturacionSemanalRepository
+            .findByDriverIdAndFechaInicioAndFechaFin(
+                facturacion.getDriverId(), facturacion.getFechaInicio(), facturacion.getFechaFin());
+
+        if (existente.isPresent()) {
+            FacturacionSemanal existing = existente.get();
+            facturacion.setId(existing.getId());
+            if (facturacion.getUserId() != null) {
+                existing.setUserId(facturacion.getUserId());
+            }
+            if (!"pagado".equals(existing.getEstado())) {
+                existing.setEstado("pagado");
+            }
+            existing.setPagoTotal(facturacion.getPagoTotal());
+            existing.setUtilidad(facturacion.getUtilidad());
+            existing.setBono(facturacion.getBono());
+            existing.setPago(facturacion.getPago());
+            existing.setDiasLiquidados(facturacion.getDiasLiquidados());
+            existing.setDiasTrabajados(facturacion.getDiasTrabajados());
+            existing.setTotalViajes(facturacion.getTotalViajes());
+            existing.setMontoTotalProducido(facturacion.getMontoTotalProducido());
+            existing.setComisionApp(facturacion.getComisionApp());
+            existing.setMontoNeto(facturacion.getMontoNeto());
+            existing.setGastoCombustible(facturacion.getGastoCombustible());
+            existing.setGastoMantenimiento(facturacion.getGastoMantenimiento());
+            existing.setProduccionBonificable(facturacion.getProduccionBonificable());
+            existing.setBonoAdicViajes(facturacion.getBonoAdicViajes());
+            existing.setPorcentajePago(facturacion.getPorcentajePago());
+            existing.setHorasTrabajo(facturacion.getHorasTrabajo());
+            existing.setKmRecorrido(facturacion.getKmRecorrido());
+            existing.setViajesValidos(facturacion.getViajesValidos());
+            existing.setUtilidadPorViaje(facturacion.getUtilidadPorViaje());
+            existing.setPagoPorViaje(facturacion.getPagoPorViaje());
+            existing.setTurno(facturacion.getTurno());
+            return facturacionSemanalRepository.save(existing);
+        }
+
+        return facturacionSemanalRepository.save(facturacion);
+    }
+
+    @Override
+    public List<FacturacionSemanal> obtenerHistorialFacturacion(String fechaInicio, String fechaFin) {
+        LocalDate inicio = parsearFecha(fechaInicio);
+        LocalDate fin = parsearFecha(fechaFin);
+        if (inicio != null && fin != null && !inicio.isAfter(fin)) {
+            return facturacionSemanalRepository.findByRangoFechas(inicio, fin);
+        }
+        if (inicio != null && fin != null) {
+            return facturacionSemanalRepository.findByRangoFechas(fin, inicio);
+        }
+        return facturacionSemanalRepository.findAllByOrderByFechaInicioDesc();
+    }
+
+    @Override
+    public BillingConfigResponse obtenerConfiguracionBilling() {
+        return BillingConfigResponse.builder()
+            .bonusThresholds(bonusThresholdRepository.findAll())
+            .paymentPercentages(paymentPercentageRepository.findAll())
+            .build();
+    }
+
+    @Override
+    public BillingConfigResponse guardarConfiguracionBilling(BillingConfigResponse config, Long userId) {
+        if (config.getBonusThresholds() != null) {
+            config.getBonusThresholds().forEach(t -> {
+                if (t.getId() == null) t.setUpdatedBy(userId);
+                else t.setUpdatedBy(userId);
+            });
+            bonusThresholdRepository.saveAll(config.getBonusThresholds());
+        }
+        if (config.getPaymentPercentages() != null) {
+            config.getPaymentPercentages().forEach(p -> p.setUpdatedBy(userId));
+            paymentPercentageRepository.saveAll(config.getPaymentPercentages());
+        }
+        return obtenerConfiguracionBilling();
     }
 }
