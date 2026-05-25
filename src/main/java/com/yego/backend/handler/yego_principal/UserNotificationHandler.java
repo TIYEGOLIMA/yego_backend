@@ -104,6 +104,23 @@ public class UserNotificationHandler {
     }
     
     /**
+     * Enviar notificación de nueva versión disponible a todas las sesiones activas
+     */
+    public void enviarNuevaVersionDisponible(String version) {
+        log.info("🔄 [UserNotificationHandler] Enviando notificación de nueva versión: {}", version);
+
+        Map<String, Object> notification = Map.of(
+            "type", "NEW_VERSION_AVAILABLE",
+            "version", version,
+            "message", "Hay una nueva versión del sistema disponible (" + version + "). Recarga la página para aplicar los cambios.",
+            "timestamp", LocalDateTime.now().toString()
+        );
+
+        filteredWebSocketService.convertAndSend("/topic/system", notification);
+        log.info("✅ [UserNotificationHandler] Notificación de nueva versión enviada a todas las sesiones");
+    }
+
+    /**
      * Obtener mensaje descriptivo para la acción
      */
     private String getActionMessage(String action, String username) {

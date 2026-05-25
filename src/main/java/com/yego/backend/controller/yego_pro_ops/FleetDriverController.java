@@ -14,6 +14,7 @@ import com.yego.backend.entity.yego_pro_ops.api.response.ResumenSemanalResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
+import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
 import com.yego.backend.entity.yego_pro_ops.entities.FacturacionSemanal;
 import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
@@ -119,7 +120,21 @@ public class FleetDriverController {
     public CompletableFuture<Map<String, Object>> calcularTurnosManualmente(
             @RequestParam String driverId,
             @RequestParam String fecha) {
-        return calculatedShiftService.calcularTurnosAsync(driverId, fecha)
+        return calcularTurnosFuture(driverId, fecha, false);
+    }
+
+    @PostMapping("/driver/recalcular-turnos")
+    public CompletableFuture<Map<String, Object>> recalcularTurnos(
+            @RequestParam String driverId,
+            @RequestParam String fecha) {
+        return calcularTurnosFuture(driverId, fecha, true);
+    }
+
+    private CompletableFuture<Map<String, Object>> calcularTurnosFuture(String driverId, String fecha, boolean recalcular) {
+        CompletableFuture<List<CalculatedShift>> turnosFuture = recalcular
+            ? calculatedShiftService.recalcularTurnos(driverId, fecha)
+            : calculatedShiftService.calcularTurnosAsync(driverId, fecha);
+        return turnosFuture
             .handle((turnos, error) -> {
                 if (error != null) {
                     Throwable causa = error instanceof CompletionException && error.getCause() != null

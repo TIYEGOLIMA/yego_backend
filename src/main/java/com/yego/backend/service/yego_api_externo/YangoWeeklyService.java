@@ -57,6 +57,7 @@ public class YangoWeeklyService {
     private static final DateTimeFormatter DAY = DateTimeFormatter.ISO_LOCAL_DATE;
 
     private static final String OBJECTIVE_BONUS_DESC = "Bonificación por cumplir objetivo";
+    static final String DEFAULT_PARK_ID = YangoClient.DEFAULT_PARK_ID;
 
     private final YangoClient yangoClient;
     private final ObjectMapper objectMapper;
@@ -168,6 +169,61 @@ public class YangoWeeklyService {
                 .activeGoals(goals.active)
                 .previousGoals(goals.previous)
                 .build();
+    }
+
+    /**
+     * Obtiene únicamente la bonificación semanal corregida para un conductor.
+     * Realiza dos llamadas en paralelo: tarjeta income (platform_bonus) y listado de
+     * transacciones (para restar «Bonificación por cumplir objetivo»).
+     *
+     * @return Optional con el valor corregido de bonificación, o {@code Optional.empty()} si falla.
+     */
+    public Optional<Double> fetchCorrectedWeeklyBonus(String driverProfileId, String parkId,
+                                                       String dateFrom, String dateTo) {
+        Optional<YangoIncomeSummary> summary =
+                fetchCorrectedWeeklyIncomeSummary(driverProfileId, parkId, dateFrom, dateTo);
+        return summary.map(YangoIncomeSummary::getBonificacion);
+    }
+
+    /**
+     * Obtiene el resumen de ingresos semanal completo con la bonificación ya corregida
+     * (restando «Bonificación por cumplir objetivo» del platform_bonus de la tarjeta income).
+     *
+     * @return Optional con el YangoIncomeSummary corregido, o {@code Optional.empty()} si falla.
+     */
+    public Optional<YangoIncomeSummary> fetchCorrectedWeeklyIncomeSummary(
+            String driverProfileId, String parkId, String dateFrom, String dateTo) {
+        PeriodRange week = new PeriodRange(dateFrom, dateTo);
+        String pid = parkId != null && !parkId.isBlank() ? parkId.trim() : DEFAULT_PARK_ID;
+
+        CompletableFuture<YangoIncomeSummary> incomeFuture =
+                CompletableFuture.supplyAsync(() -> fetchIncome(driverProfileId, week, pid), YANGO_IO);
+
+        CompletableFuture<Optional<Double>> subtractFuture =
+                CompletableFuture.supplyAsync(
+                        () -> tryFetchSumAmountBonificacionCumplirObjetivo(driverProfileId, pid, week),
+                        YANGO_IO);
+
+        CompletableFuture.allOf(incomeFuture, subtractFuture).join();
+
+        YangoIncomeSummary weeklyIncome = incomeFuture.join();
+        if (weeklyIncome == null) {
+            return Optional.empty();
+        }
+
+        Optional<Double> restaBonifObjetivo = subtractFuture.join();
+        if (restaBonifObjetivo.isPresent()) {
+            double bonifTarjeta = d0(weeklyIncome.getBonificacion());
+            double resta = restaBonifObjetivo.get();
+            double nuevaBonif = r2(bonifTarjeta - resta);
+            log.info(
+                    "[YangoWeeklyService] fetchCorrectedWeeklyIncomeSummary driver={} platform_bonus={} - resta={} → {}",
+                    driverProfileId, bonifTarjeta, resta, nuevaBonif);
+            return Optional.of(withWeeklyBonificacionOnly(weeklyIncome, nuevaBonif));
+        }
+        log.debug("[YangoWeeklyService] fetchCorrectedWeeklyIncomeSummary driver={} sin transacciones, usando tarjeta tal cual",
+                driverProfileId);
+        return Optional.of(weeklyIncome);
     }
 
     // ── resolvers ──

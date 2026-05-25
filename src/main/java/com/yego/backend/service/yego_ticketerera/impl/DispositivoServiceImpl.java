@@ -42,9 +42,6 @@ public class DispositivoServiceImpl implements DispositivoService {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    @Value("${jwt.expiration:28800}")
-    private Long jwtExpiration;
-
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
@@ -263,7 +260,6 @@ public class DispositivoServiceImpl implements DispositivoService {
     }
 
     private String generarJwtDispositivo(Dispositivo dispositivo) {
-        long expirationMs = jwtExpiration * 1000L;
         return Jwts.builder()
                 .claim("dispositivoId", dispositivo.getId())
                 .claim("sedeId", dispositivo.getSedeId())
@@ -271,7 +267,6 @@ public class DispositivoServiceImpl implements DispositivoService {
                 .claim("moduleId", dispositivo.getModuleId())
                 .claim("tokenVersion", dispositivo.getTokenVersion() != null ? dispositivo.getTokenVersion() : 0)
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(getSigningKey())
                 .compact();
     }

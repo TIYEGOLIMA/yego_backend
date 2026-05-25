@@ -53,5 +53,10 @@ public interface CalculatedShiftRepository extends JpaRepository<CalculatedShift
 
     @Query("SELECT c FROM CalculatedShift c WHERE c.fecha BETWEEN :inicio AND :fin ORDER BY c.driverId ASC, c.fecha ASC")
     List<CalculatedShift> findByFechaBetween(@Param("inicio") LocalDate inicio, @Param("fin") LocalDate fin);
+
+    @Transactional
+    @Modifying(clearAutomatically = true)
+    @Query("DELETE FROM CalculatedShift c WHERE c.driverId = :driverId AND c.fecha = :fecha")
+    int deleteByDriverIdAndFecha(@Param("driverId") String driverId, @Param("fecha") LocalDate fecha);
 }
 

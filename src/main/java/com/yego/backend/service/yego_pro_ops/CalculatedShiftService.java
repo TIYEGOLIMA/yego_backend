@@ -25,6 +25,8 @@ public interface CalculatedShiftService {
 
     CompletableFuture<List<CalculatedShift>> calcularTurnosAsync(String driverId, String fecha);
 
+    CompletableFuture<List<CalculatedShift>> recalcularTurnos(String driverId, String fecha);
+
     void invalidarCacheDetalle(String fecha);
 
     ResumenSemanalResponse obtenerResumenSemanal(String fechaInicio, String fechaFin);
