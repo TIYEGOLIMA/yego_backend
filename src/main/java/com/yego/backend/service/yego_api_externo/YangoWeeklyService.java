@@ -226,6 +226,30 @@ public class YangoWeeklyService {
         return Optional.of(weeklyIncome);
     }
 
+    /**
+     * Obtiene el resumen de ingresos semanal completo TAL CUAL lo reporta Yango,
+     * sin restar ningún concepto. Útil para facturación donde el bono se cuenta completo.
+     *
+     * @return Optional con el YangoIncomeSummary crudo, o {@code Optional.empty()} si falla.
+     */
+    public Optional<YangoIncomeSummary> fetchWeeklyIncomeSummary(
+            String driverProfileId, String parkId, String dateFrom, String dateTo) {
+        PeriodRange week = new PeriodRange(dateFrom, dateTo);
+        String pid = parkId != null && !parkId.isBlank() ? parkId.trim() : DEFAULT_PARK_ID;
+        try {
+            YangoIncomeSummary income = fetchIncome(driverProfileId, week, pid);
+            if (income != null) {
+                log.info("[YangoWeeklyService] fetchWeeklyIncomeSummary driver={} platform_bonus={} cash={}",
+                        driverProfileId, income.getBonificacion(), income.getCashCollected());
+            }
+            return Optional.ofNullable(income);
+        } catch (Exception e) {
+            log.warn("[YangoWeeklyService] fetchWeeklyIncomeSummary driver={} error: {}",
+                    driverProfileId, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
     // ── resolvers ──
 
     /**

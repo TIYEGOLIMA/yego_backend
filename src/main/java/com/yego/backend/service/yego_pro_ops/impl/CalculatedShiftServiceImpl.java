@@ -12,6 +12,8 @@ import com.yego.backend.entity.yego_pro_ops.entities.BonusThreshold;
 import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
 import com.yego.backend.entity.yego_pro_ops.entities.FacturacionSemanal;
+import com.yego.backend.entity.yego_pro_ops.entities.WeeklyIncome;
+import com.yego.backend.repository.yego_pro_ops.WeeklyIncomeRepository;
 import com.yego.backend.entity.yego_pro_ops.entities.PaymentPercentage;
 import com.yego.backend.repository.yego_pro_ops.BonusThresholdRepository;
 import com.yego.backend.repository.yego_pro_ops.CalculatedShiftRepository;
@@ -92,6 +94,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     private final DriverOrdersService driverOrdersService;
     private final FleetDriverService fleetDriverService;
     private final YangoWeeklyService yangoWeeklyService;
+    private final WeeklyIncomeRepository weeklyIncomeRepository;
     private final String parkId;
     private final ExecutorService shiftExecutor;
 
@@ -104,6 +107,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             @Lazy DriverOrdersService driverOrdersService,
             FleetDriverService fleetDriverService,
             YangoWeeklyService yangoWeeklyService,
+            WeeklyIncomeRepository weeklyIncomeRepository,
             @Value("${yego.yango.park-id:64085dd85e124e2c808806f70d527ea8}") String parkId) {
         this.calculatedShiftRepository = calculatedShiftRepository;
         this.driverCloseRepository = driverCloseRepository;
@@ -113,6 +117,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         this.driverOrdersService = driverOrdersService;
         this.fleetDriverService = fleetDriverService;
         this.yangoWeeklyService = yangoWeeklyService;
+        this.weeklyIncomeRepository = weeklyIncomeRepository;
         this.parkId = (parkId != null && !parkId.isBlank()) ? parkId.trim() : "64085dd85e124e2c808806f70d527ea8";
         this.shiftExecutor = Executors.newFixedThreadPool(SHIFT_EXECUTOR_THREADS, namedFactory("shift-worker"));
     }
@@ -1026,30 +1031,14 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         double produccionBonificable;
 
         if (incomeSummary != null) {
-            double prodSinBono = round2(
-                    d0(incomeSummary.getCashCollected())
-                    + d0(incomeSummary.getNonCashPayment())
-                    + d0(incomeSummary.getCorporate())
-                    + d0(incomeSummary.getPromotionCompensation())
-                    + d0(incomeSummary.getTips()));
             bonoYangoAcum = round2(d0(incomeSummary.getBonificacion()));
-            double comisionIncome = round2(Math.abs(d0(incomeSummary.getPlatformFees())));
-            double nuevoTotalProducido = prodSinBono;
-
-            if (Math.abs(nuevoTotalProducido - montoTotalProducido) > 0.01
-                    || Math.abs(comisionIncome - comisionApp) > 0.01) {
-                log.info("[ResumenSemanal] driver={} usando income card: prod={}→{} comision={}→{} bonoYango={}",
-                        driverId, montoTotalProducido, nuevoTotalProducido,
-                        comisionApp, comisionIncome, bonoYangoAcum);
-                montoTotalProducido = nuevoTotalProducido;
-                comisionApp = comisionIncome;
-            }
-            montoNeto = round2(montoTotalProducido - comisionApp);
+            log.info("[ResumenSemanal] driver={} bonoYango desde Fleet={} (platform_bonus corregido)",
+                    driverId, bonoYangoAcum);
         } else {
             bonoYangoAcum = 0;
-            montoNeto = round2(montoTotalProducido - comisionApp);
         }
 
+        montoNeto = round2(montoTotalProducido + comisionApp);
         double tph = horasTrabajo > 0 ? round2(totalViajes / horasTrabajo) : 0;
         double gastoMantenimiento = round2(kmRecorrido * 0.15);
         produccionBonificable = round2(montoNeto + bonoYangoAcum - (gastoCombustible + gastoMantenimiento));
@@ -1061,6 +1050,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         double utilidad = round2(pagoTotal - bono);
         double utilidadPorViaje = totalViajes > 0 ? round2(utilidad / totalViajes) : 0;
         double pagoPorViaje = totalViajes > 0 ? round2(pagoTotal / totalViajes) : 0;
+        double comisionAppAbs = round2(Math.abs(comisionApp));
 
         String turno;
         if (diurnoCount > 0 && nocturnoCount == 0) turno = "diurno";
@@ -1076,7 +1066,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             .diasTrabajados(diasTrabajados).diasLiquidados(diasLiquidados)
             .totalViajes(totalViajes).viajesValidos(viajesValidos)
             .horasTrabajo(round2(horasTrabajo)).tph(tph)
-            .montoTotalProducido(round2(montoTotalProducido)).comisionApp(round2(comisionApp))
+            .montoTotalProducido(round2(montoTotalProducido)).comisionApp(comisionAppAbs)
             .montoNeto(montoNeto).kmRecorrido(round2(kmRecorrido))
             .gastoCombustible(round2(gastoCombustible))
             .bonoYango(bonoYangoAcum)
@@ -1101,17 +1091,20 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     }
 
     /**
-     * Busca en paralelo el resumen de ingresos Yango corregido para cada conductor de la semana.
-     * Usa {@link YangoWeeklyService#fetchCorrectedWeeklyIncomeSummary}.
-     * Si falla para un conductor, se omite sin interrumpir al resto.
+     * Obtiene el income summary por conductor. Primero busca en BD (cache). Si no
+     * existe, consulta el Fleet y lo persiste para no recargar la misma semana.
      */
     private Map<String, YangoIncomeSummary> fetchIncomeSummariesEnParalelo(
             java.util.Set<String> driverIds, String fechaInicio, String fechaFin) {
         Map<String, YangoIncomeSummary> resultado = new java.util.concurrent.ConcurrentHashMap<>();
         if (driverIds == null || driverIds.isEmpty()) return resultado;
 
+        LocalDate inicio = parsearFecha(fechaInicio);
+        LocalDate fin = parsearFecha(fechaFin);
+        if (inicio == null || fin == null) return resultado;
+
         String dateFrom = fechaInicio + "T00:00:00-05:00";
-        String dateTo = fechaFin + "T23:59:59-05:00";
+        String dateTo = fin.plusDays(1) + "T23:59:59-05:00";
         String pid = this.parkId;
 
         java.util.List<CompletableFuture<Void>> futures = new java.util.ArrayList<>();
@@ -1119,8 +1112,19 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             if (driverId == null || driverId.isBlank()) continue;
             futures.add(CompletableFuture.runAsync(() -> {
                 try {
-                    yangoWeeklyService.fetchCorrectedWeeklyIncomeSummary(driverId, pid, dateFrom, dateTo)
-                            .ifPresent(summary -> resultado.put(driverId, summary));
+                    Optional<WeeklyIncome> cached = weeklyIncomeRepository
+                            .findByDriverIdAndFechaInicioAndFechaFin(driverId, inicio, fin);
+                    if (cached.isPresent()) {
+                        resultado.put(driverId, toIncomeSummary(cached.get()));
+                        return;
+                    }
+                    Optional<YangoIncomeSummary> fleet = yangoWeeklyService
+                            .fetchWeeklyIncomeSummary(driverId, pid, dateFrom, dateTo);
+                    if (fleet.isPresent()) {
+                        WeeklyIncome row = toWeeklyIncome(driverId, inicio, fin, fleet.get());
+                        weeklyIncomeRepository.save(row);
+                        resultado.put(driverId, fleet.get());
+                    }
                 } catch (Exception e) {
                     log.debug("[ResumenSemanal] incomeSummary falló para driver={}: {}",
                             driverId, e.getMessage());
@@ -1135,6 +1139,38 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         }
 
         return resultado;
+    }
+
+    private static WeeklyIncome toWeeklyIncome(String driverId, LocalDate inicio, LocalDate fin,
+                                                YangoIncomeSummary s) {
+        return WeeklyIncome.builder()
+                .driverId(driverId)
+                .fechaInicio(inicio)
+                .fechaFin(fin)
+                .bonificacion(toBigDecimal(d0(s.getBonificacion())))
+                .cashCollected(toBigDecimal(d0(s.getCashCollected())))
+                .nonCashPayment(toBigDecimal(d0(s.getNonCashPayment())))
+                .corporate(toBigDecimal(d0(s.getCorporate())))
+                .tips(toBigDecimal(d0(s.getTips())))
+                .promotionCompensation(toBigDecimal(d0(s.getPromotionCompensation())))
+                .platformFees(toBigDecimal(d0(s.getPlatformFees())))
+                .total(toBigDecimal(d0(s.getTotal())))
+                .priceYangoPro(toBigDecimal(d0(s.getPriceYangoPro())))
+                .build();
+    }
+
+    private static YangoIncomeSummary toIncomeSummary(WeeklyIncome w) {
+        return YangoIncomeSummary.builder()
+                .cashCollected(toDouble(w.getCashCollected()))
+                .nonCashPayment(toDouble(w.getNonCashPayment()))
+                .corporate(toDouble(w.getCorporate()))
+                .tips(toDouble(w.getTips()))
+                .promotionCompensation(toDouble(w.getPromotionCompensation()))
+                .bonificacion(toDouble(w.getBonificacion()))
+                .platformFees(toDouble(w.getPlatformFees()))
+                .total(toDouble(w.getTotal()))
+                .priceYangoPro(toDouble(w.getPriceYangoPro()))
+                .build();
     }
 
     private double calcularPorcentaje(int viajesValidos, LocalDate fechaReferencia) {
