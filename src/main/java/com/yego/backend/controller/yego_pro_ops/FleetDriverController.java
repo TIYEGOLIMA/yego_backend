@@ -23,6 +23,7 @@ import com.yego.backend.service.yego_pro_ops.FleetDriverService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -214,5 +215,25 @@ public class FleetDriverController {
             @Valid @RequestBody BillingConfigResponse config,
             @RequestParam Long userId) {
         return calculatedShiftService.guardarConfiguracionBilling(config, userId);
+    }
+
+    @GetMapping("/drivers/facturacion-semanal/exportar-asistencia")
+    public ResponseEntity<byte[]> exportarAsistenciaExcel(
+            @RequestParam String fechaInicio,
+            @RequestParam String fechaFin) {
+        byte[] excel = calculatedShiftService.exportarAsistenciaExcel(fechaInicio, fechaFin);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM);
+        headers.setContentDispositionFormData("attachment", "Asistencia_Yego_PRO_" + fechaInicio + "_" + fechaFin + ".xlsx");
+        headers.setContentLength(excel.length);
+        return ResponseEntity.ok().headers(headers).body(excel);
+    }
+
+    @PostMapping("/drivers/facturacion-semanal/guardar-snapshot")
+    public ResponseEntity<Map<String, Object>> guardarSnapshot(
+            @RequestParam String fechaInicio,
+            @RequestParam String fechaFin) {
+        int count = calculatedShiftService.guardarSnapshotSemanal(fechaInicio, fechaFin);
+        return ResponseEntity.ok(Map.of("guardados", count, "semana", fechaInicio + " / " + fechaFin));
     }
 }

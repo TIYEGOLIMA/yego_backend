@@ -38,4 +38,8 @@ public interface CalculatedShiftService {
     BillingConfigResponse obtenerConfiguracionBilling();
 
     BillingConfigResponse guardarConfiguracionBilling(BillingConfigResponse config, Long userId);
+
+    byte[] exportarAsistenciaExcel(String fechaInicio, String fechaFin);
+
+    int guardarSnapshotSemanal(String fechaInicio, String fechaFin);
 }

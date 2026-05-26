@@ -219,11 +219,68 @@ public class YangoWeeklyService {
             log.info(
                     "[YangoWeeklyService] fetchCorrectedWeeklyIncomeSummary driver={} platform_bonus={} - resta={} → {}",
                     driverProfileId, bonifTarjeta, resta, nuevaBonif);
-            return Optional.of(withWeeklyBonificacionOnly(weeklyIncome, nuevaBonif));
+            weeklyIncome = withWeeklyBonificacionOnly(weeklyIncome, nuevaBonif);
+        } else {
+            log.debug("[YangoWeeklyService] fetchCorrectedWeeklyIncomeSummary driver={} sin transacciones, usando tarjeta tal cual",
+                    driverProfileId);
         }
-        log.debug("[YangoWeeklyService] fetchCorrectedWeeklyIncomeSummary driver={} sin transacciones, usando tarjeta tal cual",
-                driverProfileId);
         return Optional.of(weeklyIncome);
+    }
+
+    public Optional<Double> fetchFirstBonusTransactionAmount(
+            String driverProfileId, String parkId, String date) {
+        PeriodRange range = new PeriodRange(
+                date + "T00:00:00-05:00",
+                date + "T23:59:59-05:00");
+        return tryFetchFirstBonusTransaction(driverProfileId, parkId, range);
+    }
+
+    private Optional<Double> tryFetchFirstBonusTransaction(
+            String driverProfileId, String parkId, PeriodRange range) {
+        Map<String, Object> txn = new LinkedHashMap<>();
+        txn.put("event_at", Map.of("from", range.dateFrom, "to", range.dateTo));
+        txn.put("category_ids", List.of("bonus", "bonus_discount", "platform_bonus_fee"));
+        Map<String, Object> park = new LinkedHashMap<>();
+        park.put("driver_profile", Map.of("id", driverProfileId));
+        park.put("transaction", txn);
+        Map<String, Object> query = new LinkedHashMap<>();
+        query.put("park", park);
+
+        String nextCursor = null;
+        try {
+            do {
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("query", query);
+                if (nextCursor != null && !nextCursor.isBlank()) {
+                    body.put("cursor", nextCursor);
+                }
+                String payload = objectMapper.writeValueAsString(body);
+                ResponseEntity<String> resp = yangoClient.postFleet(driverTransactionsListUrl, payload, parkId);
+                if (!resp.getStatusCode().is2xxSuccessful() || resp.getBody() == null) {
+                    return Optional.empty();
+                }
+                JsonNode root = objectMapper.readTree(resp.getBody());
+                JsonNode list = root.get("transactions");
+                if (list != null && list.isArray()) {
+                    for (JsonNode tx : list) {
+                        String desc = readTransactionDescription(tx);
+                        if (!isObjectiveCompletionBonusDescription(desc)) {
+                            continue;
+                        }
+                        double amount = readTransactionAmount(tx);
+                        if (amount > 100) {
+                            return Optional.of(amount);
+                        }
+                    }
+                }
+                nextCursor = root.hasNonNull("cursor") && root.get("cursor").isTextual()
+                        ? root.get("cursor").asText().trim() : "";
+                if (nextCursor.isBlank()) nextCursor = null;
+            } while (nextCursor != null);
+        } catch (Exception e) {
+            log.warn("[YangoWeeklyService] fetchFirstBonusTransaction error: {}", e.getMessage());
+        }
+        return Optional.empty();
     }
 
     /**

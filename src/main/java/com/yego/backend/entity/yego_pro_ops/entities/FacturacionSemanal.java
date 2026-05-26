@@ -84,8 +84,17 @@ public class FacturacionSemanal {
     @Column(name = "pago", precision = 12, scale = 2)
     private BigDecimal pago;
 
-    @Column(name = "descuento_yego", precision = 10, scale = 2)
-    private BigDecimal descuentoYego;
+    @Column(name = "bonificacion", precision = 10, scale = 2)
+    private BigDecimal bonificacion;
+
+    @Column(name = "garantia", precision = 10, scale = 2)
+    private BigDecimal garantia;
+
+    @Column(name = "descuento", precision = 10, scale = 2)
+    private BigDecimal descuento;
+
+    @Column(name = "general", length = 500)
+    private String general;
 
     @Column(name = "pago_total", precision = 12, scale = 2)
     private BigDecimal pagoTotal;

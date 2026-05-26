@@ -28,7 +28,7 @@ public class FacturacionSemanalScheduler {
      * Todos los lunes a las 8:00 AM (hora Lima) genera la facturación semanal
      * de la semana anterior y la guarda como pendiente de pago.
      */
-    @Scheduled(cron = "0 0 8 * * MON", zone = "America/Lima")
+    @Scheduled(cron = "0 0 10 * * MON", zone = "America/Lima")
     public void generarFacturacionSemanalAutomatica() {
         log.info("[FacturacionScheduler] Iniciando generación automática de facturación semanal");
         try {
