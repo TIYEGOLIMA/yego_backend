@@ -99,18 +99,23 @@ public class SacStatsServiceImpl implements SacStatsService {
             }
             totalTickets = ticketsEnRango.size();
 
-            totalRatings = queueRatingRepository.countByCreatedAtBetween(fechaInicioDT, fechaFinDT);
-            averageRating = queueRatingRepository.getAverageRatingByDateRange(fechaInicioDT, fechaFinDT);
+            if (sedeId != null) {
+                totalRatings = queueRatingRepository.countBySedeIdAndCreatedAtBetween(sedeId, fechaInicioDT, fechaFinDT);
+                averageRating = queueRatingRepository.getAverageRatingBySedeIdAndDateRange(sedeId, fechaInicioDT, fechaFinDT);
+            } else {
+                totalRatings = queueRatingRepository.countByCreatedAtBetween(fechaInicioDT, fechaFinDT);
+                averageRating = queueRatingRepository.getAverageRatingByDateRange(fechaInicioDT, fechaFinDT);
+            }
         } else {
             if (sedeId != null) {
-                totalTickets = ticketRepository.findAll().stream()
-                        .filter(t -> sedeId.equals(t.getSedeId()))
-                        .count();
+                totalTickets = ticketRepository.countBySedeId(sedeId);
+                totalRatings = queueRatingRepository.countBySedeId(sedeId);
+                averageRating = queueRatingRepository.getAverageRatingBySedeId(sedeId);
             } else {
                 totalTickets = ticketRepository.count();
+                totalRatings = queueRatingRepository.count();
+                averageRating = queueRatingRepository.getAverageRating();
             }
-            totalRatings = queueRatingRepository.count();
-            averageRating = queueRatingRepository.getAverageRating();
         }
         
         if (averageRating == null) {

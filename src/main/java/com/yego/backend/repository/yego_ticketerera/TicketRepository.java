@@ -48,4 +48,7 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     @Query("SELECT t FROM Ticket t WHERE t.sedeId = :sedeId AND t.status IN ('WAITING', 'CALLED', 'IN_PROGRESS') ORDER BY t.priority DESC, t.createdAt ASC")
     List<Ticket> findActiveTicketsBySede(@Param("sedeId") Long sedeId);
+
+    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.sedeId = :sedeId")
+    long countBySedeId(@Param("sedeId") Long sedeId);
 }

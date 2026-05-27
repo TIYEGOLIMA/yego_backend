@@ -38,4 +38,20 @@ public interface QueueRatingRepository extends JpaRepository<QueueRating, Long> 
     List<QueueRating> findRecentRatingsByDateRange(org.springframework.data.domain.Pageable pageable,
                                                    @Param("fechaInicio") LocalDateTime fechaInicio,
                                                    @Param("fechaFin") LocalDateTime fechaFin);
+
+    @Query("SELECT COUNT(qr) FROM QueueRating qr JOIN qr.ticket t WHERE t.sedeId = :sedeId")
+    long countBySedeId(@Param("sedeId") Long sedeId);
+
+    @Query("SELECT AVG(qr.score) FROM QueueRating qr JOIN qr.ticket t WHERE t.sedeId = :sedeId")
+    Double getAverageRatingBySedeId(@Param("sedeId") Long sedeId);
+
+    @Query("SELECT COUNT(qr) FROM QueueRating qr JOIN qr.ticket t WHERE t.sedeId = :sedeId AND qr.createdAt >= :fechaInicio AND qr.createdAt <= :fechaFin")
+    long countBySedeIdAndCreatedAtBetween(@Param("sedeId") Long sedeId,
+                                           @Param("fechaInicio") LocalDateTime fechaInicio,
+                                           @Param("fechaFin") LocalDateTime fechaFin);
+
+    @Query("SELECT AVG(qr.score) FROM QueueRating qr JOIN qr.ticket t WHERE t.sedeId = :sedeId AND qr.createdAt >= :fechaInicio AND qr.createdAt <= :fechaFin")
+    Double getAverageRatingBySedeIdAndDateRange(@Param("sedeId") Long sedeId,
+                                                 @Param("fechaInicio") LocalDateTime fechaInicio,
+                                                 @Param("fechaFin") LocalDateTime fechaFin);
 }
