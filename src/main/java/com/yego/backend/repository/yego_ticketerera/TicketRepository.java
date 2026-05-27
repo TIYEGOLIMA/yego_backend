@@ -51,4 +51,22 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     @Query("SELECT COUNT(t) FROM Ticket t WHERE t.sedeId = :sedeId")
     long countBySedeId(@Param("sedeId") Long sedeId);
+
+    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.createdAt >= :fechaInicio AND t.createdAt <= :fechaFin")
+    long countByCreatedAtBetween(@Param("fechaInicio") java.time.LocalDateTime fechaInicio,
+                                  @Param("fechaFin") java.time.LocalDateTime fechaFin);
+
+    @Query("SELECT COUNT(t) FROM Ticket t WHERE t.sedeId = :sedeId AND t.createdAt >= :fechaInicio AND t.createdAt <= :fechaFin")
+    long countBySedeIdAndCreatedAtBetween(@Param("sedeId") Long sedeId,
+                                           @Param("fechaInicio") java.time.LocalDateTime fechaInicio,
+                                           @Param("fechaFin") java.time.LocalDateTime fechaFin);
+
+    @Query("SELECT t FROM Ticket t WHERE t.createdAt >= :fechaInicio AND t.createdAt <= :fechaFin")
+    List<Ticket> findByCreatedAtBetween(@Param("fechaInicio") java.time.LocalDateTime fechaInicio,
+                                         @Param("fechaFin") java.time.LocalDateTime fechaFin);
+
+    @Query("SELECT t FROM Ticket t WHERE t.sedeId = :sedeId AND t.createdAt >= :fechaInicio AND t.createdAt <= :fechaFin")
+    List<Ticket> findBySedeIdAndCreatedAtBetween(@Param("sedeId") Long sedeId,
+                                                  @Param("fechaInicio") java.time.LocalDateTime fechaInicio,
+                                                  @Param("fechaFin") java.time.LocalDateTime fechaFin);
 }

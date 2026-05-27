@@ -90,19 +90,12 @@ public class SacStatsServiceImpl implements SacStatsService {
         Double averageRating;
         
         if (tieneFiltroFecha) {
-            List<Long> userIds = sacUsers.stream().map(User::getId).collect(Collectors.toList());
-            List<Ticket> ticketsEnRango = ticketRepository.findByUserIdInAndCreatedAtBetween(userIds, fechaInicioDT, fechaFinDT);
             if (sedeId != null) {
-                ticketsEnRango = ticketsEnRango.stream()
-                        .filter(t -> sedeId.equals(t.getSedeId()))
-                        .collect(Collectors.toList());
-            }
-            totalTickets = ticketsEnRango.size();
-
-            if (sedeId != null) {
+                totalTickets = ticketRepository.countBySedeIdAndCreatedAtBetween(sedeId, fechaInicioDT, fechaFinDT);
                 totalRatings = queueRatingRepository.countBySedeIdAndCreatedAtBetween(sedeId, fechaInicioDT, fechaFinDT);
                 averageRating = queueRatingRepository.getAverageRatingBySedeIdAndDateRange(sedeId, fechaInicioDT, fechaFinDT);
             } else {
+                totalTickets = ticketRepository.countByCreatedAtBetween(fechaInicioDT, fechaFinDT);
                 totalRatings = queueRatingRepository.countByCreatedAtBetween(fechaInicioDT, fechaFinDT);
                 averageRating = queueRatingRepository.getAverageRatingByDateRange(fechaInicioDT, fechaFinDT);
             }
