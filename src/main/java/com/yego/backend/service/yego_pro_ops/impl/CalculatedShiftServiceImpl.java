@@ -363,16 +363,17 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                             }
                         }
                     } catch (Exception ignored) {}
-                    return new ViajeTemporal(t, endedAt, bookedAt);
+                    return new ViajeTemporal(t, endedAt, bookedAt != null ? bookedAt : endedAt);
                 })
                 .filter(v -> v.endedAt != null && v.bookedAt != null)
-                .sorted(Comparator.comparing(v -> v.endedAt))
+                .sorted(Comparator.comparing(v -> v.bookedAt))
                 .collect(Collectors.toList());
 
             if (viajes.isEmpty()) {
                 return turnos;
             }
 
+            int horaInicioDiurno = 6;
             int horaCorte = 17;
             CalculatedShift.TipoTurno tipoActual = null;
             LocalDateTime horaInicio = null;
@@ -385,7 +386,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
 
             for (ViajeTemporal v : viajes) {
                 int hora = v.endedAt.getHour();
-                CalculatedShift.TipoTurno tipoViaje = hora < horaCorte
+                CalculatedShift.TipoTurno tipoViaje = (hora >= horaInicioDiurno && hora < horaCorte)
                     ? CalculatedShift.TipoTurno.diurno : CalculatedShift.TipoTurno.nocturno;
 
                 if (tipoActual == null) {
@@ -431,7 +432,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             LocalDateTime horaInicio, LocalDateTime horaFin, int cantidadViajes,
             double produccionTotal, double comisionesServicio, double montoTotal, double efectivoTotal, String placa) {
         int duracionMinutos = horaInicio != null && horaFin != null
-            ? (int) java.time.Duration.between(horaInicio, horaFin).toMinutes()
+            ? Math.max(0, (int) java.time.Duration.between(horaInicio, horaFin).toMinutes())
             : 0;
 
         return CalculatedShift.builder()
