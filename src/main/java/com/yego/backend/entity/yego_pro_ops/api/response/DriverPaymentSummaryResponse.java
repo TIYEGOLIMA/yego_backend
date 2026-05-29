@@ -85,6 +85,12 @@ public class DriverPaymentSummaryResponse {
         @JsonProperty("monto_total")
         private Double montoTotal;
 
+        @JsonProperty("produccion_total")
+        private Double produccionTotal;
+
+        @JsonProperty("efectivo_total")
+        private Double efectivoTotal;
+
         @JsonProperty("pagado")
         private Boolean pagado;
     }

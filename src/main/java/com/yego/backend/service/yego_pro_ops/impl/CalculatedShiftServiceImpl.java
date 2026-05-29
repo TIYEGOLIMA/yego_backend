@@ -21,6 +21,7 @@ import com.yego.backend.repository.yego_pro_ops.DriverCloseRepository;
 import com.yego.backend.repository.yego_pro_ops.FacturacionSemanalRepository;
 import com.yego.backend.repository.yego_pro_ops.PaymentPercentageRepository;
 import com.yego.backend.repository.yego_pro_ops.WeeklyIncomeRepository;
+import com.yego.backend.repository.yego_garantizado.DriverRepository;
 import com.yego.backend.service.yego_api_externo.YangoWeeklyService;
 import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
@@ -84,6 +85,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     private final BonusThresholdRepository bonusThresholdRepository;
     private final WeeklyIncomeRepository weeklyIncomeRepository;
     private final DriverCloseRepository driverCloseRepository;
+    private final DriverRepository driverRepository;
     private final FleetDriverService fleetDriverService;
     private final DriverOrdersService driverOrdersService;
     private final YangoWeeklyService yangoWeeklyService;
@@ -99,6 +101,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             BonusThresholdRepository bonusThresholdRepository,
             WeeklyIncomeRepository weeklyIncomeRepository,
             DriverCloseRepository driverCloseRepository,
+            DriverRepository driverRepository,
             FleetDriverService fleetDriverService,
             DriverOrdersService driverOrdersService,
             YangoWeeklyService yangoWeeklyService) {
@@ -108,6 +111,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
         this.bonusThresholdRepository = bonusThresholdRepository;
         this.weeklyIncomeRepository = weeklyIncomeRepository;
         this.driverCloseRepository = driverCloseRepository;
+        this.driverRepository = driverRepository;
         this.fleetDriverService = fleetDriverService;
         this.driverOrdersService = driverOrdersService;
         this.yangoWeeklyService = yangoWeeklyService;
@@ -213,6 +217,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
 
             double produccionTotal = turnosConductor.stream()
                 .mapToDouble(t -> t.getProduccionTotal() != null ? t.getProduccionTotal() : 0).sum();
+            double efectivoTotal = turnosConductor.stream()
+                .mapToDouble(t -> t.getEfectivoTotal() != null ? t.getEfectivoTotal() : 0).sum();
             double comisionesServicio = turnosConductor.stream()
                 .mapToDouble(t -> t.getComisionesServicio() != null ? t.getComisionesServicio() : 0).sum();
             int cantidadViajes = turnosConductor.stream()
@@ -232,6 +238,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                     .tipoTurno(t.getTipoTurno().name())
                     .duracionMinutos(t.getDuracionMinutos())
                     .montoTotal(t.getMontoTotal())
+                    .produccionTotal(t.getProduccionTotal())
+                    .efectivoTotal(t.getEfectivoTotal())
                     .pagado(t.getPagado())
                     .build())
                 .collect(Collectors.toList());
@@ -242,7 +250,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                 .nombre(info != null ? info.getNombre() : null)
                 .telefono(info != null ? info.getTelefono() : null)
                 .placa(turnosConductor.get(0).getPlaca())
-                .montoTotalPagar(round2(produccionTotal))
+                .montoTotalPagar(round2(efectivoTotal))
                 .produccionTotal(round2(produccionTotal))
                 .comisionesServicio(round2(comisionesServicio))
                 .cantidadTurnos(turnosConductor.size())
@@ -303,19 +311,25 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             calculatedShiftRepository.deleteByDriverIdAndFecha(driverId, fechaLocal);
             turnosPorFechaCache.remove(fecha);
             resumenPagosCache.remove(fecha);
-            return calcularTurnosSync(driverId, fecha);
+            return calcularTurnosSync(driverId, fecha, true);
         }, executorService);
     }
 
     private List<CalculatedShift> calcularTurnosSync(String driverId, String fecha) {
+        return calcularTurnosSync(driverId, fecha, false);
+    }
+
+    private List<CalculatedShift> calcularTurnosSync(String driverId, String fecha, boolean forzar) {
         LocalDate fechaLocal = LocalDate.parse(fecha, DATE_FORMATTER);
 
         List<CalculatedShift> existentes = calculatedShiftRepository.findByDriverIdAndFecha(driverId, fechaLocal);
-        if (!existentes.isEmpty()) {
+        if (!forzar && !existentes.isEmpty()) {
             return existentes;
         }
 
         List<CalculatedShift> turnos = new ArrayList<>();
+
+        String placa = driverRepository.findCarNumberByDriverId(driverId).orElse("");
 
         try {
             String dateFrom = fechaLocal.atStartOfDay(LIMA_ZONE).format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ssXXX"));
@@ -338,9 +352,20 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                             endedAt = LocalDateTime.parse(endedStr, DATETIME_FORMATTER);
                         }
                     } catch (Exception ignored) {}
-                    return new ViajeTemporal(t, endedAt);
+                    LocalDateTime bookedAt = null;
+                    try {
+                        String bookedStr = t.getBookedAt();
+                        if (bookedStr != null) {
+                            if (bookedStr.contains("T")) {
+                                bookedAt = LocalDateTime.parse(bookedStr.substring(0, 19).replace("T", " "), DATETIME_FORMATTER);
+                            } else {
+                                bookedAt = LocalDateTime.parse(bookedStr, DATETIME_FORMATTER);
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                    return new ViajeTemporal(t, endedAt, bookedAt);
                 })
-                .filter(v -> v.endedAt != null)
+                .filter(v -> v.endedAt != null && v.bookedAt != null)
                 .sorted(Comparator.comparing(v -> v.endedAt))
                 .collect(Collectors.toList());
 
@@ -349,6 +374,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             }
 
             int horaCorte = 14;
+            int horaMadrugada = 4;
             CalculatedShift.TipoTurno tipoActual = null;
             LocalDateTime horaInicio = null;
             LocalDateTime horaFin = null;
@@ -356,36 +382,40 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             double produccionTurno = 0;
             double comisionesTurno = 0;
             double montoTotalTurno = 0;
+            double efectivoTurno = 0;
 
             for (ViajeTemporal v : viajes) {
-                CalculatedShift.TipoTurno tipoViaje = v.endedAt.getHour() < horaCorte
-                    ? CalculatedShift.TipoTurno.manana : CalculatedShift.TipoTurno.tarde;
+                int hora = v.endedAt.getHour();
+                CalculatedShift.TipoTurno tipoViaje = (hora >= horaCorte || hora < horaMadrugada)
+                    ? CalculatedShift.TipoTurno.tarde : CalculatedShift.TipoTurno.manana;
 
                 if (tipoActual == null) {
                     tipoActual = tipoViaje;
-                    horaInicio = v.endedAt;
+                    horaInicio = v.bookedAt;
                 } else if (tipoActual != tipoViaje) {
                     CalculatedShift turno = crearTurnoCalculado(driverId, fechaLocal, tipoActual,
-                        horaInicio, horaFin, viajesTurno, produccionTurno, comisionesTurno, montoTotalTurno);
+                        horaInicio, horaFin, viajesTurno, produccionTurno, comisionesTurno, montoTotalTurno, efectivoTurno, placa);
                     turnos.add(calculatedShiftRepository.save(turno));
 
                     tipoActual = tipoViaje;
-                    horaInicio = v.endedAt;
+                    horaInicio = v.bookedAt;
                     viajesTurno = 0;
                     produccionTurno = 0;
                     comisionesTurno = 0;
                     montoTotalTurno = 0;
+                    efectivoTurno = 0;
                 }
 
                 viajesTurno++;
                 horaFin = v.endedAt;
                 produccionTurno += v.order.getPrice() != null ? v.order.getPrice() : 0;
                 comisionesTurno += v.order.getPriceCommissionService() != null ? v.order.getPriceCommissionService() : 0;
+                efectivoTurno += v.order.getCash() != null ? v.order.getCash() : 0;
             }
 
             if (tipoActual != null) {
                 CalculatedShift turno = crearTurnoCalculado(driverId, fechaLocal, tipoActual,
-                    horaInicio, horaFin, viajesTurno, produccionTurno, comisionesTurno, montoTotalTurno);
+                    horaInicio, horaFin, viajesTurno, produccionTurno, comisionesTurno, montoTotalTurno, efectivoTurno, placa);
                 turnos.add(calculatedShiftRepository.save(turno));
             }
         } catch (Exception e) {
@@ -400,7 +430,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
 
     private CalculatedShift crearTurnoCalculado(String driverId, LocalDate fecha, CalculatedShift.TipoTurno tipoTurno,
             LocalDateTime horaInicio, LocalDateTime horaFin, int cantidadViajes,
-            double produccionTotal, double comisionesServicio, double montoTotal) {
+            double produccionTotal, double comisionesServicio, double montoTotal, double efectivoTotal, String placa) {
         int duracionMinutos = horaInicio != null && horaFin != null
             ? (int) java.time.Duration.between(horaInicio, horaFin).toMinutes()
             : 0;
@@ -416,7 +446,9 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             .cantidadViajes(cantidadViajes)
             .montoTotal(round2(montoTotal))
             .produccionTotal(round2(produccionTotal))
+            .efectivoTotal(round2(efectivoTotal))
             .comisionesServicio(round2(comisionesServicio))
+            .placa(placa)
             .pagado(false)
             .esManual(false)
             .build();
@@ -764,8 +796,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                     .turnosTipo(turnosTipo)
                     .produccionTotal(round2(produccionTotal))
                     .comisionesServicio(round2(comisionesServicio))
-                    .montoTotalPagar(round2(turnosDia.stream().mapToDouble(t -> t.getMontoTotal() != null ? t.getMontoTotal() : 0).sum()))
-                    .montoTotalPagado(round2(turnosDia.stream().filter(t -> Boolean.TRUE.equals(t.getPagado())).mapToDouble(t -> t.getMontoTotal() != null ? t.getMontoTotal() : 0).sum()))
+                    .montoTotalPagar(round2(turnosDia.stream().mapToDouble(t -> t.getEfectivoTotal() != null ? t.getEfectivoTotal() : 0).sum()))
+                    .montoTotalPagado(round2(turnosDia.stream().filter(t -> Boolean.TRUE.equals(t.getPagado())).mapToDouble(t -> t.getEfectivoTotal() != null ? t.getEfectivoTotal() : 0).sum()))
                     .gastoCombustible(obtenerGastoCombustible(cierre))
                     .liquidaEfectivo(cierre != null && cierre.getLiquidaEfectivo() != null ? cierre.getLiquidaEfectivo().doubleValue() : 0)
                     .liquidaYape(cierre != null && cierre.getLiquidaYape() != null ? cierre.getLiquidaYape().doubleValue() : 0)
@@ -819,7 +851,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                 : 0;
             double produccionTotal = turnosConductor.stream().mapToDouble(t -> t.getProduccionTotal() != null ? t.getProduccionTotal() : 0).sum();
             double comisionesServicio = turnosConductor.stream().mapToDouble(t -> t.getComisionesServicio() != null ? t.getComisionesServicio() : 0).sum();
-            double montoTotalPagado = turnosConductor.stream().mapToDouble(t -> t.getMontoTotal() != null ? t.getMontoTotal() : 0).sum();
+            double montoTotalPagado = turnosConductor.stream().mapToDouble(t -> t.getEfectivoTotal() != null ? t.getEfectivoTotal() : 0).sum();
 
             List<PaidShiftsResponse.TurnoPagadoInfo> turnosInfo = turnosConductor.stream()
                 .map(t -> PaidShiftsResponse.TurnoPagadoInfo.builder()
@@ -1301,10 +1333,12 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
     private static class ViajeTemporal {
         final OrderInfoResponse order;
         final LocalDateTime endedAt;
+        final LocalDateTime bookedAt;
 
-        ViajeTemporal(OrderInfoResponse order, LocalDateTime endedAt) {
+        ViajeTemporal(OrderInfoResponse order, LocalDateTime endedAt, LocalDateTime bookedAt) {
             this.order = order;
             this.endedAt = endedAt;
+            this.bookedAt = bookedAt;
         }
     }
 }

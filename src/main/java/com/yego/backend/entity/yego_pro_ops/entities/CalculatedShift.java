@@ -64,6 +64,9 @@ public class CalculatedShift {
     @Column(name = "produccion_total")
     private Double produccionTotal;
 
+    @Column(name = "efectivo_total")
+    private Double efectivoTotal;
+
     @Column(name = "comisiones_servicio")
     private Double comisionesServicio;
 

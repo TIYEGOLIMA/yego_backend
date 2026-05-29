@@ -434,6 +434,19 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
         return "";
     }
 
+    @Override
+    public String obtenerPlacaConductor(String driverId) {
+        try {
+            JsonNode items = obtenerItemsDesdeDriversList(List.of(driverId));
+            if (items != null && items.isArray() && items.size() > 0) {
+                return obtenerVehicleNumber(items.get(0));
+            }
+        } catch (Exception e) {
+            log.warn("[FleetDriverService] error obteniendo placa driverId={}: {}", driverId, e.getMessage());
+        }
+        return "";
+    }
+
     private List<DriversInOrderResponse.TripSimplified> obtenerViajesSimplificados(String driverId, String fechaHoyStr) {
         try {
             DriverTripsSimplifiedResponse viajesResponse =

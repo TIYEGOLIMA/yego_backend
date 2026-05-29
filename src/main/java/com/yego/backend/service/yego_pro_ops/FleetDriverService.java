@@ -18,4 +18,6 @@ public interface FleetDriverService {
     DriverSimpleResponse obtenerListaConductoresSimplificada();
 
     ContractorSuggestionsResponse getContractorSuggestions(String parkId, String telefono);
+
+    String obtenerPlacaConductor(String driverId);
 }
