@@ -373,8 +373,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                 return turnos;
             }
 
-            int horaCorte = 14;
-            int horaMadrugada = 4;
+            int horaCorte = 17;
             CalculatedShift.TipoTurno tipoActual = null;
             LocalDateTime horaInicio = null;
             LocalDateTime horaFin = null;
@@ -386,8 +385,8 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
 
             for (ViajeTemporal v : viajes) {
                 int hora = v.endedAt.getHour();
-                CalculatedShift.TipoTurno tipoViaje = (hora >= horaCorte || hora < horaMadrugada)
-                    ? CalculatedShift.TipoTurno.tarde : CalculatedShift.TipoTurno.manana;
+                CalculatedShift.TipoTurno tipoViaje = hora < horaCorte
+                    ? CalculatedShift.TipoTurno.diurno : CalculatedShift.TipoTurno.nocturno;
 
                 if (tipoActual == null) {
                     tipoActual = tipoViaje;
@@ -580,7 +579,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
             double pagoPorViaje = totalViajes > 0 ? round2(pagoTotal / totalViajes) : 0;
 
             String turnoStr = turnosConductor.stream()
-                .map(t -> t.getTipoTurno().name().equals("manana") ? "D" : "N")
+                .map(t -> t.getTipoTurno().name().equals("diurno") ? "D" : "N")
                 .distinct()
                 .collect(Collectors.joining(", "));
 
@@ -784,7 +783,7 @@ public class CalculatedShiftServiceImpl implements CalculatedShiftService {
                 double produccionTotal = turnosDia.stream().mapToDouble(t -> t.getProduccionTotal() != null ? t.getProduccionTotal() : 0).sum();
                 double comisionesServicio = turnosDia.stream().mapToDouble(t -> t.getComisionesServicio() != null ? t.getComisionesServicio() : 0).sum();
                 String turnosTipo = turnosDia.stream()
-                    .map(t -> t.getTipoTurno().name().equals("manana") ? "D" : "N")
+                    .map(t -> t.getTipoTurno().name().equals("diurno") ? "D" : "N")
                     .distinct()
                     .collect(Collectors.joining(", "));
 

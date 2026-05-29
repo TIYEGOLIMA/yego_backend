@@ -90,7 +90,7 @@ public class CalculatedShift {
     private LocalDateTime updatedAt;
 
     public enum TipoTurno {
-        manana, tarde
+        diurno, nocturno
     }
 
     public enum EstadoTurno {
