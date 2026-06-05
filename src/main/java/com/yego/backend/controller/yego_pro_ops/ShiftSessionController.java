@@ -1,0 +1,99 @@
+package com.yego.backend.controller.yego_pro_ops;
+
+import com.yego.backend.entity.yego_pro_ops.api.request.CloseShiftSessionRequest;
+import com.yego.backend.entity.yego_pro_ops.api.request.RegisterTripRequest;
+import com.yego.backend.entity.yego_pro_ops.api.request.SettleShiftSessionRequest;
+import com.yego.backend.entity.yego_pro_ops.api.response.RegisterTripResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.ShiftSessionResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.ShiftSessionSummaryResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.TripResponse;
+import com.yego.backend.service.yego_pro_ops.ShiftSessionService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.UUID;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/pro-ops/shift-sessions")
+@RequiredArgsConstructor
+@CrossOrigin(origins = "*")
+public class ShiftSessionController {
+
+    private final ShiftSessionService shiftSessionService;
+
+    @PostMapping("/trips")
+    public RegisterTripResponse registerTrip(@Valid @RequestBody RegisterTripRequest request) {
+        log.info("[ShiftSessionController] registrar viaje driverId={} externalTripId={} amount={}",
+                request.getDriverId(), request.getExternalTripId(), request.getAmount());
+        try {
+            return shiftSessionService.registerTrip(request);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    @GetMapping("/active/{driverId}")
+    public ShiftSessionResponse getActiveSession(@PathVariable String driverId) {
+        ShiftSessionResponse session = shiftSessionService.getActiveSession(driverId);
+        if (session == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "No hay sesión activa para el conductor: " + driverId);
+        }
+        return session;
+    }
+
+    @GetMapping("/{sessionId}")
+    public ShiftSessionSummaryResponse getSessionSummary(@PathVariable UUID sessionId) {
+        try {
+            return shiftSessionService.getSessionSummary(sessionId);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage());
+        }
+    }
+
+    @GetMapping("/driver/{driverId}")
+    public List<ShiftSessionResponse> getDriverSessionHistory(@PathVariable String driverId) {
+        return shiftSessionService.getDriverSessionHistory(driverId);
+    }
+
+    @GetMapping("/{sessionId}/trips")
+    public List<TripResponse> getSessionTrips(@PathVariable UUID sessionId) {
+        return shiftSessionService.getSessionTrips(sessionId);
+    }
+
+    @PostMapping("/{sessionId}/close")
+    public ShiftSessionResponse closeSession(
+            @PathVariable UUID sessionId,
+            @Valid @RequestBody CloseShiftSessionRequest request) {
+        log.info("[ShiftSessionController] cerrar sesión sessionId={} closedBy={}", sessionId, request.getClosedBy());
+        try {
+            return shiftSessionService.closeSession(sessionId, request.getClosedBy());
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    @PostMapping("/{sessionId}/settle")
+    public ShiftSessionResponse settleSession(
+            @PathVariable UUID sessionId,
+            @Valid @RequestBody SettleShiftSessionRequest request) {
+        log.info("[ShiftSessionController] liquidar sesión sessionId={} settledBy={}", sessionId, request.getSettledBy());
+        try {
+            return shiftSessionService.settleSession(sessionId, request.getSettledBy());
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+}

@@ -6,24 +6,18 @@ import com.yego.backend.entity.yego_pro_ops.api.response.ContractorSuggestionsRe
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverCloseResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverSimpleResponse;
-import com.yego.backend.entity.yego_pro_ops.api.response.DriverPaymentSummaryResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverTripsSimplifiedResponse;
-import com.yego.backend.entity.yego_pro_ops.api.response.PaidShiftsResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.BillingConfigResponse;
-import com.yego.backend.entity.yego_pro_ops.api.response.ResumenSemanalResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriversInOrderResponse;
-import com.yego.backend.entity.yego_pro_ops.api.response.FechasConTiposTurnoResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
-import com.yego.backend.entity.yego_pro_ops.entities.CalculatedShift;
 import com.yego.backend.entity.yego_pro_ops.entities.FacturacionSemanal;
-import com.yego.backend.service.yego_pro_ops.CalculatedShiftService;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
 import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
+import com.yego.backend.service.yego_pro_ops.FacturacionSemanalService;
 import com.yego.backend.service.yego_pro_ops.FleetDriverService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -38,9 +32,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 
 @Slf4j
 @RestController
@@ -52,7 +43,7 @@ public class FleetDriverController {
     private final FleetDriverService fleetDriverService;
     private final DriverOrdersService driverOrdersService;
     private final DriverCloseService driverCloseService;
-    private final CalculatedShiftService calculatedShiftService;
+    private final FacturacionSemanalService facturacionSemanalService;
 
     @GetMapping("/driver/viajes-completos")
     public DriverOrdersResponse obtenerViajesCompletos(
@@ -102,83 +93,6 @@ public class FleetDriverController {
         return fleetDriverService.obtenerConductoresEnOrden(page, limit);
     }
 
-    @PostMapping("/turnos/generar-dia-anterior")
-    public ResponseEntity<Map<String, Object>> generarTurnosDiaAnterior() {
-        log.info("[FleetDriverController] disparo manual batch día anterior (fire-and-forget)");
-        CompletableFuture.runAsync(() -> {
-            try {
-                calculatedShiftService.procesarHorasTurnoDiaAnterior();
-            } catch (Exception e) {
-                log.error("[FleetDriverController] error batch manual día anterior: {}", e.getMessage(), e);
-            }
-        });
-        return ResponseEntity.accepted().body(Map.of(
-            "message", "Batch encolado, se procesará en segundo plano. Revisa logs o consulta el resumen de pagos."
-        ));
-    }
-
-    @GetMapping("/driver/calcular-turnos")
-    public CompletableFuture<Map<String, Object>> calcularTurnosManualmente(
-            @RequestParam String driverId,
-            @RequestParam String fecha) {
-        return calcularTurnosFuture(driverId, fecha, false);
-    }
-
-    @PostMapping("/driver/recalcular-turnos")
-    public CompletableFuture<Map<String, Object>> recalcularTurnos(
-            @RequestParam String driverId,
-            @RequestParam String fecha) {
-        return calcularTurnosFuture(driverId, fecha, true);
-    }
-
-    private CompletableFuture<Map<String, Object>> calcularTurnosFuture(String driverId, String fecha, boolean recalcular) {
-        CompletableFuture<List<CalculatedShift>> turnosFuture = recalcular
-            ? calculatedShiftService.recalcularTurnos(driverId, fecha)
-            : calculatedShiftService.calcularTurnosAsync(driverId, fecha);
-        return turnosFuture
-            .handle((turnos, error) -> {
-                if (error != null) {
-                    Throwable causa = error instanceof CompletionException && error.getCause() != null
-                        ? error.getCause() : error;
-                    log.error("[FleetDriverController] error calcular-turnos driverId={} fecha={}: {}",
-                        driverId, fecha, causa.getMessage(), causa);
-                    if (causa instanceof IllegalArgumentException) {
-                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, causa.getMessage());
-                    }
-                    throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
-                        "Error al calcular turnos: " + causa.getMessage());
-                }
-                return Map.<String, Object>of(
-                    "message", "Turnos calculados exitosamente",
-                    "driverId", driverId,
-                    "fecha", fecha,
-                    "cantidadTurnos", turnos.size()
-                );
-            });
-    }
-
-    @GetMapping("/driver/fechas-turnos/{driverId}")
-    public FechasConTiposTurnoResponse obtenerFechasConTiposTurno(@PathVariable String driverId) {
-        return calculatedShiftService.obtenerFechasConTiposTurno(driverId);
-    }
-
-    @GetMapping("/drivers/resumen-pagos")
-    public DriverPaymentSummaryResponse obtenerResumenPagos(@RequestParam String fecha) {
-        return calculatedShiftService.obtenerResumenPagos(fecha);
-    }
-
-    @GetMapping("/drivers/turnos-pagados")
-    public PaidShiftsResponse obtenerTurnosPagados(@RequestParam(required = false) String fecha) {
-        return calculatedShiftService.obtenerTurnosPagados(fecha);
-    }
-
-    @GetMapping("/drivers/resumen-semanal")
-    public ResumenSemanalResponse obtenerResumenSemanal(
-            @RequestParam String fechaInicio,
-            @RequestParam String fechaFin) {
-        return calculatedShiftService.obtenerResumenSemanal(fechaInicio, fechaFin);
-    }
-
     @GetMapping("/drivers")
     public DriverSimpleResponse obtenerListaConductores() {
         return fleetDriverService.obtenerListaConductoresSimplificada();
@@ -195,45 +109,25 @@ public class FleetDriverController {
     public FacturacionSemanal registrarFacturacionSemanal(@Valid @RequestBody FacturacionSemanal facturacion) {
         log.info("[FleetDriverController] registrar facturación semanal driverId={} semana={}/{} userId={}",
             facturacion.getDriverId(), facturacion.getFechaInicio(), facturacion.getFechaFin(), facturacion.getUserId());
-        return calculatedShiftService.registrarFacturacionSemanal(facturacion);
+        return facturacionSemanalService.registrarFacturacionSemanal(facturacion);
     }
 
     @GetMapping("/drivers/facturacion-semanal/historial")
     public List<FacturacionSemanal> obtenerHistorialFacturacion(
             @RequestParam(required = false) String fechaInicio,
             @RequestParam(required = false) String fechaFin) {
-        return calculatedShiftService.obtenerHistorialFacturacion(fechaInicio, fechaFin);
+        return facturacionSemanalService.obtenerHistorialFacturacion(fechaInicio, fechaFin);
     }
 
     @GetMapping("/config/billing")
     public BillingConfigResponse obtenerConfiguracionBilling() {
-        return calculatedShiftService.obtenerConfiguracionBilling();
+        return facturacionSemanalService.obtenerConfiguracionBilling();
     }
 
     @PutMapping("/config/billing")
     public BillingConfigResponse guardarConfiguracionBilling(
             @Valid @RequestBody BillingConfigResponse config,
             @RequestParam Long userId) {
-        return calculatedShiftService.guardarConfiguracionBilling(config, userId);
-    }
-
-    @GetMapping("/drivers/facturacion-semanal/exportar-asistencia")
-    public ResponseEntity<byte[]> exportarAsistenciaExcel(
-            @RequestParam String fechaInicio,
-            @RequestParam String fechaFin) {
-        byte[] excel = calculatedShiftService.exportarAsistenciaExcel(fechaInicio, fechaFin);
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM);
-        headers.setContentDispositionFormData("attachment", "Asistencia_Yego_PRO_" + fechaInicio + "_" + fechaFin + ".xlsx");
-        headers.setContentLength(excel.length);
-        return ResponseEntity.ok().headers(headers).body(excel);
-    }
-
-    @PostMapping("/drivers/facturacion-semanal/guardar-snapshot")
-    public ResponseEntity<Map<String, Object>> guardarSnapshot(
-            @RequestParam String fechaInicio,
-            @RequestParam String fechaFin) {
-        int count = calculatedShiftService.guardarSnapshotSemanal(fechaInicio, fechaFin);
-        return ResponseEntity.ok(Map.of("guardados", count, "semana", fechaInicio + " / " + fechaFin));
+        return facturacionSemanalService.guardarConfiguracionBilling(config, userId);
     }
 }

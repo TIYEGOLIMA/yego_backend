@@ -87,8 +87,8 @@ public class DriverClose {
     @Column(name = "diferencia_odometro")
     private Integer diferenciaOdometro;
 
-    @Column(name = "calculated_shift_ids", length = 255)
-    private String calculatedShiftIds;
+    @Column(name = "shift_session_id")
+    private java.util.UUID shiftSessionId;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

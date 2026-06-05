@@ -7,7 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -74,6 +74,6 @@ public class DriverCloseRequest {
     @JsonProperty("diferenciaOdometro")
     private Integer diferenciaOdometro;
 
-    @JsonProperty("turnoIds")
-    private List<Long> turnoIds;
+    @JsonProperty("shiftSessionId")
+    private UUID shiftSessionId;
 }

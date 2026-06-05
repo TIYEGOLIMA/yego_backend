@@ -69,9 +69,6 @@ CREATE INDEX IF NOT EXISTS idx_weekly_estado       ON module_weekly_billing (est
 CREATE INDEX IF NOT EXISTS idx_bonus_effective     ON module_bonus_thresholds (effective_from, min_trips DESC);
 CREATE INDEX IF NOT EXISTS idx_pct_effective       ON module_payment_percentages (effective_from, min_validated_trips DESC);
 
--- Índice crítico para resumen-semanal: busca turnos por rango de fechas
-CREATE INDEX IF NOT EXISTS idx_calculated_shift_fecha ON module_calculated_shifts (fecha, driver_id);
-
 -- Índice crítico para resumen-semanal: busca cierres por rango de fechas
 CREATE INDEX IF NOT EXISTS idx_driver_close_fecha  ON module_driver_closes (fecha, driver_id);
 

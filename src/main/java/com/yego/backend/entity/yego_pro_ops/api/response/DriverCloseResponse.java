@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -83,8 +83,8 @@ public class DriverCloseResponse {
     @JsonProperty("diferenciaOdometro")
     private Integer diferenciaOdometro;
 
-    @JsonProperty("tiposTurno")
-    private List<String> tiposTurno;
+    @JsonProperty("shiftSessionId")
+    private UUID shiftSessionId;
 
     @JsonProperty("createdAt")
     private LocalDateTime createdAt;
