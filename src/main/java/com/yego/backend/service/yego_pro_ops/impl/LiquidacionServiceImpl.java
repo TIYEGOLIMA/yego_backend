@@ -419,11 +419,6 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             kmYango = datosYango.km;
         }
 
-        BigDecimal bonoObjetivoLunes = restarBonoObjetivoLunes(driverId, desdeFinal, hastaFinal);
-        if (bonoObjetivoLunes.compareTo(BigDecimal.ZERO) > 0) {
-            montoTotalProducido = montoTotalProducido.subtract(bonoObjetivoLunes);
-        }
-
         BigDecimal montoNeto = montoTotalProducido.subtract(comisionApp);
         if (montoNeto.compareTo(BigDecimal.ZERO) < 0) montoNeto = BigDecimal.ZERO;
 
