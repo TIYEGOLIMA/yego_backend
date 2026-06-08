@@ -2,9 +2,11 @@ package com.yego.backend.repository.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.entities.ShiftSession;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -13,16 +15,25 @@ import java.util.UUID;
 @Repository
 public interface ShiftSessionRepository extends JpaRepository<ShiftSession, UUID> {
 
-    Optional<ShiftSession> findByDriverIdAndStatus(String driverId, String status);
+    Optional<ShiftSession> findByDriverIdAndStatusAndDeletedFalse(String driverId, String status);
 
-    @Query("SELECT s FROM ShiftSession s WHERE s.driverId = :driverId AND s.status = 'settled' ORDER BY s.closedAt DESC")
-    List<ShiftSession> findSettledByDriverIdOrderByClosedAtDesc(@Param("driverId") String driverId);
+    @Query("SELECT s FROM ShiftSession s WHERE s.driverId = :driverId AND s.status = 'settled' AND s.deleted = false ORDER BY s.closedAt DESC LIMIT 1")
+    Optional<ShiftSession> findTopByDriverIdAndStatusOrderByClosedAtDesc(@Param("driverId") String driverId);
 
-    @Query("SELECT s FROM ShiftSession s WHERE s.driverId = :driverId AND s.status = 'settled' ORDER BY s.closedAt DESC LIMIT 1")
-    Optional<ShiftSession> findTopByDriverIdAndStatusOrderByClosedAtDesc(@Param("driverId") String driverId, @Param("status") String status);
-
-    @Query("SELECT s FROM ShiftSession s WHERE s.driverId = :driverId ORDER BY s.startedAt DESC")
+    @Query("SELECT s FROM ShiftSession s WHERE s.driverId = :driverId AND s.deleted = false ORDER BY s.startedAt DESC")
     List<ShiftSession> findByDriverIdOrderByStartedAtDesc(@Param("driverId") String driverId);
 
-    boolean existsByDriverIdAndStatus(String driverId, String status);
+    @Query("SELECT MAX(s.settledAt) FROM ShiftSession s WHERE s.driverId = :driverId AND s.status = 'settled' AND s.deleted = false")
+    Optional<java.time.LocalDateTime> findLastSettledAtByDriverId(@Param("driverId") String driverId);
+
+    @Query("SELECT MAX(s.closedAt) FROM ShiftSession s WHERE s.driverId = :driverId AND s.status IN ('closed','settled') AND s.deleted = false")
+    Optional<java.time.LocalDateTime> findLastClosedAtByDriverId(@Param("driverId") String driverId);
+
+    @Query("SELECT COUNT(s) > 0 FROM ShiftSession s WHERE s.driverId = :driverId AND s.status IN ('closed', 'settled') AND s.deleted = false AND s.startedAt < :hasta AND (s.closedAt IS NULL OR s.closedAt > :desde)")
+    boolean existsOverlapping(@Param("driverId") String driverId, @Param("desde") java.time.LocalDateTime desde, @Param("hasta") java.time.LocalDateTime hasta);
+
+    @Modifying
+    @Transactional
+    @Query("UPDATE ShiftSession s SET s.deleted = true WHERE s.id = :id")
+    void softDelete(@Param("id") UUID id);
 }

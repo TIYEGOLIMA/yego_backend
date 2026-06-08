@@ -11,6 +11,4 @@ import java.util.UUID;
 public interface TripRepository extends JpaRepository<Trip, UUID> {
 
     List<Trip> findByShiftSessionId(UUID shiftSessionId);
-
-    long countByShiftSessionId(UUID shiftSessionId);
 }

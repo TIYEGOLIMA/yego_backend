@@ -18,17 +18,16 @@ public interface FacturacionSemanalRepository extends JpaRepository<FacturacionS
     Optional<FacturacionSemanal> findByDriverIdAndFechaInicioAndFechaFin(
         String driverId, LocalDate fechaInicio, LocalDate fechaFin);
 
-    List<FacturacionSemanal> findByFechaInicioAndFechaFin(LocalDate fechaInicio, LocalDate fechaFin);
-
-    @Modifying
-    @Transactional
-    @Query("DELETE FROM FacturacionSemanal f WHERE f.fechaInicio = :inicio AND f.fechaFin = :fin")
-    void deleteByFechaInicioAndFechaFin(@Param("inicio") LocalDate inicio, @Param("fin") LocalDate fin);
-
-    List<FacturacionSemanal> findByDriverIdOrderByFechaInicioDesc(String driverId);
-
     @Query("SELECT f FROM FacturacionSemanal f WHERE f.fechaInicio BETWEEN :inicio AND :fin ORDER BY f.driverId, f.fechaInicio DESC")
     List<FacturacionSemanal> findByRangoFechas(@Param("inicio") LocalDate inicio, @Param("fin") LocalDate fin);
 
     List<FacturacionSemanal> findAllByOrderByFechaInicioDesc();
+
+    @Query("SELECT COUNT(f) > 0 FROM FacturacionSemanal f WHERE f.driverId = :driverId AND f.fechaInicio <= :hasta AND f.fechaFin >= :desde")
+    boolean existsOverlappingWithDriver(@Param("driverId") String driverId, @Param("desde") LocalDate desde, @Param("hasta") LocalDate hasta);
+
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM FacturacionSemanal f WHERE f.driverId = :driverId AND f.fechaInicio <= :hasta AND f.fechaFin >= :desde")
+    void deleteOverlappingWithDriver(@Param("driverId") String driverId, @Param("desde") LocalDate desde, @Param("hasta") LocalDate hasta);
 }

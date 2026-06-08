@@ -231,6 +231,7 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
                 .priceOther(extraerDouble(orderNode, "price_other"))
                 .pricePromotion(extraerDouble(orderNode, "price_promotion"))
                 .priceTip(extraerDouble(orderNode, "price_tip"))
+                .carLicenseNumber(obtenerTexto(orderNode, "car_license_number"))
                 .addressFrom(obtenerTexto(orderNode, "address_from"))
                 .addressTo(obtenerTexto(orderNode, "address_to"))
                 .build();

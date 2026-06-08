@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -75,6 +76,13 @@ public class DriverCloseServiceImpl implements DriverCloseService {
                 driverId, fecha, e.getMessage());
             return Optional.empty();
         }
+    }
+
+    @Override
+    public Optional<DriverCloseResponse> obtenerCierrePorSessionId(UUID sessionId) {
+        if (sessionId == null) return Optional.empty();
+        return driverCloseRepository.findFirstByShiftSessionIdOrderByIdDesc(sessionId)
+                .map(this::convertirAResponse);
     }
 
     @Override

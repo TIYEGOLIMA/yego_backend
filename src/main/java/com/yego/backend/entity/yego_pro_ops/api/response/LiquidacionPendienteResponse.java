@@ -7,7 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -15,16 +15,19 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class LiquidacionSemanalResponse {
+public class LiquidacionPendienteResponse {
 
     @JsonProperty("driverId")
     private String driverId;
 
-    @JsonProperty("semanaInicio")
-    private LocalDate semanaInicio;
+    @JsonProperty("periodoDesde")
+    private LocalDateTime periodoDesde;
 
-    @JsonProperty("semanaFin")
-    private LocalDate semanaFin;
+    @JsonProperty("periodoHasta")
+    private LocalDateTime periodoHasta;
+
+    @JsonProperty("esPrimeraLiquidacion")
+    private boolean esPrimeraLiquidacion;
 
     @JsonProperty("totalSesiones")
     private int totalSesiones;
@@ -32,32 +35,23 @@ public class LiquidacionSemanalResponse {
     @JsonProperty("totalViajes")
     private int totalViajes;
 
-    @JsonProperty("totalIngresos")
-    private BigDecimal totalIngresos;
+    @JsonProperty("viajesPorHora")
+    private BigDecimal viajesPorHora;
 
-    @JsonProperty("totalKm")
-    private BigDecimal totalKm;
-
-    @JsonProperty("primerViaje")
-    private String primerViaje;
-
-    @JsonProperty("ultimoViaje")
-    private String ultimoViaje;
-
-    @JsonProperty("dias")
-    private List<DiaLiquidacionInfo> dias;
-
-    @JsonProperty("sesionesPendientes")
-    private List<UUID> sesionesPendientes;
-
-    @JsonProperty("tieneSesionesCerradas")
-    private boolean tieneSesionesCerradas;
-
-    @JsonProperty("tieneSesionActiva")
-    private boolean tieneSesionActiva;
+    @JsonProperty("kmRecorrido")
+    private BigDecimal kmRecorrido;
 
     @JsonProperty("montoTotalProducido")
     private BigDecimal montoTotalProducido;
+
+    @JsonProperty("placa")
+    private String placa;
+
+    @JsonProperty("carBrandModel")
+    private String carBrandModel;
+
+    @JsonProperty("semanaCerrada")
+    private boolean semanaCerrada;
 
     @JsonProperty("bonoYango")
     private BigDecimal bonoYango;
@@ -70,9 +64,6 @@ public class LiquidacionSemanalResponse {
 
     @JsonProperty("produccionBonificable")
     private BigDecimal produccionBonificable;
-
-    @JsonProperty("bonoAdicViajes")
-    private BigDecimal bonoAdicViajes;
 
     @JsonProperty("bono")
     private BigDecimal bono;
@@ -95,32 +86,29 @@ public class LiquidacionSemanalResponse {
     @JsonProperty("pagoPorViaje")
     private BigDecimal pagoPorViaje;
 
-    @JsonProperty("kmRecorrido")
-    private BigDecimal kmRecorrido;
+    @JsonProperty("diasTrabajados")
+    private int diasTrabajados;
 
-    @JsonProperty("gastoMantenimiento")
-    private BigDecimal gastoMantenimiento;
+    @JsonProperty("sesionesPendientes")
+    private List<UUID> sesionesPendientes;
 
-    @JsonProperty("viajesPorHora")
-    private BigDecimal viajesPorHora;
-
-    @JsonProperty("sesionesDetalle")
-    private List<SesionDiaInfo> sesionesDetalle;
-
-    @JsonProperty("semanaCerrada")
-    private boolean semanaCerrada;
+    @JsonProperty("dias")
+    private List<DiaPendienteInfo> dias;
 
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class DiaLiquidacionInfo {
+    public static class DiaPendienteInfo {
 
         @JsonProperty("fecha")
-        private LocalDate fecha;
+        private String fecha;
 
         @JsonProperty("diaSemana")
         private String diaSemana;
+
+        @JsonProperty("sesiones")
+        private int sesiones;
 
         @JsonProperty("viajes")
         private int viajes;
@@ -128,17 +116,8 @@ public class LiquidacionSemanalResponse {
         @JsonProperty("ingresos")
         private BigDecimal ingresos;
 
-        @JsonProperty("ingresosPendientes")
-        private BigDecimal ingresosPendientes;
-
-        @JsonProperty("ingresosLiquidados")
-        private BigDecimal ingresosLiquidados;
-
         @JsonProperty("km")
         private BigDecimal km;
-
-        @JsonProperty("sesiones")
-        private int sesiones;
 
         @JsonProperty("estado")
         private String estado;

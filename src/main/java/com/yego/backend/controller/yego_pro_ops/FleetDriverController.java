@@ -75,6 +75,12 @@ public class FleetDriverController {
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cierre no encontrado"));
     }
 
+    @GetMapping("/driver/cierre/session/{sessionId}")
+    public DriverCloseResponse obtenerCierrePorSession(@PathVariable java.util.UUID sessionId) {
+        return driverCloseService.obtenerCierrePorSessionId(sessionId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cierre no encontrado"));
+    }
+
     @PutMapping("/driver/cierre")
     public DriverClose actualizarCierre(@Valid @RequestBody DriverCloseRequest request) {
         log.info("[FleetDriverController] actualizar cierre driverId={} fecha={} userId={}",

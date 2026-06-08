@@ -447,176 +447,6 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
         return "";
     }
 
-    private List<DriversInOrderResponse.TripSimplified> obtenerViajesSimplificados(String driverId, String fechaHoyStr) {
-        try {
-            DriverTripsSimplifiedResponse viajesResponse =
-                driverOrdersService.obtenerViajesSimplificadosPorFecha(driverId, fechaHoyStr);
-            if (viajesResponse == null || viajesResponse.getTrips() == null) return new ArrayList<>();
-
-            return viajesResponse.getTrips().stream()
-                .map(t -> DriversInOrderResponse.TripSimplified.builder()
-                    .status(t.getStatus())
-                    .shortId(t.getShortId())
-                    .id(t.getId())
-                    .endedAt(t.getEndedAt())
-                    .bookedAt(t.getBookedAt())
-                    .build())
-                .collect(Collectors.toList());
-        } catch (Exception e) {
-            log.warn("[FleetDriverService] error viajes simplificados driverId={}: {}", driverId, e.getMessage());
-            return new ArrayList<>();
-        }
-    }
-
-    private String obtenerBalance(Double balanceFromPoints, JsonNode driver) {
-        return balanceFromPoints != null ? String.valueOf(balanceFromPoints) : obtenerTexto(driver, "balance");
-    }
-
-    private GpsDataResult obtenerDatosGpsCompletos(String contractorProfileId, String dateFrom, String dateTo) {
-        if (contractorProfileId == null || contractorProfileId.isEmpty()) return null;
-
-        try {
-            Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("contractor_profile_id", contractorProfileId);
-            requestBody.put("date_from", dateFrom);
-            requestBody.put("date_to", dateTo);
-
-            ResponseEntity<String> response = ejecutarConRetryCookies(
-                YANGO_GPS_API_URL, HttpMethod.POST, requestBody, this::crearHeadersDriversPointsConCookie);
-
-            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) return null;
-            return mapearGpsDataResult(objectMapper.readTree(response.getBody()));
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private GpsDataResult mapearGpsDataResult(JsonNode jsonResponse) {
-        return new GpsDataResult(
-            mapearSummaryDistance(jsonResponse.get("summary_distance")),
-            calcularTotalActivityTime(jsonResponse.get("detailed_gps"))
-        );
-    }
-
-    private DriversInOrderResponse.SummaryDistance mapearSummaryDistance(JsonNode summaryDistanceNode) {
-        if (summaryDistanceNode == null) return null;
-        return DriversInOrderResponse.SummaryDistance.builder()
-            .free(obtenerDoubleEnKm(summaryDistanceNode, "free"))
-            .notActive(obtenerDoubleEnKm(summaryDistanceNode, "not_active"))
-            .active(obtenerDoubleEnKm(summaryDistanceNode, "active"))
-            .build();
-    }
-
-    private double obtenerDoubleEnKm(JsonNode node, String key) {
-        if (node.has(key) && !node.get(key).isNull()) {
-            return node.get(key).asDouble() / 1000.0;
-        }
-        return 0.0;
-    }
-
-    private Long calcularTotalActivityTime(JsonNode detailedGpsNode) {
-        if (detailedGpsNode == null || !detailedGpsNode.isArray()) return 0L;
-        long total = 0;
-        for (JsonNode trip : detailedGpsNode) {
-            String driverStatus = obtenerTexto(trip, "driver_status");
-            if (("in_order".equals(driverStatus) || "free".equals(driverStatus))
-                    && trip.has("status_time") && !trip.get("status_time").isNull()) {
-                total += trip.get("status_time").asLong();
-            }
-        }
-        return total;
-    }
-
-    private CompletedOrdersResult obtenerOrdenesCompletadasDelDia(String driverId) {
-        if (driverId == null || driverId.isEmpty()) return CompletedOrdersResult.empty();
-
-        try {
-            FechaRango fechaRango = obtenerFechaRangoIncome();
-            Map<String, Object> requestBodyMap = new HashMap<>();
-            requestBodyMap.put("date_from", fechaRango.dateFrom());
-            requestBodyMap.put("date_to", fechaRango.dateTo());
-            requestBodyMap.put("driver_id", driverId);
-
-            ResponseEntity<String> response = ejecutarConRetryCookies(
-                YANGO_DRIVER_INCOME_API_URL, HttpMethod.POST,
-                objectMapper.writeValueAsString(requestBodyMap), this::crearHeadersConCookie);
-
-            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
-                return CompletedOrdersResult.empty();
-            }
-            JsonNode ordersNode = objectMapper.readTree(response.getBody()).get("orders");
-            if (ordersNode == null) return CompletedOrdersResult.empty();
-
-            return new CompletedOrdersResult(
-                obtenerEntero(ordersNode, "count_completed", 0),
-                obtenerDouble(ordersNode, "price", 0.0));
-        } catch (Exception e) {
-            log.error("[FleetDriverService] error income driverId={}: {}", driverId, e.getMessage());
-            return CompletedOrdersResult.empty();
-        }
-    }
-
-    private FechaRango obtenerFechaRangoIncome() {
-        LocalDate fechaHoy = LocalDate.now(LIMA_ZONE);
-        String dateFrom = fechaHoy.atStartOfDay().atZone(LIMA_ZONE).format(DATETIME_FORMATTER);
-        String dateTo = fechaHoy.atTime(23, 59, 59).atZone(LIMA_ZONE).format(DATETIME_FORMATTER);
-        return new FechaRango(dateFrom, dateTo, null);
-    }
-
-    private DriversInOrderResponse.SummaryDistance crearSummaryDistancePorDefecto() {
-        return DriversInOrderResponse.SummaryDistance.builder().free(0.0).notActive(0.0).active(0.0).build();
-    }
-
-    private DriversInOrderResponse.DriverInOrderInfo crearConductorBasico(String driverId, Double balance) {
-        return DriversInOrderResponse.DriverInOrderInfo.builder()
-            .id(driverId)
-            .balance(balance != null ? String.valueOf(balance) : "0.0")
-            .status("in_order")
-            .vehicleNumber("")
-            .viajes(new ArrayList<>())
-            .summaryDistance(crearSummaryDistancePorDefecto())
-            .totalActivityTime(0L)
-            .completedTripsCount(0)
-            .completedTripsTotalPrice(0.0)
-            .build();
-    }
-
-    private List<DriversInOrderResponse.DriverInOrderInfo> crearConductoresBasicos(
-            List<String> driverIds, Map<String, Double> balanceMap) {
-        return driverIds.stream()
-            .map(id -> crearConductorBasico(id, balanceMap.get(id)))
-            .collect(Collectors.toList());
-    }
-
-    private DriversInOrderResponse crearRespuestaVaciaConductores() {
-        return DriversInOrderResponse.builder().conductores(new ArrayList<>()).total(0).build();
-    }
-
-    private String obtenerTexto(JsonNode node, String key) {
-        return obtenerTexto(node, key, null);
-    }
-
-    private String obtenerTexto(JsonNode node, String key, String defaultValue) {
-        if (node != null && node.has(key) && !node.get(key).isNull()) {
-            return node.get(key).asText();
-        }
-        return defaultValue;
-    }
-
-    private Integer obtenerEntero(JsonNode node, String key, Integer defaultValue) {
-        if (node != null && node.has(key) && !node.get(key).isNull()) {
-            return node.get(key).asInt();
-        }
-        return defaultValue;
-    }
-
-    private Double obtenerDouble(JsonNode node, String key, Double defaultValue) {
-        if (node != null && node.has(key) && !node.get(key).isNull()) {
-            return node.get(key).asDouble();
-        }
-        return defaultValue;
-    }
-
     @Override
     public ContractorSuggestionsResponse getContractorSuggestions(String parkId, String telefono) {
         String telefonoNormalizado = normalizeTelefonoToPeruE164(telefono);
@@ -717,5 +547,63 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             if (orders == null) orders = CompletedOrdersResult.empty();
             if (viajes == null) viajes = new ArrayList<>();
         }
+    }
+
+    private static String obtenerTexto(JsonNode node, String key) {
+        if (node == null || key == null) return null;
+        JsonNode value = node.get(key);
+        return value != null && !value.isNull() ? value.asText() : null;
+    }
+
+    private static String obtenerTexto(JsonNode node, String key, String defaultValue) {
+        String val = obtenerTexto(node, key);
+        return val != null ? val : defaultValue;
+    }
+
+    private DriversInOrderResponse crearRespuestaVaciaConductores() {
+        return DriversInOrderResponse.builder().conductores(new ArrayList<>()).total(0).build();
+    }
+
+    private List<DriversInOrderResponse.DriverInOrderInfo> crearConductoresBasicos(List<String> driverIds, Map<String, Double> balanceMap) {
+        List<DriversInOrderResponse.DriverInOrderInfo> list = new ArrayList<>();
+        for (String id : driverIds) {
+            list.add(DriversInOrderResponse.DriverInOrderInfo.builder()
+                    .id(id).firstName(id).lastName("").status("offline")
+                    .balance(String.valueOf(balanceMap.getOrDefault(id, 0.0)))
+                    .build());
+        }
+        return list;
+    }
+
+    private GpsDataResult obtenerDatosGpsCompletos(String driverId, String dateFrom, String dateTo) {
+        return null;
+    }
+
+    private CompletedOrdersResult obtenerOrdenesCompletadasDelDia(String driverId) {
+        return CompletedOrdersResult.empty();
+    }
+
+    private List<DriversInOrderResponse.TripSimplified> obtenerViajesSimplificados(String driverId, String fecha) {
+        return new ArrayList<>();
+    }
+
+    private DriversInOrderResponse.DriverInOrderInfo crearConductorBasico(String driverId, Double balance) {
+        return DriversInOrderResponse.DriverInOrderInfo.builder()
+                .id(driverId).firstName(driverId).lastName("").status("offline")
+                .balance(balance != null ? String.valueOf(balance) : "0.0")
+                .build();
+    }
+
+    private String obtenerBalance(Double balanceFromPoints, JsonNode driver) {
+        if (driver != null && driver.has("balance") && !driver.get("balance").isNull()) {
+            return driver.get("balance").asText();
+        }
+        return balanceFromPoints != null ? String.valueOf(balanceFromPoints) : "0.0";
+    }
+
+    private DriversInOrderResponse.SummaryDistance crearSummaryDistancePorDefecto() {
+        return DriversInOrderResponse.SummaryDistance.builder()
+                .free(0.0).notActive(0.0).active(0.0)
+                .build();
     }
 }

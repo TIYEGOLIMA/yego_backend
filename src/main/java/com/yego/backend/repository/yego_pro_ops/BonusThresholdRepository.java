@@ -8,13 +8,10 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 @Repository
 public interface BonusThresholdRepository extends JpaRepository<BonusThreshold, Long> {
 
     @Query("SELECT b FROM BonusThreshold b WHERE b.effectiveFrom <= :fecha ORDER BY b.minTrips DESC")
     List<BonusThreshold> findApplicableForDate(@Param("fecha") LocalDate fecha);
-
-    Optional<BonusThreshold> findFirstByMinTripsAndEffectiveFrom(Integer minTrips, LocalDate effectiveFrom);
 }

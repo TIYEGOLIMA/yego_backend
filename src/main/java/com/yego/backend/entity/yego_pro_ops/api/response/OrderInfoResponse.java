@@ -63,6 +63,9 @@ public class OrderInfoResponse {
     @JsonProperty("price_tip")
     private Double priceTip;
 
+    @JsonProperty("car_license_number")
+    private String carLicenseNumber;
+
     @JsonProperty("address_from")
     private String addressFrom;
 
