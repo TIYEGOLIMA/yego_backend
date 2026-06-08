@@ -411,19 +411,21 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         BigDecimal comisionApp = BigDecimal.ZERO;
         BigDecimal bonoYango = BigDecimal.ZERO;
         BigDecimal kmYango = BigDecimal.ZERO;
+        BigDecimal efectivo = BigDecimal.ZERO;
 
         if (datosYango != null) {
             montoTotalProducido = datosYango.montoTotalProducido;
             comisionApp = datosYango.comisionApp;
             bonoYango = datosYango.bonoYango;
             kmYango = datosYango.km;
+            efectivo = datosYango.efectivo;
         }
 
         BigDecimal montoNeto = montoTotalProducido.subtract(comisionApp);
         if (montoNeto.compareTo(BigDecimal.ZERO) < 0) montoNeto = BigDecimal.ZERO;
 
         BigDecimal kmFinal = kmYango.compareTo(BigDecimal.ZERO) > 0 ? kmYango : totalKmLocales;
-        BigDecimal pagoTotal = montoTotalProducido;
+        BigDecimal pagoTotal = montoNeto;
         BigDecimal utilidad = pagoTotal;
         BigDecimal utilidadPorViaje = totalViajes > 0 ? utilidad.divide(BigDecimal.valueOf(totalViajes), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
         BigDecimal pagoPorViaje = totalViajes > 0 ? pagoTotal.divide(BigDecimal.valueOf(totalViajes), 2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
@@ -474,6 +476,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .porcentajePago(0.0).pago(BigDecimal.ZERO).pagoTotal(pagoTotal)
                 .utilidad(utilidad).utilidadPorViaje(utilidadPorViaje).pagoPorViaje(pagoPorViaje)
                 .diasTrabajados(sessionsByDay.size()).sesionesPendientes(sesionesPendientes).dias(dias)
+                .efectivo(efectivo)
                 .build();
     }
 
@@ -613,6 +616,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         BigDecimal comisionApp = BigDecimal.ZERO;
         BigDecimal bonoYango = BigDecimal.ZERO;
         BigDecimal km = BigDecimal.ZERO;
+        BigDecimal efectivo = BigDecimal.ZERO;
         int totalViajes = 0;
 
         for (OrderInfoResponse o : orders) {
@@ -621,12 +625,13 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             if (o.getPriceCommissionPark() != null) comisionApp = comisionApp.add(BigDecimal.valueOf(o.getPriceCommissionPark()));
             if (o.getPriceBonus() != null) bonoYango = bonoYango.add(BigDecimal.valueOf(o.getPriceBonus()));
             if (o.getDistance() != null) km = km.add(BigDecimal.valueOf(o.getDistance()));
+            if (o.getCash() != null) efectivo = efectivo.add(BigDecimal.valueOf(o.getCash()));
             totalViajes++;
         }
 
         comisionApp = comisionApp.abs();
 
-        return new DatosYango(montoTotal, comisionApp, bonoYango, km, totalViajes);
+        return new DatosYango(montoTotal, comisionApp, bonoYango, km, totalViajes, efectivo);
     }
 
     private BigDecimal calcularBono(int totalViajes) {
@@ -711,10 +716,11 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .diasTrabajados(0)
                 .sesionesPendientes(List.of())
                 .dias(List.of())
+                .efectivo(BigDecimal.ZERO)
                 .build();
     }
 
-    private record DatosYango(BigDecimal montoTotalProducido, BigDecimal comisionApp, BigDecimal bonoYango, BigDecimal km, int totalViajes) {}
+    private record DatosYango(BigDecimal montoTotalProducido, BigDecimal comisionApp, BigDecimal bonoYango, BigDecimal km, int totalViajes, BigDecimal efectivo) {}
 
     @Override
     public void limpiarFacturacion(String driverId, LocalDate desde, LocalDate hasta) {

@@ -77,6 +77,9 @@ public class LiquidacionPendienteResponse {
     @JsonProperty("pagoTotal")
     private BigDecimal pagoTotal;
 
+    @JsonProperty("efectivo")
+    private BigDecimal efectivo;
+
     @JsonProperty("utilidad")
     private BigDecimal utilidad;
 
