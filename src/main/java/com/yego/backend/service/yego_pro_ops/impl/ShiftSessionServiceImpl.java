@@ -131,6 +131,7 @@ public class ShiftSessionServiceImpl implements ShiftSessionService {
                 .status(session.getStatus())
                 .totalTrips(session.getTotalTrips())
                 .totalAmount(session.getTotalAmount())
+                .totalCash(session.getTotalCash())
                 .createdAt(session.getCreatedAt())
                 .updatedAt(session.getUpdatedAt())
                 .build();

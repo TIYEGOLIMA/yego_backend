@@ -54,6 +54,10 @@ public class ShiftSession {
     @Builder.Default
     private BigDecimal totalAmount = BigDecimal.ZERO;
 
+    @Column(name = "total_cash", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal totalCash = BigDecimal.ZERO;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

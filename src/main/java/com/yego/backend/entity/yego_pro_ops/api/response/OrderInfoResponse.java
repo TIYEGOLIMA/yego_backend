@@ -33,7 +33,7 @@ public class OrderInfoResponse {
     @JsonProperty("distance")
     private Double distance;
 
-    @JsonProperty("cash")
+    @JsonProperty("price_cash")
     private Double cash;
 
     @JsonProperty("card")

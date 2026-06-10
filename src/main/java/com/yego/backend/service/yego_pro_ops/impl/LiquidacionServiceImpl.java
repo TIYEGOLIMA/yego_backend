@@ -320,7 +320,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                     .inicio(s.getStartedAt() != null ? s.getStartedAt().format(DATETIME_FORMATTER) : null)
                     .fin(s.getClosedAt() != null ? s.getClosedAt().format(DATETIME_FORMATTER) : null)
                     .viajes(trips.size())
-                    .ingresos(trips.stream().map(t -> t.getAmount() != null ? t.getAmount() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add))
+                    .ingresos(s.getTotalCash() != null ? s.getTotalCash() : BigDecimal.ZERO)
                     .km(trips.stream().map(t -> t.getDistanceKm() != null ? t.getDistanceKm() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add))
                     .status(s.getStatus())
                     .build());
@@ -522,9 +522,11 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             session = shiftSessionRepository.save(session);
             sessionId = session.getId();
             BigDecimal totalAmount = BigDecimal.ZERO;
+            BigDecimal totalCash = BigDecimal.ZERO;
             for (OrderInfoResponse order : yango.getOrders()) {
                 BigDecimal amount = order.getPrice() != null ? BigDecimal.valueOf(order.getPrice()) : BigDecimal.ZERO;
                 totalAmount = totalAmount.add(amount);
+                if (order.getCash() != null) totalCash = totalCash.add(BigDecimal.valueOf(order.getCash()));
                 Trip trip = Trip.builder()
                         .driverId(driverId).shiftSessionId(session.getId()).externalTripId(order.getId())
                         .completedAt(order.getEndedAt() != null ? LocalDateTime.parse(order.getEndedAt(), DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")) : LocalDateTime.now())
@@ -533,6 +535,8 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 tripRepository.save(trip);
             }
             session.setTotalAmount(totalAmount);
+            log.info("[LiquidacionService] DEBUG totalCash={} totalAmount={} ordersCount={}", totalCash, totalAmount, yango.getOrders().size());
+            session.setTotalCash(totalCash);
             shiftSessionRepository.save(session);
             sessionsCerradas = List.of(session);
             log.info("[LiquidacionService] sesión auto-generada sessionId={} viajes={}", sessionId, yango.getOrders().size());
