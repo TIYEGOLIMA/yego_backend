@@ -23,7 +23,6 @@ import com.yego.backend.repository.yego_pro_ops.TripRepository;
 import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
 import com.yego.backend.service.yego_pro_ops.LiquidacionService;
 import com.yego.backend.service.yego_pro_ops.ShiftSessionService;
-import com.yego.backend.service.yego_api_externo.YangoWeeklyService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,7 +65,6 @@ public class LiquidacionServiceImpl implements LiquidacionService {
     private final FacturacionSemanalRepository facturacionSemanalRepository;
     private final BonusThresholdRepository bonusThresholdRepository;
     private final PaymentPercentageRepository paymentPercentageRepository;
-    private final YangoWeeklyService yangoWeeklyService;
     private final DriverCloseRepository driverCloseRepository;
 
     public LiquidacionServiceImpl(
@@ -77,7 +75,6 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             FacturacionSemanalRepository facturacionSemanalRepository,
             BonusThresholdRepository bonusThresholdRepository,
             PaymentPercentageRepository paymentPercentageRepository,
-            YangoWeeklyService yangoWeeklyService,
             DriverCloseRepository driverCloseRepository) {
         this.shiftSessionRepository = shiftSessionRepository;
         this.tripRepository = tripRepository;
@@ -86,7 +83,6 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         this.facturacionSemanalRepository = facturacionSemanalRepository;
         this.bonusThresholdRepository = bonusThresholdRepository;
         this.paymentPercentageRepository = paymentPercentageRepository;
-        this.yangoWeeklyService = yangoWeeklyService;
         this.driverCloseRepository = driverCloseRepository;
     }
 
@@ -730,32 +726,5 @@ public class LiquidacionServiceImpl implements LiquidacionService {
     public void limpiarFacturacion(String driverId, LocalDate desde, LocalDate hasta) {
         facturacionSemanalRepository.deleteOverlappingWithDriver(driverId, desde, hasta);
         log.info("[LiquidacionService] facturación limpiada driverId={} desde={} hasta={}", driverId, desde, hasta);
-    }
-
-    private BigDecimal restarBonoObjetivoLunes(String driverId, LocalDateTime desde, LocalDateTime hasta) {
-        BigDecimal acumulado = BigDecimal.ZERO;
-        LocalDate inicio = desde.toLocalDate();
-        LocalDate fin = hasta.toLocalDate();
-        LocalDate cursor = inicio.with(TemporalAdjusters.nextOrSame(DayOfWeek.MONDAY));
-        log.info("[LiquidacionService] buscando bono objetivo lunes driverId={} rango={}→{}", driverId, inicio, fin);
-        while (!cursor.isAfter(fin)) {
-            try {
-                log.info("[LiquidacionService] consultando bono lunes {} para driverId={}", cursor, driverId);
-                Optional<Double> bonus = yangoWeeklyService.fetchFirstBonusTransactionAmount(
-                        driverId, DEFAULT_PARK_ID, cursor.toString());
-                if (bonus.isPresent() && bonus.get() > 0) {
-                    BigDecimal monto = BigDecimal.valueOf(bonus.get());
-                    acumulado = acumulado.add(monto);
-                    log.info("[LiquidacionService] bono objetivo lunes {} = {} (acumulado: {})", cursor, monto, acumulado);
-                } else {
-                    log.info("[LiquidacionService] sin bono objetivo para lunes {}", cursor);
-                }
-            } catch (Exception e) {
-                log.error("[LiquidacionService] ERROR bono lunes {} driverId={}: {}", cursor, driverId, e.getMessage(), e);
-            }
-            cursor = cursor.plusWeeks(1);
-        }
-        log.info("[LiquidacionService] bono objetivo lunes total a restar={} driverId={}", acumulado, driverId);
-        return acumulado;
     }
 }

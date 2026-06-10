@@ -31,9 +31,4 @@ public interface ShiftSessionRepository extends JpaRepository<ShiftSession, UUID
 
     @Query("SELECT COUNT(s) > 0 FROM ShiftSession s WHERE s.driverId = :driverId AND s.status IN ('closed', 'settled') AND s.deleted = false AND s.startedAt < :hasta AND (s.closedAt IS NULL OR s.closedAt > :desde)")
     boolean existsOverlapping(@Param("driverId") String driverId, @Param("desde") java.time.LocalDateTime desde, @Param("hasta") java.time.LocalDateTime hasta);
-
-    @Modifying
-    @Transactional
-    @Query("UPDATE ShiftSession s SET s.deleted = true WHERE s.id = :id")
-    void softDelete(@Param("id") UUID id);
 }
