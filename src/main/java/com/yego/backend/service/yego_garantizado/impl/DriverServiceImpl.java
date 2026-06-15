@@ -342,7 +342,10 @@ public class DriverServiceImpl implements DriverService {
     private String getFleetName(String parkId) {
         try {
             return fleetCacheRepository.findById(parkId)
-                    .map(FleetCache::getName)
+                    .map(fc -> {
+                        log.info("✅ [DriverService] Fleet cache HIT para park_id '{}': {}", parkId, fc.getName());
+                        return fc.getName();
+                    })
                     .orElseGet(() -> refreshFleetCacheAndGetName(parkId));
         } catch (Exception e) {
             log.warn("⚠️ [DriverService] Fleet cache no disponible, usando API externa como fallback: {}", e.getMessage());
