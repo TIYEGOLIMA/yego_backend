@@ -8,7 +8,9 @@ import com.yego.backend.entity.yego_garantizado.api.response.FlotaResponse;
 import com.yego.backend.entity.yego_api_externo.api.response.PPendientesResponse;
 import com.yego.backend.entity.yego_garantizado.entities.Driver;
 import com.yego.backend.entity.yego_api_externo.entities.DriverApi;
+import com.yego.backend.entity.yego_api_externo.entities.FleetCache;
 import com.yego.backend.repository.yego_garantizado.DriverRepository;
+import com.yego.backend.repository.yego_api_externo.FleetCacheRepository;
 import com.yego.backend.service.yego_garantizado.DriverService;
 import com.yego.backend.service.yego_garantizado.FlotaService;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +26,7 @@ public class DriverServiceImpl implements DriverService {
 
     private final DriverRepository driverRepository;
     private final FlotaService flotaService;
+    private final FleetCacheRepository fleetCacheRepository;
     private final RestTemplate restTemplate;
     
     // Park IDs permitidos (filtro)
@@ -41,9 +44,10 @@ public class DriverServiceImpl implements DriverService {
         "2e39f6699c854bc49cc75197431fe25c"  //Yego.
     );
 
-    public DriverServiceImpl(DriverRepository driverRepository, FlotaService flotaService, RestTemplate restTemplate) {
+    public DriverServiceImpl(DriverRepository driverRepository, FlotaService flotaService, FleetCacheRepository fleetCacheRepository, RestTemplate restTemplate) {
         this.driverRepository = driverRepository;
         this.flotaService = flotaService;
+        this.fleetCacheRepository = fleetCacheRepository;
         this.restTemplate = restTemplate;
     }
 
@@ -269,12 +273,8 @@ public class DriverServiceImpl implements DriverService {
         
         DriverApi driver = mapearObjectArrayADriverApi(resultadoSeleccionado);
         
-        // Obtener nombre de flota (sin restricción, todas las flotas)
-        String nombreFlota = obtenerFlotasPendientes().stream()
-                .filter(f -> f.getId().equals(driver.getParkId()))
-                .findFirst()
-                .map(FlotaResponse::getName)
-                .orElse("N/A");
+        // Obtener nombre de flota desde cache local (fallback a API externa si no disponible)
+        String nombreFlota = getFleetName(driver.getParkId());
         
         // Nombre y apellidos
         String nombre = driver.getFirstName() != null ? driver.getFirstName() : 
@@ -338,7 +338,39 @@ public class DriverServiceImpl implements DriverService {
         
         return driver;
     }
-    
+
+    private String getFleetName(String parkId) {
+        try {
+            return fleetCacheRepository.findById(parkId)
+                    .map(FleetCache::getName)
+                    .orElseGet(() -> refreshFleetCacheAndGetName(parkId));
+        } catch (Exception e) {
+            log.warn("⚠️ [DriverService] Fleet cache no disponible, usando API externa como fallback: {}", e.getMessage());
+            return obtenerFlotasPendientes().stream()
+                    .filter(f -> f.getId().equals(parkId))
+                    .findFirst()
+                    .map(FlotaResponse::getName)
+                    .orElse("N/A");
+        }
+    }
+
+    private String refreshFleetCacheAndGetName(String parkId) {
+        log.info("🔄 [DriverService] park_id '{}' no encontrado en cache, poblando desde API externa", parkId);
+        List<FlotaResponse> flotas = obtenerFlotasPendientes();
+        for (FlotaResponse f : flotas) {
+            FleetCache fc = FleetCache.builder()
+                    .parkId(f.getId())
+                    .name(f.getName())
+                    .city(f.getCity())
+                    .build();
+            fleetCacheRepository.save(fc);
+        }
+        log.info("💾 [DriverService] Fleet cache actualizado con {} flotas desde API externa", flotas.size());
+        return fleetCacheRepository.findById(parkId)
+                .map(FleetCache::getName)
+                .orElse("N/A");
+    }
+
     @Override
     public List<FlotaResponse> obtenerFlotasPendientes() {
         try {
