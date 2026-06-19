@@ -7,6 +7,7 @@ import com.yego.backend.repository.yego_marketing_mensajes.MarketingMensajeRepos
 import com.yego.backend.service.WhatsAppService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
+import org.springframework.core.env.Environment;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -53,6 +54,7 @@ public class MarketingMensajeScheduler {
     private final WhatsAppService whatsAppService;
     private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
+    private final Environment environment;
 
     /** Clave: mensajeId, Valor: última hora (HH:mm) en que se envió, para evitar duplicados dentro de la misma ventana. */
     private final Map<Long, String> ultimoEnvioPorMensaje = new HashMap<>();
@@ -60,15 +62,22 @@ public class MarketingMensajeScheduler {
     public MarketingMensajeScheduler(MarketingMensajeRepository marketingMensajeRepository,
                                      WhatsAppService whatsAppService,
                                      ObjectMapper objectMapper,
-                                     RestTemplate restTemplate) {
+                                     RestTemplate restTemplate,
+                                     Environment environment) {
         this.marketingMensajeRepository = marketingMensajeRepository;
         this.whatsAppService = whatsAppService;
         this.objectMapper = objectMapper;
         this.restTemplate = restTemplate;
+        this.environment = environment;
     }
 
     @Scheduled(fixedDelay = 300_000, initialDelay = 60_000)
     public void verificarYEnviarMensajesProgramados() {
+        List<String> activeProfiles = Arrays.asList(environment.getActiveProfiles());
+        if (activeProfiles.contains("dev") || activeProfiles.contains("local")) {
+            log.info("⏭️ [MarketingMensajeScheduler] Omitido en modo desarrollo (profiles: {})", activeProfiles);
+            return;
+        }
         log.info("⏰ [MarketingMensajeScheduler] Scheduler ejecutándose - Verificando mensajes programados");
         try {
             LocalTime horaActual = LocalTime.now(ZONA_LIMA);

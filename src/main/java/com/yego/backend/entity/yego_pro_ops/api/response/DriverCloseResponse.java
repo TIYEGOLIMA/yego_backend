@@ -56,6 +56,9 @@ public class DriverCloseResponse {
     @JsonProperty("liquidaYape")
     private BigDecimal liquidaYape;
 
+    @JsonProperty("operacionYape")
+    private String operacionYape;
+
     @JsonProperty("otrosGastos")
     private BigDecimal otrosGastos;
 

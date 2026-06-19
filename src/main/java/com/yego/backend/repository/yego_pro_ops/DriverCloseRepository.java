@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -14,4 +15,6 @@ public interface DriverCloseRepository extends JpaRepository<DriverClose, Long> 
     Optional<DriverClose> findFirstByDriverIdAndFechaOrderByIdDesc(String driverId, LocalDate fecha);
 
     Optional<DriverClose> findFirstByShiftSessionIdOrderByIdDesc(UUID shiftSessionId);
+
+    List<DriverClose> findByDriverIdAndFechaBetween(String driverId, LocalDate desde, LocalDate hasta);
 }

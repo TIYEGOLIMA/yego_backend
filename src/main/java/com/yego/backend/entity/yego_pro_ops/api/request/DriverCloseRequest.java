@@ -47,6 +47,9 @@ public class DriverCloseRequest {
     @JsonProperty("liquidaYape")
     private Double liquidaYape;
 
+    @JsonProperty("operacionYape")
+    private String operacionYape;
+
     @JsonProperty("otrosGastos")
     private Double otrosGastos;
 

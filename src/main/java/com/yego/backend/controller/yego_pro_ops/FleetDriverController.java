@@ -81,6 +81,14 @@ public class FleetDriverController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cierre no encontrado"));
     }
 
+    @GetMapping("/driver/cierres/rango")
+    public List<DriverCloseResponse> obtenerCierresPorRango(
+            @RequestParam String driverId,
+            @RequestParam String desde,
+            @RequestParam String hasta) {
+        return driverCloseService.obtenerCierresPorRango(driverId, desde, hasta);
+    }
+
     @PutMapping("/driver/cierre")
     public DriverClose actualizarCierre(@Valid @RequestBody DriverCloseRequest request) {
         log.info("[FleetDriverController] actualizar cierre driverId={} fecha={} userId={}",

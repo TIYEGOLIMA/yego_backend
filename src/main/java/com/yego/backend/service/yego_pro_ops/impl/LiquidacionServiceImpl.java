@@ -545,7 +545,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             double gnvSoles = request.getGnvSoles() != null ? request.getGnvSoles() : 0;
             double gasolinaSoles = request.getGasolinaSoles() != null ? request.getGasolinaSoles() : 0;
             double otrosGastos = request.getOtrosGastos() != null ? request.getOtrosGastos() : 0;
-            double totalIngresos = s.getTotalAmount() != null ? s.getTotalAmount().doubleValue() : 0;
+            double totalIngresos = s.getTotalCash() != null ? s.getTotalCash().doubleValue() : 0;
             double totalGastos = gnvSoles + gasolinaSoles + otrosGastos;
 
             DriverClose cierre = DriverClose.builder()

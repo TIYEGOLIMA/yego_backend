@@ -3,7 +3,9 @@ package com.yego.backend.service.yego_pro_ops.impl;
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverCloseRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverCloseResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.DriverClose;
+import com.yego.backend.entity.yego_pro_ops.entities.ShiftSession;
 import com.yego.backend.repository.yego_pro_ops.DriverCloseRepository;
+import com.yego.backend.repository.yego_pro_ops.ShiftSessionRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
 import lombok.extern.slf4j.Slf4j;
@@ -29,14 +31,17 @@ public class DriverCloseServiceImpl implements DriverCloseService {
 
     private final DriverCloseRepository driverCloseRepository;
     private final UserRepository userRepository;
+    private final ShiftSessionRepository shiftSessionRepository;
     private final TransactionTemplate transactionTemplate;
 
     public DriverCloseServiceImpl(
             DriverCloseRepository driverCloseRepository,
             UserRepository userRepository,
+            ShiftSessionRepository shiftSessionRepository,
             PlatformTransactionManager transactionManager) {
         this.driverCloseRepository = driverCloseRepository;
         this.userRepository = userRepository;
+        this.shiftSessionRepository = shiftSessionRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
@@ -82,7 +87,18 @@ public class DriverCloseServiceImpl implements DriverCloseService {
     public Optional<DriverCloseResponse> obtenerCierrePorSessionId(UUID sessionId) {
         if (sessionId == null) return Optional.empty();
         return driverCloseRepository.findFirstByShiftSessionIdOrderByIdDesc(sessionId)
-                .map(this::convertirAResponse);
+                .map(cierre -> {
+                    Optional<ShiftSession> sessionOpt = shiftSessionRepository.findById(sessionId);
+                    if (sessionOpt.isPresent()) {
+                        ShiftSession session = sessionOpt.get();
+                        if (session.getTotalCash() != null) {
+                            BigDecimal totalGastos = cierre.getTotalGastos() != null ? cierre.getTotalGastos() : BigDecimal.ZERO;
+                            cierre.setTotalIngresos(session.getTotalCash());
+                            cierre.setResta(session.getTotalCash().subtract(totalGastos));
+                        }
+                    }
+                    return convertirAResponse(cierre);
+                });
     }
 
     @Override
@@ -121,6 +137,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .gasolinaSoles(toBigDecimal(req.getGasolinaSoles()))
             .liquidaEfectivo(toBigDecimal(req.getLiquidaEfectivo()))
             .liquidaYape(toBigDecimal(req.getLiquidaYape()))
+            .operacionYape(req.getOperacionYape())
             .otrosGastos(toBigDecimal(req.getOtrosGastos()))
             .otrosGastosDescripcion(req.getOtrosGastosDescripcion())
             .totalIngresos(toBigDecimal(ingresos))
@@ -141,6 +158,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         if (req.getGasolinaSoles() != null) cierre.setGasolinaSoles(toBigDecimal(req.getGasolinaSoles()));
         if (req.getLiquidaEfectivo() != null) cierre.setLiquidaEfectivo(toBigDecimal(req.getLiquidaEfectivo()));
         if (req.getLiquidaYape() != null) cierre.setLiquidaYape(toBigDecimal(req.getLiquidaYape()));
+        if (req.getOperacionYape() != null) cierre.setOperacionYape(req.getOperacionYape());
         if (req.getOtrosGastos() != null) cierre.setOtrosGastos(toBigDecimal(req.getOtrosGastos()));
         if (req.getOtrosGastosDescripcion() != null) cierre.setOtrosGastosDescripcion(req.getOtrosGastosDescripcion());
         if (req.getTotalIngresos() != null && req.getTotalIngresos() > 0) cierre.setTotalIngresos(toBigDecimal(req.getTotalIngresos()));
@@ -177,6 +195,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .gasolinaSoles(cierre.getGasolinaSoles())
             .liquidaEfectivo(cierre.getLiquidaEfectivo())
             .liquidaYape(cierre.getLiquidaYape())
+            .operacionYape(cierre.getOperacionYape())
             .otrosGastos(cierre.getOtrosGastos())
             .otrosGastosDescripcion(cierre.getOtrosGastosDescripcion())
             .totalIngresos(cierre.getTotalIngresos())
@@ -217,5 +236,35 @@ public class DriverCloseServiceImpl implements DriverCloseService {
 
     private static boolean esVacio(String s) {
         return s == null || s.trim().isEmpty();
+    }
+
+    @Override
+    public List<DriverCloseResponse> obtenerCierresPorRango(String driverId, String desde, String hasta) {
+        if (esVacio(driverId) || esVacio(desde) || esVacio(hasta)) return List.of();
+        try {
+            LocalDate fechaDesde = LocalDate.parse(desde.trim(), DATE_FORMATTER);
+            LocalDate fechaHasta = LocalDate.parse(hasta.trim(), DATE_FORMATTER);
+            return driverCloseRepository.findByDriverIdAndFechaBetween(driverId.trim(), fechaDesde, fechaHasta)
+                    .stream()
+                    .map(cierre -> {
+                        if (cierre.getShiftSessionId() != null) {
+                            Optional<ShiftSession> sessionOpt = shiftSessionRepository.findById(cierre.getShiftSessionId());
+                            if (sessionOpt.isPresent()) {
+                                ShiftSession session = sessionOpt.get();
+                                if (session.getTotalCash() != null) {
+                                    BigDecimal totalGastos = cierre.getTotalGastos() != null ? cierre.getTotalGastos() : BigDecimal.ZERO;
+                                    cierre.setTotalIngresos(session.getTotalCash());
+                                    cierre.setResta(session.getTotalCash().subtract(totalGastos));
+                                }
+                            }
+                        }
+                        return convertirAResponse(cierre);
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("[DriverCloseService] error obteniendo cierres por rango driverId={} desde={}: {}",
+                driverId, desde, e.getMessage());
+            return List.of();
+        }
     }
 }
