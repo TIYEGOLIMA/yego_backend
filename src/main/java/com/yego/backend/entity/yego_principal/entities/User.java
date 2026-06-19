@@ -51,7 +51,7 @@ public class User {
     @Column(name = "username", nullable = false, unique = true, length = 255)
     private String username;
     
-    @Column(name = "dni", length = 8, nullable = false, unique = true)
+    @Column(name = "dni", length = 12, nullable = false, unique = true)
     private String dni;
 
     @Column(name = "area_id")
