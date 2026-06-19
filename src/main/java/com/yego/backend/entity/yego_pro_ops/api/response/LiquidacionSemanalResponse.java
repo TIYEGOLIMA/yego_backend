@@ -86,6 +86,12 @@ public class LiquidacionSemanalResponse {
     @JsonProperty("pagoTotal")
     private BigDecimal pagoTotal;
 
+    @JsonProperty("bonificacionEmpresa")
+    private BigDecimal bonificacionEmpresa;
+
+    @JsonProperty("pagoTotalFinal")
+    private BigDecimal pagoTotalFinal;
+
     @JsonProperty("utilidad")
     private BigDecimal utilidad;
 

@@ -274,7 +274,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         }
 
         BigDecimal montoTotalProducidoSesiones = sessions.stream()
-                .map(s -> s.getTotalAmount() != null ? s.getTotalAmount() : BigDecimal.ZERO)
+                .map(s -> s.getTotalCash() != null ? s.getTotalCash() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (montoTotalProducidoSesiones.compareTo(BigDecimal.ZERO) > 0) {
             montoTotalProducido = montoTotalProducidoSesiones;
@@ -325,6 +325,17 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         boolean semanaCerradaSemanal = facturacionSemanalRepository
                 .existsOverlappingWithDriver(driverId, weekStart, weekEnd);
 
+        BigDecimal bonificacionEmpresa = null;
+        BigDecimal pagoTotalFinal = null;
+        if (semanaCerradaSemanal) {
+            Optional<FacturacionSemanal> facturacionExistente = facturacionSemanalRepository
+                    .findByDriverIdAndFechaInicioAndFechaFin(driverId, weekStart, weekEnd);
+            if (facturacionExistente.isPresent()) {
+                bonificacionEmpresa = facturacionExistente.get().getBonificacionEmpresa();
+                pagoTotalFinal = facturacionExistente.get().getPagoTotalFinal();
+            }
+        }
+
         return LiquidacionSemanalResponse.builder()
                 .driverId(driverId).semanaInicio(weekStart).semanaFin(weekEnd)
                 .totalSesiones(sessions.size()).totalViajes(totalViajes).totalIngresos(totalPendiente).totalKm(totalKm)
@@ -333,6 +344,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .montoTotalProducido(montoTotalProducido).bonoYango(bonoYango).comisionApp(comisionApp)
                 .montoNeto(montoNeto).produccionBonificable(produccionBonificable).bonoAdicViajes(bonoAdicViajes)
                 .bono(bono).porcentajePago(porcentajePago).pago(pago).pagoTotal(pagoTotal)
+                .bonificacionEmpresa(bonificacionEmpresa).pagoTotalFinal(pagoTotalFinal)
                 .utilidad(utilidad).utilidadPorViaje(utilidadPorViaje).pagoPorViaje(pagoPorViaje)
                 .kmRecorrido(kmFinal).gastoMantenimiento(gastoMantenimiento).viajesPorHora(viajesPorHora).sesionesDetalle(sesionesUnicas).semanaCerrada(semanaCerradaSemanal)
                 .build();

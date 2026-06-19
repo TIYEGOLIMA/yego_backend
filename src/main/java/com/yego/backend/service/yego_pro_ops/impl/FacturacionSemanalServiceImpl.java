@@ -60,6 +60,8 @@ public class FacturacionSemanalServiceImpl implements FacturacionSemanalService 
             actual.setDescuento(facturacion.getDescuento());
             actual.setGeneral(facturacion.getGeneral());
             actual.setPagoTotal(facturacion.getPagoTotal());
+            actual.setBonificacionEmpresa(facturacion.getBonificacionEmpresa());
+            actual.setPagoTotalFinal(facturacion.getPagoTotalFinal());
             actual.setUtilidad(facturacion.getUtilidad());
             actual.setUtilidadPorViaje(facturacion.getUtilidadPorViaje());
             actual.setPagoPorViaje(facturacion.getPagoPorViaje());

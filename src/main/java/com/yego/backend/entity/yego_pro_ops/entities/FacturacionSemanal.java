@@ -99,6 +99,12 @@ public class FacturacionSemanal {
     @Column(name = "pago_total", precision = 12, scale = 2)
     private BigDecimal pagoTotal;
 
+    @Column(name = "bonificacion_empresa", precision = 12, scale = 2)
+    private BigDecimal bonificacionEmpresa;
+
+    @Column(name = "pago_total_final", precision = 12, scale = 2)
+    private BigDecimal pagoTotalFinal;
+
     @Column(name = "utilidad", precision = 12, scale = 2)
     private BigDecimal utilidad;
 
