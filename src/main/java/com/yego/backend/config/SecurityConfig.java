@@ -123,6 +123,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/health").permitAll() // Health check
                 .requestMatchers("/api/yego-premium/**").permitAll() // Driver active stats endpoints
                 .requestMatchers("/api/marketing-mensajes/**").permitAll() // Marketing mensajes endpoints
+                .requestMatchers("/api/vehicles/**").permitAll() // Flotas/Vehículos endpoints
                 .requestMatchers("/api/pro-ops/**", "/pro-ops/**").permitAll() // Pro Ops endpoints (con o sin /api si context-path=/api)
                 .requestMatchers("/api/GoBot/**").permitAll() // GoBot API externa endpoints
                 .requestMatchers("/api/yango-external/**").permitAll() // Yango resumen externo (yego_api_externo)
