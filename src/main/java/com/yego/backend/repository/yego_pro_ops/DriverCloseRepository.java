@@ -19,4 +19,6 @@ public interface DriverCloseRepository extends JpaRepository<DriverClose, Long> 
     List<DriverClose> findByDriverIdAndFechaBetween(String driverId, LocalDate desde, LocalDate hasta);
 
     List<DriverClose> findByMontoTotalProducidoIsNull();
+
+    List<DriverClose> findAllByDriverId(String driverId);
 }

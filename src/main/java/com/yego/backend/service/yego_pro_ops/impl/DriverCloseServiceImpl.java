@@ -10,6 +10,7 @@ import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
 import com.yego.backend.service.yego_pro_ops.LiquidacionService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -41,7 +42,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             DriverCloseRepository driverCloseRepository,
             UserRepository userRepository,
             ShiftSessionRepository shiftSessionRepository,
-            LiquidacionService liquidacionService,
+            @Lazy LiquidacionService liquidacionService,
             PlatformTransactionManager transactionManager) {
         this.driverCloseRepository = driverCloseRepository;
         this.userRepository = userRepository;
@@ -143,6 +144,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .liquidaEfectivo(toBigDecimal(req.getLiquidaEfectivo()))
             .liquidaYape(toBigDecimal(req.getLiquidaYape()))
             .operacionYape(req.getOperacionYape())
+            .adelanto(toBigDecimal(req.getAdelanto()))
             .otrosGastos(toBigDecimal(req.getOtrosGastos()))
             .otrosGastosDescripcion(req.getOtrosGastosDescripcion())
             .totalIngresos(toBigDecimal(ingresos))
@@ -168,10 +170,12 @@ public class DriverCloseServiceImpl implements DriverCloseService {
                 ShiftSession sesion = sesionOpt.get();
                 LocalDateTime fin = sesion.getClosedAt() != null ? sesion.getClosedAt() : LocalDateTime.now();
                 BigDecimal producido = liquidacionService.calcularProducidoYango(sesion.getDriverId(), sesion.getStartedAt(), fin);
-                if (producido != null && producido.compareTo(BigDecimal.ZERO) > 0) return producido;
+                if (producido != null && producido.compareTo(BigDecimal.ZERO) > 0) {
+                    return producido;
+                }
             }
         }
-        return req.getMontoTotalProducido() != null ? BigDecimal.valueOf(req.getMontoTotalProducido()) : null;
+        return BigDecimal.ZERO;
     }
 
     private void aplicarCamposEditables(DriverClose cierre, DriverCloseRequest req) {
@@ -182,6 +186,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         if (req.getLiquidaEfectivo() != null) cierre.setLiquidaEfectivo(toBigDecimal(req.getLiquidaEfectivo()));
         if (req.getLiquidaYape() != null) cierre.setLiquidaYape(toBigDecimal(req.getLiquidaYape()));
         if (req.getOperacionYape() != null) cierre.setOperacionYape(req.getOperacionYape());
+        if (req.getAdelanto() != null) cierre.setAdelanto(toBigDecimal(req.getAdelanto()));
         if (req.getOtrosGastos() != null) cierre.setOtrosGastos(toBigDecimal(req.getOtrosGastos()));
         if (req.getOtrosGastosDescripcion() != null) cierre.setOtrosGastosDescripcion(req.getOtrosGastosDescripcion());
         if (req.getTotalIngresos() != null && req.getTotalIngresos() > 0) cierre.setTotalIngresos(toBigDecimal(req.getTotalIngresos()));
@@ -222,6 +227,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .liquidaEfectivo(cierre.getLiquidaEfectivo())
             .liquidaYape(cierre.getLiquidaYape())
             .operacionYape(cierre.getOperacionYape())
+            .adelanto(cierre.getAdelanto())
             .otrosGastos(cierre.getOtrosGastos())
             .otrosGastosDescripcion(cierre.getOtrosGastosDescripcion())
             .totalIngresos(cierre.getTotalIngresos())

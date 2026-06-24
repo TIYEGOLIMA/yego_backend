@@ -105,15 +105,10 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         }
 
         List<UUID> sessionIds = sessions.stream().map(ShiftSession::getId).collect(Collectors.toList());
-        List<Trip> allTrips = new ArrayList<>();
-        for (UUID sid : sessionIds) {
-            allTrips.addAll(tripRepository.findByShiftSessionId(sid));
-        }
+        List<Trip> allTrips = tripRepository.findByShiftSessionIdIn(sessionIds);
 
         Map<LocalDate, List<ShiftSession>> sessionsByDay = new LinkedHashMap<>();
         for (ShiftSession s : sessions) {
-            LocalDate startDate = s.getStartedAt().toLocalDate();
-            LocalDate endDate = s.getClosedAt() != null ? s.getClosedAt().toLocalDate() : LocalDate.now();
             LocalDate dia = s.getStartedAt().toLocalDate();
             if (!dia.isBefore(weekStart) && !dia.isAfter(weekEnd)) {
                 sessionsByDay.computeIfAbsent(dia, k -> new ArrayList<>()).add(s);
@@ -121,16 +116,20 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         }
 
         boolean tieneActiva = sessions.stream().anyMatch(s -> "active".equals(s.getStatus()));
-        boolean tieneCerrada = sessions.stream().anyMatch(s -> "closed".equals(s.getStatus()) || "settled".equals(s.getStatus()));
+        boolean tieneCerrada = sessions.stream().anyMatch(s -> "completada".equals(s.getStatus()));
 
         LocalDateTime lastSettled = shiftSessionRepository.findLastSettledAtByDriverId(driverId).orElse(null);
 
+        Map<UUID, BigDecimal> tripsPorSession = allTrips.stream()
+                .collect(Collectors.groupingBy(Trip::getShiftSessionId,
+                        Collectors.reducing(BigDecimal.ZERO,
+                                t -> t.getAmount() != null ? t.getAmount() : BigDecimal.ZERO,
+                                BigDecimal::add)));
+
         BigDecimal totalPendiente = sessions.stream()
-                .filter(s -> "closed".equals(s.getStatus())
+                .filter(s -> "completada".equals(s.getStatus())
                         && (lastSettled == null || (s.getClosedAt() != null && !s.getClosedAt().isBefore(lastSettled))))
-                .map(s -> tripRepository.findByShiftSessionId(s.getId()).stream()
-                        .map(t -> t.getAmount() != null ? t.getAmount() : BigDecimal.ZERO)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .map(s -> tripsPorSession.getOrDefault(s.getId(), BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<DiaLiquidacionInfo> dias = new ArrayList<>();
@@ -163,7 +162,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 ingresosDia = ingresosDia.add(ing);
                 kmDia = kmDia.add(k);
 
-                if ("closed".equals(s.getStatus())
+                if ("completada".equals(s.getStatus())
                         && (lastSettled == null || (s.getClosedAt() != null && !s.getClosedAt().isBefore(lastSettled)))) {
                     ingresosPendientes = ingresosPendientes.add(ing);
                 } else if ("settled".equals(s.getStatus())) {
@@ -186,21 +185,21 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 estado = "Sin actividad";
             } else {
                 boolean hayActiva = sesionesDia.stream().anyMatch(s -> "active".equals(s.getStatus()));
-                boolean hayCerradaPendiente = sesionesDia.stream().anyMatch(s ->
-                    "closed".equals(s.getStatus())
+                boolean hayPendienteValidacion = sesionesDia.stream().anyMatch(s ->
+                    "por_validar".equals(s.getStatus())
                         && (lastSettled == null || (s.getClosedAt() != null && !s.getClosedAt().isBefore(lastSettled)))
                 );
                 boolean haySettled = sesionesDia.stream().anyMatch(s -> "settled".equals(s.getStatus()));
-                boolean todasSettled = sesionesDia.stream().allMatch(s -> "settled".equals(s.getStatus()));
+                boolean todasSettled = sesionesDia.stream().allMatch(s -> "settled".equals(s.getStatus()) || "completada".equals(s.getStatus()));
 
                 if (todasSettled) {
                     estado = "Liquidado";
                 } else if (hayActiva) {
                     estado = "En curso";
-                } else if (hayCerradaPendiente && haySettled) {
+                } else if (hayPendienteValidacion && haySettled) {
                     estado = "Pendiente parcial";
-                } else if (hayCerradaPendiente) {
-                    estado = "Cerrado";
+                } else if (hayPendienteValidacion) {
+                    estado = "Por validar";
                 } else if (haySettled) {
                     estado = "Liquidado";
                 } else {
@@ -235,7 +234,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .orElse(null);
 
         List<UUID> sesionesPendientes = sessions.stream()
-                .filter(s -> "closed".equals(s.getStatus())
+                .filter(s -> "completada".equals(s.getStatus())
                         && (lastSettled == null || (s.getClosedAt() != null && !s.getClosedAt().isBefore(lastSettled))))
                 .map(ShiftSession::getId)
                 .collect(Collectors.toList());
@@ -247,8 +246,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         int totalViajesYango = 0;
         BigDecimal viajesPorHora = BigDecimal.ZERO;
 
-        Set<String> sessionTripIds = sessions.stream()
-                .flatMap(s -> tripRepository.findByShiftSessionId(s.getId()).stream())
+        Set<String> sessionTripIds = allTrips.stream()
                 .map(Trip::getExternalTripId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
@@ -318,22 +316,18 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         List<SesionDiaInfo> sesionesUnicas = new ArrayList<>();
         for (ShiftSession s : sessions) {
             if (!visto.add(s.getId())) continue;
-            List<Trip> trips = allTrips.stream().filter(t -> t.getShiftSessionId().equals(s.getId())).collect(Collectors.toList());
+            List<Trip> tripsSesion = allTrips.stream().filter(t -> t.getShiftSessionId().equals(s.getId())).collect(Collectors.toList());
             BigDecimal efectivoSesion = nz(s.getTotalCash());
-            BigDecimal producidoSesion = producidoPorSesion.get(s.getId());
-            if (producidoSesion == null) {
-                LocalDateTime finSesion = s.getClosedAt() != null ? s.getClosedAt() : LocalDateTime.now();
-                producidoSesion = calcularProducidoYango(s.getDriverId(), s.getStartedAt(), finSesion);
-            }
+            BigDecimal producidoSesion = producidoPorSesion.getOrDefault(s.getId(), BigDecimal.ZERO);
             sesionesUnicas.add(SesionDiaInfo.builder()
                     .sessionId(s.getId())
                     .inicio(s.getStartedAt() != null ? s.getStartedAt().format(DATETIME_FORMATTER) : null)
                     .fin(s.getClosedAt() != null ? s.getClosedAt().format(DATETIME_FORMATTER) : null)
-                    .viajes(trips.size())
+                    .viajes(tripsSesion.size())
                     .ingresos(efectivoSesion)
                     .efectivo(efectivoSesion)
                     .montoTotalProducido(producidoSesion)
-                    .km(trips.stream().map(t -> t.getDistanceKm() != null ? t.getDistanceKm() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add))
+                    .km(tripsSesion.stream().map(t -> t.getDistanceKm() != null ? t.getDistanceKm() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add))
                     .status(s.getStatus())
                     .build());
         }
@@ -343,12 +337,29 @@ public class LiquidacionServiceImpl implements LiquidacionService {
 
         BigDecimal bonificacionEmpresa = null;
         BigDecimal pagoTotalFinal = null;
+        BigDecimal totalAdelantos = BigDecimal.ZERO;
+        BigDecimal pagoTotalConAdelantos = null;
         if (semanaCerradaSemanal) {
             Optional<FacturacionSemanal> facturacionExistente = facturacionSemanalRepository
                     .findByDriverIdAndFechaInicioAndFechaFin(driverId, weekStart, weekEnd);
             if (facturacionExistente.isPresent()) {
                 bonificacionEmpresa = facturacionExistente.get().getBonificacionEmpresa();
                 pagoTotalFinal = facturacionExistente.get().getPagoTotalFinal();
+                totalAdelantos = facturacionExistente.get().getTotalAdelantos() != null
+                        ? facturacionExistente.get().getTotalAdelantos() : BigDecimal.ZERO;
+                pagoTotalConAdelantos = facturacionExistente.get().getPagoTotalConAdelantos();
+            }
+        }
+
+        // Calcular total adelantos de los cierres de la semana
+        if (totalAdelantos.compareTo(BigDecimal.ZERO) == 0 && !semanaCerradaSemanal) {
+            List<DriverClose> cierresAdelantos = driverCloseRepository
+                    .findByDriverIdAndFechaBetween(driverId, weekStart, weekEnd);
+            totalAdelantos = cierresAdelantos.stream()
+                    .map(c -> c.getAdelanto() != null ? c.getAdelanto() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (totalAdelantos.compareTo(BigDecimal.ZERO) > 0) {
+                pagoTotalConAdelantos = pagoTotal.subtract(totalAdelantos);
             }
         }
 
@@ -361,6 +372,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .montoNeto(montoNeto).produccionBonificable(produccionBonificable).bonoAdicViajes(bonoAdicViajes)
                 .bono(bono).porcentajePago(porcentajePago).pago(pago).pagoTotal(pagoTotal)
                 .bonificacionEmpresa(bonificacionEmpresa).pagoTotalFinal(pagoTotalFinal)
+                .totalAdelantos(totalAdelantos).pagoTotalConAdelantos(pagoTotalConAdelantos)
                 .utilidad(utilidad).utilidadPorViaje(utilidadPorViaje).pagoPorViaje(pagoPorViaje)
                 .kmRecorrido(kmFinal).gastoMantenimiento(gastoMantenimiento).gastoCombustible(gastoCombustible).viajesPorHora(viajesPorHora).sesionesDetalle(sesionesUnicas).semanaCerrada(semanaCerradaSemanal)
                 .build();
@@ -385,7 +397,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         boolean esPrimera = shiftSessionRepository.findLastSettledAtByDriverId(driverId).isEmpty();
 
         List<ShiftSession> sessionsCerradas = shiftSessionRepository.findByDriverIdOrderByStartedAtDesc(driverId).stream()
-                .filter(s -> "closed".equals(s.getStatus()))
+                .filter(s -> "completada".equals(s.getStatus()))
                 .filter(s -> s.getClosedAt() != null && !s.getClosedAt().isBefore(desdeFinal))
                 .filter(s -> s.getStartedAt() != null && !s.getStartedAt().isAfter(hastaFinal))
                 .sorted(Comparator.comparing(ShiftSession::getStartedAt))
@@ -526,7 +538,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         final LocalDateTime hastaFinal = hasta;
 
         List<ShiftSession> sessionsCerradas = shiftSessionRepository.findByDriverIdOrderByStartedAtDesc(driverId).stream()
-                .filter(s -> "closed".equals(s.getStatus()))
+                .filter(s -> "completada".equals(s.getStatus()))
                 .filter(s -> s.getClosedAt() != null && !s.getClosedAt().isBefore(desdeFinal))
                 .filter(s -> s.getStartedAt() != null && !s.getStartedAt().isAfter(hastaFinal))
                 .collect(Collectors.toList());
@@ -541,7 +553,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             }
             ShiftSession session = ShiftSession.builder()
                     .driverId(driverId).startedAt(desdeFinal).closedAt(hastaFinal)
-                    .status("closed").totalTrips(yango.getOrders().size()).totalAmount(BigDecimal.ZERO)
+                    .status("por_validar").totalTrips(yango.getOrders().size()).totalAmount(BigDecimal.ZERO)
                     .build();
             session = shiftSessionRepository.save(session);
             sessionId = session.getId();

@@ -63,6 +63,9 @@ public class DriverClose {
     @Column(name = "operacion_yape", length = 50)
     private String operacionYape;
 
+    @Column(name = "adelanto", precision = 10, scale = 2)
+    private BigDecimal adelanto;
+
     @Column(name = "otros_gastos", precision = 10, scale = 2)
     private BigDecimal otrosGastos;
 
