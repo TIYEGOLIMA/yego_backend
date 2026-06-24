@@ -30,6 +30,12 @@ public class SesionDiaInfo {
     @JsonProperty("ingresos")
     private BigDecimal ingresos;
 
+    @JsonProperty("efectivo")
+    private BigDecimal efectivo;
+
+    @JsonProperty("montoTotalProducido")
+    private BigDecimal montoTotalProducido;
+
     @JsonProperty("km")
     private BigDecimal km;
 

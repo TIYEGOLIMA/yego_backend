@@ -65,6 +65,9 @@ public class DriverCloseRequest {
     @JsonProperty("resta")
     private Double resta;
 
+    @JsonProperty("montoTotalProducido")
+    private Double montoTotalProducido;
+
     @JsonProperty("placa")
     private String placa;
 

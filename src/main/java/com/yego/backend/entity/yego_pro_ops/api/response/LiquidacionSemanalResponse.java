@@ -107,6 +107,9 @@ public class LiquidacionSemanalResponse {
     @JsonProperty("gastoMantenimiento")
     private BigDecimal gastoMantenimiento;
 
+    @JsonProperty("gastoCombustible")
+    private BigDecimal gastoCombustible;
+
     @JsonProperty("viajesPorHora")
     private BigDecimal viajesPorHora;
 

@@ -78,6 +78,9 @@ public class DriverClose {
     @Column(name = "resta", precision = 10, scale = 2)
     private BigDecimal resta;
 
+    @Column(name = "monto_total_producido", precision = 12, scale = 2)
+    private BigDecimal montoTotalProducido;
+
     @Column(name = "placa", length = 20)
     private String placa;
 

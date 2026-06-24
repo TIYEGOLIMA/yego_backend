@@ -263,6 +263,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                         .collect(Collectors.toList());
                 if (!filtradas.isEmpty()) {
                     DatosYango dy = procesarDatosYango(filtradas);
+                    montoTotalProducido = dy.montoTotalProducido;
                     comisionApp = dy.comisionApp;
                     bonoYango = dy.bonoYango;
                     kmYango = dy.km;
@@ -273,19 +274,26 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             log.warn("[LiquidacionService] error consultando Yango para getLiquidacionSemanal driverId={}: {}", driverId, e.getMessage());
         }
 
-        BigDecimal montoTotalProducidoSesiones = sessions.stream()
-                .map(s -> s.getTotalCash() != null ? s.getTotalCash() : BigDecimal.ZERO)
+        List<DriverClose> cierresSemana = driverCloseRepository.findByDriverIdAndFechaBetween(driverId, weekStart, weekEnd);
+        BigDecimal producidoCierres = cierresSemana.stream()
+                .map(c -> nz(c.getMontoTotalProducido()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (montoTotalProducidoSesiones.compareTo(BigDecimal.ZERO) > 0) {
-            montoTotalProducido = montoTotalProducidoSesiones;
+        if (producidoCierres.compareTo(BigDecimal.ZERO) > 0) {
+            montoTotalProducido = producidoCierres;
         }
+        BigDecimal gastoCombustible = cierresSemana.stream()
+                .map(c -> nz(c.getGnvSoles()).add(nz(c.getGasolinaSoles())))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        Map<UUID, BigDecimal> producidoPorSesion = cierresSemana.stream()
+                .filter(c -> c.getShiftSessionId() != null && c.getMontoTotalProducido() != null)
+                .collect(Collectors.toMap(DriverClose::getShiftSessionId, DriverClose::getMontoTotalProducido, (a, b) -> b));
 
         BigDecimal kmFinal = kmYango.compareTo(BigDecimal.ZERO) > 0 ? kmYango : totalKm;
         BigDecimal gastoMantenimiento = kmFinal.multiply(TASA_MANTENIMIENTO).setScale(2, RoundingMode.HALF_UP);
         BigDecimal montoNeto = montoTotalProducido.subtract(comisionApp);
         if (montoNeto.compareTo(BigDecimal.ZERO) < 0) montoNeto = BigDecimal.ZERO;
 
-        BigDecimal produccionBonificable = montoNeto.add(bonoYango).subtract(gastoMantenimiento);
+        BigDecimal produccionBonificable = montoNeto.add(bonoYango).subtract(gastoCombustible).subtract(gastoMantenimiento);
         if (produccionBonificable.compareTo(BigDecimal.ZERO) < 0) produccionBonificable = BigDecimal.ZERO;
 
         int viajesParaCalc = Math.max(totalViajes, totalViajesYango);
@@ -311,12 +319,20 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         for (ShiftSession s : sessions) {
             if (!visto.add(s.getId())) continue;
             List<Trip> trips = allTrips.stream().filter(t -> t.getShiftSessionId().equals(s.getId())).collect(Collectors.toList());
+            BigDecimal efectivoSesion = nz(s.getTotalCash());
+            BigDecimal producidoSesion = producidoPorSesion.get(s.getId());
+            if (producidoSesion == null) {
+                LocalDateTime finSesion = s.getClosedAt() != null ? s.getClosedAt() : LocalDateTime.now();
+                producidoSesion = calcularProducidoYango(s.getDriverId(), s.getStartedAt(), finSesion);
+            }
             sesionesUnicas.add(SesionDiaInfo.builder()
                     .sessionId(s.getId())
                     .inicio(s.getStartedAt() != null ? s.getStartedAt().format(DATETIME_FORMATTER) : null)
                     .fin(s.getClosedAt() != null ? s.getClosedAt().format(DATETIME_FORMATTER) : null)
                     .viajes(trips.size())
-                    .ingresos(s.getTotalCash() != null ? s.getTotalCash() : BigDecimal.ZERO)
+                    .ingresos(efectivoSesion)
+                    .efectivo(efectivoSesion)
+                    .montoTotalProducido(producidoSesion)
                     .km(trips.stream().map(t -> t.getDistanceKm() != null ? t.getDistanceKm() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add))
                     .status(s.getStatus())
                     .build());
@@ -346,7 +362,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .bono(bono).porcentajePago(porcentajePago).pago(pago).pagoTotal(pagoTotal)
                 .bonificacionEmpresa(bonificacionEmpresa).pagoTotalFinal(pagoTotalFinal)
                 .utilidad(utilidad).utilidadPorViaje(utilidadPorViaje).pagoPorViaje(pagoPorViaje)
-                .kmRecorrido(kmFinal).gastoMantenimiento(gastoMantenimiento).viajesPorHora(viajesPorHora).sesionesDetalle(sesionesUnicas).semanaCerrada(semanaCerradaSemanal)
+                .kmRecorrido(kmFinal).gastoMantenimiento(gastoMantenimiento).gastoCombustible(gastoCombustible).viajesPorHora(viajesPorHora).sesionesDetalle(sesionesUnicas).semanaCerrada(semanaCerradaSemanal)
                 .build();
     }
 
@@ -461,7 +477,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 sesionesDetalle.add(SesionDiaInfo.builder().sessionId(s.getId())
                         .inicio(s.getStartedAt() != null ? s.getStartedAt().format(DATETIME_FORMATTER) : null)
                         .fin(s.getClosedAt() != null ? s.getClosedAt().format(DATETIME_FORMATTER) : null)
-                        .viajes(v).ingresos(ing).km(k).status(s.getStatus()).build());
+                        .viajes(v).ingresos(ing).efectivo(nz(s.getTotalCash())).montoTotalProducido(ing).km(k).status(s.getStatus()).build());
             }
             dias.add(DiaPendienteInfo.builder().fecha(fecha.format(DATE_FORMATTER))
                     .diaSemana(fecha.getDayOfWeek().getDisplayName(TextStyle.FULL, new Locale("es", "PE")))
@@ -559,6 +575,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             double otrosGastos = request.getOtrosGastos() != null ? request.getOtrosGastos() : 0;
             double totalIngresos = s.getTotalCash() != null ? s.getTotalCash().doubleValue() : 0;
             double totalGastos = gnvSoles + gasolinaSoles + otrosGastos;
+            BigDecimal producidoSesion = calcularProducidoYango(driverId, s.getStartedAt(), s.getClosedAt());
 
             DriverClose cierre = DriverClose.builder()
                     .driverId(driverId).fecha(s.getStartedAt().toLocalDate()).userId(userId)
@@ -574,6 +591,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                     .otrosGastosDescripcion(request.getOtrosGastosDescripcion())
                     .totalIngresos(BigDecimal.valueOf(totalIngresos)).totalGastos(BigDecimal.valueOf(totalGastos))
                     .resta(BigDecimal.valueOf(totalIngresos - totalGastos))
+                    .montoTotalProducido(producidoSesion)
                     .build();
             Optional<DriverClose> existente = driverCloseRepository
                     .findFirstByDriverIdAndFechaOrderByIdDesc(driverId, s.getStartedAt().toLocalDate());
@@ -590,6 +608,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 actual.setTotalIngresos(cierre.getTotalIngresos());
                 actual.setTotalGastos(cierre.getTotalGastos());
                 actual.setResta(cierre.getResta());
+                actual.setMontoTotalProducido(cierre.getMontoTotalProducido());
                 actual.setPlaca(cierre.getPlaca());
                 actual.setOdometroInicial(cierre.getOdometroInicial());
                 actual.setOdometroFinal(cierre.getOdometroFinal());
@@ -610,8 +629,64 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         return Map.of("liquidado", true, "sesiones", sessionsCerradas.size(), "sessionId", sessionId != null ? sessionId.toString() : "");
     }
 
-    private LocalDateTime parseDateTimeLiquidar(String value) {
-        if (value == null || value.isEmpty()) return null;
+    @Override
+    @Transactional(readOnly = true)
+    public BigDecimal calcularProducidoYango(String driverId, LocalDateTime desde, LocalDateTime hasta) {
+        if (driverId == null || desde == null || hasta == null) return BigDecimal.ZERO;
+        try {
+            String dateFrom = desde.format(ISO_DATETIME_FORMATTER) + "-05:00";
+            String dateTo = hasta.format(ISO_DATETIME_FORMATTER) + "-05:00";
+            DriverOrdersResponse yango = driverOrdersService.obtenerViajesCompletos(driverId, dateFrom, dateTo);
+            if (yango != null && yango.getOrders() != null && !yango.getOrders().isEmpty()) {
+                return procesarDatosYango(yango.getOrders()).montoTotalProducido();
+            }
+        } catch (Exception e) {
+            log.warn("[LiquidacionService] error calculando producido Yango driverId={} desde={} hasta={}: {}",
+                    driverId, desde, hasta, e.getMessage());
+        }
+        return BigDecimal.ZERO;
+    }
+
+    @Override
+    public Map<String, Object> backfillProducido() {
+        List<DriverClose> pendientes = driverCloseRepository.findByMontoTotalProducidoIsNull();
+        int procesados = 0;
+        int actualizados = 0;
+        int fallidos = 0;
+        log.info("[LiquidacionService] backfill producido: {} cierres por procesar", pendientes.size());
+
+        for (DriverClose cierre : pendientes) {
+            procesados++;
+            try {
+                BigDecimal producido = BigDecimal.ZERO;
+                if (cierre.getShiftSessionId() != null) {
+                    ShiftSession sesion = shiftSessionRepository.findById(cierre.getShiftSessionId()).orElse(null);
+                    if (sesion != null && sesion.getStartedAt() != null) {
+                        LocalDateTime fin = sesion.getClosedAt() != null ? sesion.getClosedAt() : sesion.getStartedAt().plusDays(1);
+                        producido = calcularProducidoYango(sesion.getDriverId(), sesion.getStartedAt(), fin);
+                    }
+                }
+                if (producido.compareTo(BigDecimal.ZERO) <= 0 && cierre.getFecha() != null) {
+                    producido = calcularProducidoYango(cierre.getDriverId(),
+                            cierre.getFecha().atStartOfDay(), cierre.getFecha().atTime(23, 59, 59));
+                }
+                if (producido.compareTo(BigDecimal.ZERO) > 0) {
+                    cierre.setMontoTotalProducido(producido);
+                    driverCloseRepository.save(cierre);
+                    actualizados++;
+                }
+            } catch (Exception e) {
+                fallidos++;
+                log.warn("[LiquidacionService] backfill producido falló cierreId={}: {}", cierre.getId(), e.getMessage());
+            }
+        }
+
+        log.info("[LiquidacionService] backfill producido completado procesados={} actualizados={} fallidos={}",
+                procesados, actualizados, fallidos);
+        return Map.of("procesados", procesados, "actualizados", actualizados, "fallidos", fallidos);
+    }
+
+    private LocalDateTime parseDateTimeLiquidar(String value) {        if (value == null || value.isEmpty()) return null;
         try {
             return LocalDateTime.parse(value, ISO_DATETIME_FORMATTER);
         } catch (Exception e1) {
@@ -621,6 +696,10 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 return null;
             }
         }
+    }
+
+    private static BigDecimal nz(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
     }
 
     private DatosYango procesarDatosYango(List<OrderInfoResponse> orders) {
@@ -697,6 +776,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .porcentajePago(0.0).pago(BigDecimal.ZERO).pagoTotal(BigDecimal.ZERO)
                 .utilidad(BigDecimal.ZERO).utilidadPorViaje(BigDecimal.ZERO).pagoPorViaje(BigDecimal.ZERO)
                 .kmRecorrido(BigDecimal.ZERO).viajesPorHora(BigDecimal.ZERO).sesionesDetalle(List.of()).semanaCerrada(false)
+                .gastoCombustible(BigDecimal.ZERO)
                 .build();
     }
 

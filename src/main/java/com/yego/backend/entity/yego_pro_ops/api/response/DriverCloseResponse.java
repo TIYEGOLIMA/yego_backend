@@ -74,6 +74,9 @@ public class DriverCloseResponse {
     @JsonProperty("resta")
     private BigDecimal resta;
 
+    @JsonProperty("montoTotalProducido")
+    private BigDecimal montoTotalProducido;
+
     @JsonProperty("placa")
     private String placa;
 

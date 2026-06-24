@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -110,6 +111,18 @@ public class ShiftSessionServiceImpl implements ShiftSessionService {
 
         driverCloseRepository.findFirstByShiftSessionIdOrderByIdDesc(sessionId)
                 .ifPresent(driverCloseRepository::delete);
+
+        // Si al eliminar este turno ya no quedan otras sesiones cerradas/liquidadas ese día,
+        // borra cualquier cierre remanente de esa fecha para que no persista en liquidación.
+        LocalDate fechaSesion = session.getStartedAt().toLocalDate();
+        boolean quedanSesionesEseDia = shiftSessionRepository.findByDriverIdOrderByStartedAtDesc(session.getDriverId()).stream()
+                .filter(otra -> !otra.getId().equals(sessionId))
+                .filter(otra -> "closed".equals(otra.getStatus()) || "settled".equals(otra.getStatus()))
+                .anyMatch(otra -> otra.getStartedAt() != null && otra.getStartedAt().toLocalDate().equals(fechaSesion));
+        if (!quedanSesionesEseDia) {
+            driverCloseRepository.findFirstByDriverIdAndFechaOrderByIdDesc(session.getDriverId(), fechaSesion)
+                    .ifPresent(driverCloseRepository::delete);
+        }
 
         List<Trip> trips = tripRepository.findByShiftSessionId(sessionId);
         if (!trips.isEmpty()) {

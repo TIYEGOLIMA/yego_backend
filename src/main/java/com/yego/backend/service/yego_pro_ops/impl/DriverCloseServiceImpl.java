@@ -8,6 +8,7 @@ import com.yego.backend.repository.yego_pro_ops.DriverCloseRepository;
 import com.yego.backend.repository.yego_pro_ops.ShiftSessionRepository;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_pro_ops.DriverCloseService;
+import com.yego.backend.service.yego_pro_ops.LiquidacionService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -15,6 +16,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,16 +34,19 @@ public class DriverCloseServiceImpl implements DriverCloseService {
     private final DriverCloseRepository driverCloseRepository;
     private final UserRepository userRepository;
     private final ShiftSessionRepository shiftSessionRepository;
+    private final LiquidacionService liquidacionService;
     private final TransactionTemplate transactionTemplate;
 
     public DriverCloseServiceImpl(
             DriverCloseRepository driverCloseRepository,
             UserRepository userRepository,
             ShiftSessionRepository shiftSessionRepository,
+            LiquidacionService liquidacionService,
             PlatformTransactionManager transactionManager) {
         this.driverCloseRepository = driverCloseRepository;
         this.userRepository = userRepository;
         this.shiftSessionRepository = shiftSessionRepository;
+        this.liquidacionService = liquidacionService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
@@ -148,7 +153,25 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .odometroFinal(req.getOdometroFinal())
             .diferenciaOdometro(req.getDiferenciaOdometro())
             .shiftSessionId(req.getShiftSessionId())
+            .montoTotalProducido(resolveProducido(req))
             .build();
+    }
+
+    /**
+     * Producido bruto del cierre. Se recalcula desde Yango por la ventana de la sesión
+     * (startedAt..closedAt); si no hay sesión o Yango no responde, usa el valor recibido.
+     */
+    private BigDecimal resolveProducido(DriverCloseRequest req) {
+        if (req.getShiftSessionId() != null) {
+            Optional<ShiftSession> sesionOpt = shiftSessionRepository.findById(req.getShiftSessionId());
+            if (sesionOpt.isPresent()) {
+                ShiftSession sesion = sesionOpt.get();
+                LocalDateTime fin = sesion.getClosedAt() != null ? sesion.getClosedAt() : LocalDateTime.now();
+                BigDecimal producido = liquidacionService.calcularProducidoYango(sesion.getDriverId(), sesion.getStartedAt(), fin);
+                if (producido != null && producido.compareTo(BigDecimal.ZERO) > 0) return producido;
+            }
+        }
+        return req.getMontoTotalProducido() != null ? BigDecimal.valueOf(req.getMontoTotalProducido()) : null;
     }
 
     private void aplicarCamposEditables(DriverClose cierre, DriverCloseRequest req) {
@@ -168,6 +191,9 @@ public class DriverCloseServiceImpl implements DriverCloseService {
         if (req.getOdometroFinal() != null) cierre.setOdometroFinal(req.getOdometroFinal());
         if (req.getDiferenciaOdometro() != null) cierre.setDiferenciaOdometro(req.getDiferenciaOdometro());
         if (req.getShiftSessionId() != null) cierre.setShiftSessionId(req.getShiftSessionId());
+
+        BigDecimal producido = resolveProducido(req);
+        if (producido != null) cierre.setMontoTotalProducido(producido);
 
         double ingresos = cierre.getTotalIngresos() != null ? cierre.getTotalIngresos().doubleValue() : 0;
         double gastos = cierre.getTotalGastos() != null ? cierre.getTotalGastos().doubleValue() : 0;
@@ -201,6 +227,7 @@ public class DriverCloseServiceImpl implements DriverCloseService {
             .totalIngresos(cierre.getTotalIngresos())
             .totalGastos(cierre.getTotalGastos())
             .resta(cierre.getResta())
+            .montoTotalProducido(cierre.getMontoTotalProducido())
             .placa(cierre.getPlaca())
             .odometroInicial(cierre.getOdometroInicial())
             .odometroFinal(cierre.getOdometroFinal())

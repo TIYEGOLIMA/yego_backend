@@ -71,6 +71,12 @@ public class LiquidacionController {
         return liquidacionService.liquidarPendiente(request);
     }
 
+    @PostMapping("/admin/backfill-producido")
+    public Map<String, Object> backfillProducido() {
+        log.info("[LiquidacionController] backfill producido histórico");
+        return liquidacionService.backfillProducido();
+    }
+
     @DeleteMapping("/{driverId}/limpiar")
     public void limpiarFacturacion(
             @PathVariable String driverId,
