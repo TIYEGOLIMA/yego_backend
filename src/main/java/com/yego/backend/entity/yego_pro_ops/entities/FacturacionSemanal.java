@@ -66,6 +66,9 @@ public class FacturacionSemanal {
     @Column(name = "bono_yango", precision = 12, scale = 2)
     private BigDecimal bonoYango;
 
+    @Column(name = "bono_yango_lunes", precision = 12, scale = 2)
+    private BigDecimal bonoYangoLunes;
+
     @Column(name = "gasto_mantenimiento", precision = 10, scale = 2)
     private BigDecimal gastoMantenimiento;
 

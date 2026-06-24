@@ -23,6 +23,8 @@ import com.yego.backend.repository.yego_pro_ops.TripRepository;
 import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
 import com.yego.backend.service.yego_pro_ops.LiquidacionService;
 import com.yego.backend.service.yego_pro_ops.ShiftSessionService;
+import com.yego.backend.service.yego_api_externo.YangoWeeklyService;
+import com.yego.backend.service.yego_api_externo.YangoWeeklyService.PeriodRange;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +68,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
     private final BonusThresholdRepository bonusThresholdRepository;
     private final PaymentPercentageRepository paymentPercentageRepository;
     private final DriverCloseRepository driverCloseRepository;
+    private final YangoWeeklyService yangoWeeklyService;
 
     public LiquidacionServiceImpl(
             ShiftSessionRepository shiftSessionRepository,
@@ -75,7 +78,8 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             FacturacionSemanalRepository facturacionSemanalRepository,
             BonusThresholdRepository bonusThresholdRepository,
             PaymentPercentageRepository paymentPercentageRepository,
-            DriverCloseRepository driverCloseRepository) {
+            DriverCloseRepository driverCloseRepository,
+            YangoWeeklyService yangoWeeklyService) {
         this.shiftSessionRepository = shiftSessionRepository;
         this.tripRepository = tripRepository;
         this.shiftSessionService = shiftSessionService;
@@ -84,6 +88,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         this.bonusThresholdRepository = bonusThresholdRepository;
         this.paymentPercentageRepository = paymentPercentageRepository;
         this.driverCloseRepository = driverCloseRepository;
+        this.yangoWeeklyService = yangoWeeklyService;
     }
 
     @Override
@@ -272,6 +277,22 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             log.warn("[LiquidacionService] error consultando Yango para getLiquidacionSemanal driverId={}: {}", driverId, e.getMessage());
         }
 
+        // Obtener bonificación por cumplir objetivo (bono Yango Lunes)
+        BigDecimal bonoYangoLunes = BigDecimal.ZERO;
+        try {
+            LocalDate lunesDespues = weekEnd.plusDays(1);
+            PeriodRange weeklyRange = new PeriodRange(
+                    lunesDespues.format(DATE_FORMATTER) + "T00:00:00-05:00",
+                    lunesDespues.format(DATE_FORMATTER) + "T23:59:59-05:00");
+            Optional<Double> bonifObjetivo = yangoWeeklyService
+                    .fetchSumAmountBonificacionCumplirObjetivo(driverId, DEFAULT_PARK_ID, weeklyRange);
+            if (bonifObjetivo.isPresent() && bonifObjetivo.get() > 0) {
+                bonoYangoLunes = BigDecimal.valueOf(bonifObjetivo.get());
+            }
+        } catch (Exception e) {
+            log.warn("[LiquidacionService] error obteniendo bonoYangoLunes driverId={}: {}", driverId, e.getMessage());
+        }
+
         List<DriverClose> cierresSemana = driverCloseRepository.findByDriverIdAndFechaBetween(driverId, weekStart, weekEnd);
         BigDecimal producidoCierres = cierresSemana.stream()
                 .map(c -> nz(c.getMontoTotalProducido()))
@@ -286,12 +307,16 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .filter(c -> c.getShiftSessionId() != null && c.getMontoTotalProducido() != null)
                 .collect(Collectors.toMap(DriverClose::getShiftSessionId, DriverClose::getMontoTotalProducido, (a, b) -> b));
 
+        Map<UUID, BigDecimal> adelantoPorSesion = cierresSemana.stream()
+                .filter(c -> c.getShiftSessionId() != null && c.getAdelanto() != null && c.getAdelanto().compareTo(BigDecimal.ZERO) > 0)
+                .collect(Collectors.toMap(DriverClose::getShiftSessionId, DriverClose::getAdelanto, (a, b) -> a.add(b)));
+
         BigDecimal kmFinal = kmYango.compareTo(BigDecimal.ZERO) > 0 ? kmYango : totalKm;
         BigDecimal gastoMantenimiento = kmFinal.multiply(TASA_MANTENIMIENTO).setScale(2, RoundingMode.HALF_UP);
         BigDecimal montoNeto = montoTotalProducido.subtract(comisionApp);
         if (montoNeto.compareTo(BigDecimal.ZERO) < 0) montoNeto = BigDecimal.ZERO;
 
-        BigDecimal produccionBonificable = montoNeto.add(bonoYango).subtract(gastoCombustible).subtract(gastoMantenimiento);
+        BigDecimal produccionBonificable = montoNeto.add(bonoYango).add(bonoYangoLunes).subtract(gastoCombustible).subtract(gastoMantenimiento);
         if (produccionBonificable.compareTo(BigDecimal.ZERO) < 0) produccionBonificable = BigDecimal.ZERO;
 
         int viajesParaCalc = Math.max(totalViajes, totalViajesYango);
@@ -329,6 +354,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                     .montoTotalProducido(producidoSesion)
                     .km(tripsSesion.stream().map(t -> t.getDistanceKm() != null ? t.getDistanceKm() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add))
                     .status(s.getStatus())
+                    .adelanto(adelantoPorSesion.getOrDefault(s.getId(), BigDecimal.ZERO))
                     .build());
         }
 
@@ -368,7 +394,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .totalSesiones(sessions.size()).totalViajes(totalViajes).totalIngresos(totalPendiente).totalKm(totalKm)
                 .primerViaje(primerViaje).ultimoViaje(ultimoViaje).dias(dias)
                 .sesionesPendientes(sesionesPendientes).tieneSesionesCerradas(tieneCerrada).tieneSesionActiva(tieneActiva)
-                .montoTotalProducido(montoTotalProducido).bonoYango(bonoYango).comisionApp(comisionApp)
+                .montoTotalProducido(montoTotalProducido).bonoYango(bonoYango).bonoYangoLunes(bonoYangoLunes).comisionApp(comisionApp)
                 .montoNeto(montoNeto).produccionBonificable(produccionBonificable).bonoAdicViajes(bonoAdicViajes)
                 .bono(bono).porcentajePago(porcentajePago).pago(pago).pagoTotal(pagoTotal)
                 .bonificacionEmpresa(bonificacionEmpresa).pagoTotalFinal(pagoTotalFinal)

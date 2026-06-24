@@ -57,6 +57,7 @@ public class ShiftSessionServiceImpl implements ShiftSessionService {
                     if (cierre != null) {
                         resp.setLiquidaEfectivo(nz(cierre.getLiquidaEfectivo()));
                         resp.setLiquidaYape(nz(cierre.getLiquidaYape()));
+                        resp.setAdelanto(nz(cierre.getAdelanto()));
                     }
                     return resp;
                 })

@@ -49,6 +49,9 @@ public class ShiftSessionResponse {
     @JsonProperty("liquidaYape")
     private BigDecimal liquidaYape;
 
+    @JsonProperty("adelanto")
+    private BigDecimal adelanto;
+
     @JsonProperty("createdAt")
     private LocalDateTime createdAt;
 
