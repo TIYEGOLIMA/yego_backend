@@ -89,6 +89,9 @@ public class ShiftSessionController {
             @PathVariable UUID sessionId,
             @RequestBody Map<String, String> body) {
         String status = body.get("status");
+        if (status == null || status.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El campo 'status' es requerido");
+        }
         log.info("[ShiftSessionController] actualizar estado sessionId={} status={}", sessionId, status);
         try {
             return shiftSessionService.updateSessionStatus(sessionId, status);

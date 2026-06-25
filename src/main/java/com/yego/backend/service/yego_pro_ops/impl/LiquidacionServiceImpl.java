@@ -96,13 +96,10 @@ public class LiquidacionServiceImpl implements LiquidacionService {
     public LiquidacionSemanalResponse getLiquidacionSemanal(String driverId, LocalDate weekStart) {
         LocalDate weekEnd = weekStart.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
 
-        List<ShiftSession> sessions = shiftSessionRepository.findByDriverIdOrderByStartedAtDesc(driverId).stream()
-                .filter(s -> {
-                    LocalDate startDate = s.getStartedAt().toLocalDate();
-                    LocalDate endDate = s.getClosedAt() != null ? s.getClosedAt().toLocalDate() : LocalDate.now();
-                    return !startDate.isAfter(weekEnd) && !endDate.isBefore(weekStart);
-                })
-                .sorted(Comparator.comparing(ShiftSession::getStartedAt))
+        List<ShiftSession> sessions = shiftSessionRepository
+                .findByDriverIdAndStartedAtBetweenOrderByStartedAtAsc(driverId, weekStart.atStartOfDay(), weekEnd.atTime(23, 59, 59))
+                .stream()
+                .filter(s -> "completada".equals(s.getStatus()) || "settled".equals(s.getStatus()))
                 .collect(Collectors.toList());
 
         if (sessions.isEmpty()) {
@@ -111,6 +108,9 @@ public class LiquidacionServiceImpl implements LiquidacionService {
 
         List<UUID> sessionIds = sessions.stream().map(ShiftSession::getId).collect(Collectors.toList());
         List<Trip> allTrips = tripRepository.findByShiftSessionIdIn(sessionIds);
+
+        Map<UUID, List<Trip>> tripsPorSessionId = allTrips.stream()
+                .collect(Collectors.groupingBy(Trip::getShiftSessionId));
 
         Map<LocalDate, List<ShiftSession>> sessionsByDay = new LinkedHashMap<>();
         for (ShiftSession s : sessions) {
@@ -155,9 +155,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             List<SesionDiaInfo> sesionesDetalle = new ArrayList<>();
 
             for (ShiftSession s : sesionesDia) {
-                List<Trip> tripsSesion = allTrips.stream()
-                        .filter(t -> t.getShiftSessionId().equals(s.getId()))
-                        .collect(Collectors.toList());
+                List<Trip> tripsSesion = tripsPorSessionId.getOrDefault(s.getId(), List.of());
 
                 int v = tripsSesion.size();
                 BigDecimal ing = tripsSesion.stream().map(t -> t.getAmount() != null ? t.getAmount() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -341,7 +339,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         List<SesionDiaInfo> sesionesUnicas = new ArrayList<>();
         for (ShiftSession s : sessions) {
             if (!visto.add(s.getId())) continue;
-            List<Trip> tripsSesion = allTrips.stream().filter(t -> t.getShiftSessionId().equals(s.getId())).collect(Collectors.toList());
+            List<Trip> tripsSesion = tripsPorSessionId.getOrDefault(s.getId(), List.of());
             BigDecimal efectivoSesion = nz(s.getTotalCash());
             BigDecimal producidoSesion = producidoPorSesion.getOrDefault(s.getId(), BigDecimal.ZERO);
             sesionesUnicas.add(SesionDiaInfo.builder()
@@ -624,6 +622,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                     .gasolinaGalones(request.getGasolinaGalones()).gasolinaSoles(BigDecimal.valueOf(gasolinaSoles))
                     .liquidaEfectivo(BigDecimal.valueOf(request.getLiquidaEfectivo() != null ? request.getLiquidaEfectivo() : 0))
                     .liquidaYape(BigDecimal.valueOf(request.getLiquidaYape() != null ? request.getLiquidaYape() : 0))
+                    .operacionYape(request.getOperacionYape())
                     .otrosGastos(BigDecimal.valueOf(otrosGastos))
                     .otrosGastosDescripcion(request.getOtrosGastosDescripcion())
                     .totalIngresos(BigDecimal.valueOf(totalIngresos)).totalGastos(BigDecimal.valueOf(totalGastos))
@@ -640,6 +639,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 actual.setGasolinaSoles(cierre.getGasolinaSoles());
                 actual.setLiquidaEfectivo(cierre.getLiquidaEfectivo());
                 actual.setLiquidaYape(cierre.getLiquidaYape());
+                actual.setOperacionYape(cierre.getOperacionYape());
                 actual.setOtrosGastos(cierre.getOtrosGastos());
                 actual.setOtrosGastosDescripcion(cierre.getOtrosGastosDescripcion());
                 actual.setTotalIngresos(cierre.getTotalIngresos());
