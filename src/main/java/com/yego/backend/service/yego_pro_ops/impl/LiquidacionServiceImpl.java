@@ -605,7 +605,6 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         }
 
         for (ShiftSession s : sessionsCerradas) {
-            shiftSessionService.settleSession(s.getId(), userId);
             if (sessionId == null) sessionId = s.getId();
 
             double gnvSoles = request.getGnvSoles() != null ? request.getGnvSoles() : 0;
