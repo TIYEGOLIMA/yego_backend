@@ -342,17 +342,19 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             List<Trip> tripsSesion = tripsPorSessionId.getOrDefault(s.getId(), List.of());
             BigDecimal efectivoSesion = nz(s.getTotalCash());
             BigDecimal producidoSesion = producidoPorSesion.getOrDefault(s.getId(), BigDecimal.ZERO);
+            BigDecimal adelantoSesion = adelantoPorSesion.getOrDefault(s.getId(), BigDecimal.ZERO);
+            BigDecimal efectivoNeto = efectivoSesion.subtract(adelantoSesion).max(BigDecimal.ZERO);
             sesionesUnicas.add(SesionDiaInfo.builder()
                     .sessionId(s.getId())
                     .inicio(s.getStartedAt() != null ? s.getStartedAt().format(DATETIME_FORMATTER) : null)
                     .fin(s.getClosedAt() != null ? s.getClosedAt().format(DATETIME_FORMATTER) : null)
                     .viajes(tripsSesion.size())
                     .ingresos(efectivoSesion)
-                    .efectivo(efectivoSesion)
+                    .efectivo(efectivoNeto)
                     .montoTotalProducido(producidoSesion)
                     .km(tripsSesion.stream().map(t -> t.getDistanceKm() != null ? t.getDistanceKm() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add))
                     .status(s.getStatus())
-                    .adelanto(adelantoPorSesion.getOrDefault(s.getId(), BigDecimal.ZERO))
+                    .adelanto(adelantoSesion)
                     .build());
         }
 
