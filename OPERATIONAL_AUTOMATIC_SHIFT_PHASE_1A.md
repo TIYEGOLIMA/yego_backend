@@ -41,6 +41,13 @@ Rutas:
 - `GET /shifts`
 - `GET /events`
 
+Hardening Fase 1A.6:
+
+- `GET /shifts` usa `limit` y `offset` con `limit` default `200` y maximo `1000`;
+- `GET /events` usa `limit` y `offset` con `limit` default `200` y maximo `1000`;
+- la paginacion aplica en consulta de repositorio, no en memoria;
+- el controller operacional deja de declarar `@CrossOrigin("*")` y usa la configuracion global existente.
+
 No se expuso `POST /reprocess` porque la configuracion actual de seguridad deja `pro-ops` abierto y esta fase no debe abrir un write endpoint sensible sin una compuerta clara de autorizacion.
 
 ## 4. Algoritmo de inferencia
@@ -96,6 +103,7 @@ Normalizacion de placa:
 - `LATE_TRIP_DETECTED` se cubre a nivel de inconsistencia temporal interna del reproceso, pero no reemplaza una estrategia futura mas fuerte de observacion incremental.
 - No hay endpoint de reproceso por seguridad; el reproceso queda como servicio interno/test.
 - La capa sigue siendo read-only respecto al flujo manual y financiero.
+- `mirrorModeEnabled` sigue sin bloquear endpoints GET y no expone write API en esta fase.
 
 ## 8. Como probar
 
@@ -148,6 +156,7 @@ Confirmado:
 - eventos tardios con observacion incremental futura;
 - dependencia de la calidad temporal del source Yango;
 - ausencia de reconciliacion historica fuerte placa -> `car_id`.
+- la capacidad de importacion Yango sigue siendo interna y bajo demanda; no cambia autenticacion, cookies, proxy, paginacion remota ni agrega scheduler.
 
 ## 13. Siguiente fase recomendada
 

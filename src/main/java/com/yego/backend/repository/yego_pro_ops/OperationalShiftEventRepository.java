@@ -1,6 +1,7 @@
 package com.yego.backend.repository.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.entities.OperationalShiftEvent;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -20,14 +21,15 @@ public interface OperationalShiftEventRepository extends JpaRepository<Operation
           and (:shiftId is null or event.operationalShiftSessionId = :shiftId)
           and (:driverId is null or event.driverId = :driverId)
           and (:vehicleKey is null or event.vehicleKey = :vehicleKey)
-        order by event.eventTime asc, event.id asc
+        order by event.eventTime desc, event.id desc
         """)
     List<OperationalShiftEvent> search(
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to,
             @Param("shiftId") UUID shiftId,
             @Param("driverId") String driverId,
-            @Param("vehicleKey") String vehicleKey);
+            @Param("vehicleKey") String vehicleKey,
+            Pageable pageable);
 
     @Modifying
     void deleteByOperationalShiftSessionIdIn(Collection<UUID> operationalShiftSessionIds);

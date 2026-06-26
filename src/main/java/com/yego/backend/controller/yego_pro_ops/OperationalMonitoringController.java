@@ -7,7 +7,6 @@ import com.yego.backend.service.yego_pro_ops.OperationalShiftInferenceService;
 import com.yego.backend.service.yego_pro_ops.OperationalTripFactService;
 import com.yego.backend.service.yego_pro_ops.impl.OperationalDateRangeParser;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -20,7 +19,6 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/pro-ops/operational-monitoring")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class OperationalMonitoringController {
 
     private final OperationalTripFactService operationalTripFactService;
@@ -46,13 +44,17 @@ public class OperationalMonitoringController {
             @RequestParam String to,
             @RequestParam(required = false) String driverId,
             @RequestParam(required = false) String vehicleKey,
-            @RequestParam(required = false) String state) {
+            @RequestParam(required = false) String state,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer offset) {
         return operationalShiftInferenceService.searchShifts(
                 dateRangeParser.parseFrom(from),
                 dateRangeParser.parseTo(to),
                 driverId,
                 vehicleKey,
-                state);
+                state,
+                limit,
+                offset);
     }
 
     @GetMapping("/events")
@@ -61,12 +63,16 @@ public class OperationalMonitoringController {
             @RequestParam String to,
             @RequestParam(required = false) UUID shiftId,
             @RequestParam(required = false) String driverId,
-            @RequestParam(required = false) String vehicleKey) {
+            @RequestParam(required = false) String vehicleKey,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) Integer offset) {
         return operationalShiftInferenceService.searchEvents(
                 dateRangeParser.parseFrom(from),
                 dateRangeParser.parseTo(to),
                 shiftId,
                 driverId,
-                vehicleKey);
+                vehicleKey,
+                limit,
+                offset);
     }
 }

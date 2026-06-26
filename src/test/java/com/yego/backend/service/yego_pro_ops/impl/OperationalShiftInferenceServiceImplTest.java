@@ -7,6 +7,7 @@ import com.yego.backend.entity.yego_pro_ops.entities.OperationalTripFact;
 import com.yego.backend.repository.yego_pro_ops.OperationalShiftEventRepository;
 import com.yego.backend.repository.yego_pro_ops.OperationalShiftSessionRepository;
 import com.yego.backend.repository.yego_pro_ops.OperationalTripFactRepository;
+import org.springframework.data.domain.Pageable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
@@ -138,6 +139,47 @@ class OperationalShiftInferenceServiceImplTest {
 
         assertEquals(1, storedSessions.get().size());
         assertEquals(2, storedSessions.get().get(0).getTripCount());
+    }
+
+    @Test
+    void searchShiftsUsesSanitizedLimitAndOffset() {
+        when(shiftSessionRepository.search(any(), any(), eq("driver-1"), eq("CAR-1"), eq("OPEN_INFERRED"), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        service.searchShifts(
+                LocalDateTime.of(2026, 6, 25, 0, 0),
+                LocalDateTime.of(2026, 6, 25, 23, 59),
+                "driver-1",
+                "CAR-1",
+                "OPEN_INFERRED",
+                1_500,
+                -1);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(shiftSessionRepository).search(any(), any(), eq("driver-1"), eq("CAR-1"), eq("OPEN_INFERRED"), pageableCaptor.capture());
+        assertEquals(1_000, pageableCaptor.getValue().getPageSize());
+        assertEquals(0, pageableCaptor.getValue().getOffset());
+    }
+
+    @Test
+    void searchEventsUsesProvidedFiltersAndOffset() {
+        UUID shiftId = UUID.randomUUID();
+        when(shiftEventRepository.search(any(), any(), eq(shiftId), eq("driver-2"), eq("CAR-9"), any(Pageable.class)))
+                .thenReturn(List.of());
+
+        service.searchEvents(
+                LocalDateTime.of(2026, 6, 25, 0, 0),
+                LocalDateTime.of(2026, 6, 25, 23, 59),
+                shiftId,
+                "driver-2",
+                "CAR-9",
+                null,
+                250);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(shiftEventRepository).search(any(), any(), eq(shiftId), eq("driver-2"), eq("CAR-9"), pageableCaptor.capture());
+        assertEquals(200, pageableCaptor.getValue().getPageSize());
+        assertEquals(250, pageableCaptor.getValue().getOffset());
     }
 
     private OperationalTripFact fact(

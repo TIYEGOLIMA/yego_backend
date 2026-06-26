@@ -14,6 +14,9 @@ import java.util.stream.Collectors;
 @Component
 public class OperationalMonitoringProperties {
 
+    private static final int DEFAULT_READ_LIMIT = 200;
+    private static final int MAX_READ_LIMIT = 1_000;
+
     private final ZoneId zoneId;
     private final Duration staleCandidateThreshold;
     private final Set<String> completedStatuses;
@@ -47,5 +50,19 @@ public class OperationalMonitoringProperties {
 
     public boolean isMirrorModeEnabled() {
         return mirrorModeEnabled;
+    }
+
+    public int sanitizeLimit(Integer requestedLimit) {
+        if (requestedLimit == null || requestedLimit <= 0) {
+            return DEFAULT_READ_LIMIT;
+        }
+        return Math.min(requestedLimit, MAX_READ_LIMIT);
+    }
+
+    public int sanitizeOffset(Integer requestedOffset) {
+        if (requestedOffset == null || requestedOffset < 0) {
+            return 0;
+        }
+        return requestedOffset;
     }
 }

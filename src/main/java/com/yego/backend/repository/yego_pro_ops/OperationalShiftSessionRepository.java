@@ -1,6 +1,7 @@
 package com.yego.backend.repository.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.entities.OperationalShiftSession;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -18,14 +19,15 @@ public interface OperationalShiftSessionRepository extends JpaRepository<Operati
           and (:driverId is null or session.driverId = :driverId)
           and (:vehicleKey is null or session.vehicleKey = :vehicleKey)
           and (:state is null or session.state = :state)
-        order by session.openedAt asc, session.id asc
+        order by session.openedAt desc, session.id desc
         """)
     List<OperationalShiftSession> search(
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to,
             @Param("driverId") String driverId,
             @Param("vehicleKey") String vehicleKey,
-            @Param("state") String state);
+            @Param("state") String state,
+            Pageable pageable);
 
     @Query("""
         select session from OperationalShiftSession session

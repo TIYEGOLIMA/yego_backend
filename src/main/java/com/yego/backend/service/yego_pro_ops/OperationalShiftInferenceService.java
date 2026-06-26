@@ -16,14 +16,18 @@ public interface OperationalShiftInferenceService {
             LocalDateTime to,
             String driverId,
             String vehicleKey,
-            String state);
+            String state,
+            Integer limit,
+            Integer offset);
 
     List<OperationalShiftEventResponse> searchEvents(
             LocalDateTime from,
             LocalDateTime to,
             UUID shiftId,
             String driverId,
-            String vehicleKey);
+            String vehicleKey,
+            Integer limit,
+            Integer offset);
 
     record ReprocessResult(int tripFactsConsidered, int sessionsCreated, int eventsCreated) {
     }

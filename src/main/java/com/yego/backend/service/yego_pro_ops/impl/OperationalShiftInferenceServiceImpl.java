@@ -11,6 +11,7 @@ import com.yego.backend.repository.yego_pro_ops.OperationalShiftSessionRepositor
 import com.yego.backend.repository.yego_pro_ops.OperationalTripFactRepository;
 import com.yego.backend.service.yego_pro_ops.OperationalShiftInferenceService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -81,8 +82,16 @@ public class OperationalShiftInferenceServiceImpl implements OperationalShiftInf
             LocalDateTime to,
             String driverId,
             String vehicleKey,
-            String state) {
-        return shiftSessionRepository.search(from, to, normalize(driverId), normalize(vehicleKey), normalize(state))
+            String state,
+            Integer limit,
+            Integer offset) {
+        return shiftSessionRepository.search(
+                        from,
+                        to,
+                        normalize(driverId),
+                        normalize(vehicleKey),
+                        normalize(state),
+                        new OffsetLimitPageable(properties.sanitizeOffset(offset), properties.sanitizeLimit(limit)))
                 .stream()
                 .map(this::toSessionResponse)
                 .toList();
@@ -95,8 +104,16 @@ public class OperationalShiftInferenceServiceImpl implements OperationalShiftInf
             LocalDateTime to,
             UUID shiftId,
             String driverId,
-            String vehicleKey) {
-        return shiftEventRepository.search(from, to, shiftId, normalize(driverId), normalize(vehicleKey))
+            String vehicleKey,
+            Integer limit,
+            Integer offset) {
+        return shiftEventRepository.search(
+                        from,
+                        to,
+                        shiftId,
+                        normalize(driverId),
+                        normalize(vehicleKey),
+                        new OffsetLimitPageable(properties.sanitizeOffset(offset), properties.sanitizeLimit(limit)))
                 .stream()
                 .map(this::toEventResponse)
                 .toList();
@@ -414,5 +431,58 @@ public class OperationalShiftInferenceServiceImpl implements OperationalShiftInf
             return right == null;
         }
         return left.equals(right);
+    }
+
+    private static final class OffsetLimitPageable implements Pageable {
+        private final int offset;
+        private final int limit;
+
+        private OffsetLimitPageable(int offset, int limit) {
+            this.offset = offset;
+            this.limit = limit;
+        }
+
+        @Override
+        public int getPageNumber() {
+            return limit == 0 ? 0 : offset / limit;
+        }
+
+        @Override
+        public int getPageSize() {
+            return limit;
+        }
+
+        @Override
+        public long getOffset() {
+            return offset;
+        }
+
+        @Override
+        public Pageable next() {
+            return new OffsetLimitPageable(offset + limit, limit);
+        }
+
+        @Override
+        public Pageable previousOrFirst() {
+            return hasPrevious() ? new OffsetLimitPageable(offset - limit, limit) : first();
+        }
+
+        @Override
+        public Pageable first() {
+            return new OffsetLimitPageable(0, limit);
+        }
+
+        @Override
+        public Pageable withPage(int pageNumber) {
+            if (pageNumber < 0) {
+                throw new IllegalArgumentException("pageNumber must not be negative");
+            }
+            return new OffsetLimitPageable(pageNumber * limit, limit);
+        }
+
+        @Override
+        public boolean hasPrevious() {
+            return offset > 0;
+        }
     }
 }
