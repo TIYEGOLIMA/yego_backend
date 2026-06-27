@@ -19,16 +19,22 @@ public class OperationalMonitoringProperties {
 
     private final ZoneId zoneId;
     private final Duration staleCandidateThreshold;
+    private final Duration startDeltaTolerance;
+    private final Duration endDeltaTolerance;
     private final Set<String> completedStatuses;
     private final boolean mirrorModeEnabled;
 
     public OperationalMonitoringProperties(
             @Value("${operational.monitoring.timezone:America/Lima}") String timezone,
             @Value("${operational.monitoring.stale-threshold-hours:8}") long staleThresholdHours,
+            @Value("${operational.monitoring.validation.start-delta-tolerance-minutes:90}") long startDeltaToleranceMinutes,
+            @Value("${operational.monitoring.validation.end-delta-tolerance-minutes:90}") long endDeltaToleranceMinutes,
             @Value("${operational.monitoring.completed-statuses:complete}") String completedStatusesRaw,
             @Value("${operational.monitoring.mirror-mode:true}") boolean mirrorModeEnabled) {
         this.zoneId = ZoneId.of(timezone);
         this.staleCandidateThreshold = Duration.ofHours(staleThresholdHours);
+        this.startDeltaTolerance = Duration.ofMinutes(startDeltaToleranceMinutes);
+        this.endDeltaTolerance = Duration.ofMinutes(endDeltaToleranceMinutes);
         this.completedStatuses = Arrays.stream(completedStatusesRaw.split(","))
                 .map(value -> value == null ? "" : value.trim().toLowerCase(Locale.ROOT))
                 .filter(value -> !value.isBlank())
@@ -46,6 +52,14 @@ public class OperationalMonitoringProperties {
 
     public Set<String> getCompletedStatuses() {
         return completedStatuses;
+    }
+
+    public Duration getStartDeltaTolerance() {
+        return startDeltaTolerance;
+    }
+
+    public Duration getEndDeltaTolerance() {
+        return endDeltaTolerance;
     }
 
     public boolean isMirrorModeEnabled() {

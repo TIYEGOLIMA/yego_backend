@@ -167,6 +167,10 @@ Fase recomendada:
 - definicion segura de un mecanismo de reproceso interno protegido;
 - si la evidencia acompana, luego UI operacional y reconciliacion con sesiones manuales.
 
+Documento asociado de validacion paralela:
+
+- `OPERATIONAL_AUTOMATIC_SHIFT_PHASE_1B_VALIDATION.md`
+
 ## Rollback
 
 1. revertir el commit de esta fase;

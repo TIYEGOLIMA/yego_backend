@@ -38,7 +38,7 @@ class OperationalMonitoringControllerTest {
     @BeforeEach
     void setUp() {
         OperationalDateRangeParser parser = new OperationalDateRangeParser(
-                new com.yego.backend.config.yego_pro_ops.OperationalMonitoringProperties("America/Lima", 8, "complete", true));
+                new com.yego.backend.config.yego_pro_ops.OperationalMonitoringProperties("America/Lima", 8, 90, 90, "complete", true));
         controller = new OperationalMonitoringController(operationalTripFactService, operationalShiftInferenceService, parser);
     }
 

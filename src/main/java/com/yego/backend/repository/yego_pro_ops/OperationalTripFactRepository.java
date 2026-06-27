@@ -45,4 +45,18 @@ public interface OperationalTripFactRepository extends JpaRepository<Operational
             @Param("to") LocalDateTime to,
             @Param("driverId") String driverId,
             @Param("vehicleKey") String vehicleKey);
+
+    @Query("""
+        select fact from OperationalTripFact fact
+        where (:from is null or coalesce(fact.bookedAt, fact.endedAt, fact.observedAt) >= :from)
+          and (:to is null or coalesce(fact.bookedAt, fact.endedAt, fact.observedAt) <= :to)
+          and (:driverId is null or fact.driverId = :driverId)
+          and (:vehicleKey is null or fact.vehicleKey = :vehicleKey)
+        order by coalesce(fact.bookedAt, fact.endedAt, fact.observedAt) asc, fact.externalTripId asc
+        """)
+    List<OperationalTripFact> findForValidation(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("driverId") String driverId,
+            @Param("vehicleKey") String vehicleKey);
 }

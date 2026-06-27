@@ -12,6 +12,7 @@ import com.yego.backend.repository.yego_pro_ops.OperationalTripFactRepository;
 import com.yego.backend.service.yego_pro_ops.OperationalShiftInferenceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -455,6 +456,11 @@ public class OperationalShiftInferenceServiceImpl implements OperationalShiftInf
         @Override
         public long getOffset() {
             return offset;
+        }
+
+        @Override
+        public Sort getSort() {
+            return Sort.unsorted();
         }
 
         @Override

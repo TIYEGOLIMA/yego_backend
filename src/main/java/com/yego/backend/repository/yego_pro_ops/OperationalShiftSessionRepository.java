@@ -37,6 +37,20 @@ public interface OperationalShiftSessionRepository extends JpaRepository<Operati
           and (:vehicleKey is null or session.vehicleKey = :vehicleKey)
         order by session.openedAt asc, session.id asc
         """)
+    List<OperationalShiftSession> findForValidation(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("driverId") String driverId,
+            @Param("vehicleKey") String vehicleKey);
+
+    @Query("""
+        select session from OperationalShiftSession session
+        where (:from is null or coalesce(session.closedAt, session.lastActivityAt, session.openedAt) >= :from)
+          and (:to is null or session.openedAt <= :to)
+          and (:driverId is null or session.driverId = :driverId)
+          and (:vehicleKey is null or session.vehicleKey = :vehicleKey)
+        order by session.openedAt asc, session.id asc
+        """)
     List<OperationalShiftSession> findForReprocess(
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to,

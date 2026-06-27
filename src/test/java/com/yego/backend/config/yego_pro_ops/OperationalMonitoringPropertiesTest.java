@@ -9,6 +9,8 @@ class OperationalMonitoringPropertiesTest {
     private final OperationalMonitoringProperties properties = new OperationalMonitoringProperties(
             "America/Lima",
             8,
+            90,
+            90,
             "complete",
             true);
 

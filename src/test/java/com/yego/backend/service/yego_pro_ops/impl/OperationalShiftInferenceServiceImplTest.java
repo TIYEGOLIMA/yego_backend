@@ -49,7 +49,7 @@ class OperationalShiftInferenceServiceImplTest {
                 tripFactRepository,
                 shiftSessionRepository,
                 shiftEventRepository,
-                new OperationalMonitoringProperties("America/Lima", 8, "complete", true));
+                new OperationalMonitoringProperties("America/Lima", 8, 90, 90, "complete", true));
     }
 
     @Test
