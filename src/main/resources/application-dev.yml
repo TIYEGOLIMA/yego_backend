@@ -105,6 +105,12 @@ swagger:
   description: ${SWAGGER_DESCRIPTION:API del Sistema Yego Integral}
   version: ${SWAGGER_VERSION:1.0.0}
 
+# WhatsApp API (Evolution API) - Desarrollo
+whatsapp:
+  api:
+    key: ${WHATSAPP_API_KEY:F6898E0C248E-4610-8C7C-61DAF4876CED}
+    base-url: ${WHATSAPP_API_BASE_URL:https://wsp.yego.pro}
+
 # Configuración de notificaciones para desarrollo
 notification:
   email:

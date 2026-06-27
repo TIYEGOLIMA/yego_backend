@@ -141,3 +141,9 @@ yego:
       # Archivo de proxies (por defecto: proxies.txt en src/main/resources)
       # Formato: una línea por proxy: IP:PORT:USERNAME:PASSWORD
       file: proxies.txt
+
+# WhatsApp API (Evolution API)
+whatsapp:
+  api:
+    key: ${WHATSAPP_API_KEY:F6898E0C248E-4610-8C7C-61DAF4876CED}
+    base-url: ${WHATSAPP_API_BASE_URL:https://wsp.yego.pro}
