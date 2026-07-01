@@ -354,7 +354,7 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     public VehicleResponse obtenerDetallePorPlaca(String placa) {
-        FleetVehicle vehicle = fleetVehicleRepository.findByNumberIgnoreCaseAndActivoTrue(placa)
+        FleetVehicle vehicle = fleetVehicleRepository.findFirstByNumberIgnoreCaseAndActivoTrueOrderByUpdatedAtDesc(placa)
                 .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado con placa: " + placa));
         String parkId = vehicle.getSegment().getParkId();
         VehicleResponse resp = obtenerDetalleVehiculo(vehicle.getYangoCarId(), parkId);
