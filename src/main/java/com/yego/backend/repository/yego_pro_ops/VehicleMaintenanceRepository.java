@@ -14,4 +14,6 @@ public interface VehicleMaintenanceRepository extends JpaRepository<VehicleMaint
     List<VehicleMaintenance> findByYangoCarIdAndTipoOrderByFechaDesc(String yangoCarId, String tipo);
 
     List<VehicleMaintenance> findByYangoCarIdAndEstadoOrderByFechaDesc(String yangoCarId, String estado);
+
+    long countByYangoCarId(String yangoCarId);
 }

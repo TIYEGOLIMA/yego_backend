@@ -29,11 +29,8 @@ public class VehicleDocument {
     @Column(name = "nombre", length = 200)
     private String nombre;
 
-    @Column(name = "fecha_inicio")
-    private LocalDate fechaInicio;
-
-    @Column(name = "fecha_fin")
-    private LocalDate fechaFin;
+    @Column(name = "fecha_vigente")
+    private LocalDate fechaVigente;
 
     @Column(name = "archivo_url", columnDefinition = "TEXT")
     private String archivoUrl;
@@ -41,6 +38,19 @@ public class VehicleDocument {
     @Column(name = "estado", nullable = false, length = 20)
     @Builder.Default
     private String estado = "vigente";
+
+    @Column(name = "created_by_id")
+    private Long createdById;
+
+    @Column(name = "eliminado", nullable = false)
+    @Builder.Default
+    private Boolean eliminado = false;
+
+    @Column(name = "deleted_by_id")
+    private Long deletedById;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
