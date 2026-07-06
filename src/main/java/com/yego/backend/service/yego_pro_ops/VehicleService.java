@@ -1,6 +1,8 @@
 package com.yego.backend.service.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.api.response.FleetVehicleResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleCard;
+import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleTraceEvent;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.*;
@@ -35,6 +37,12 @@ public interface VehicleService {
 
     /** Trazabilidad unificada del vehículo (cambios de flota + documentos). */
     List<VehicleTraceEvent> obtenerTrazabilidad(String yangoCarId);
+
+    /** Buscador ligero móvil por placa (parcial). Devuelve cards desde BD local. */
+    List<MobileVehicleCard> buscarVehiculosMobile(String placa);
+
+    /** Respuesta agregada para app móvil: todo del auto por yangoCarId (BD local). */
+    MobileVehicleResponse obtenerVehiculoMobile(String yangoCarId);
 
     List<VehicleResponse.DocumentInfo> obtenerDocumentos(String yangoCarId);
 

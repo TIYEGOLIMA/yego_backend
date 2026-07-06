@@ -12,13 +12,23 @@ import java.util.UUID;
 @Repository
 public interface FleetVehicleRepository extends JpaRepository<FleetVehicle, String> {
 
-    @EntityGraph(attributePaths = "segment")
-    List<FleetVehicle> findByActivoTrue();
+    // ── Listado (excluye vehículos inactivos: status_id <> statusIdExcluido) ──
 
     @EntityGraph(attributePaths = "segment")
-    List<FleetVehicle> findBySegment_IdAndActivoTrue(UUID segmentId);
+    List<FleetVehicle> findByActivoTrueAndStatusIdNot(String statusIdExcluido);
 
-    long countBySegment_IdAndActivoTrue(UUID segmentId);
+    @EntityGraph(attributePaths = "segment")
+    List<FleetVehicle> findBySegment_IdAndActivoTrueAndStatusIdNot(UUID segmentId, String statusIdExcluido);
+
+    long countBySegment_IdAndActivoTrueAndStatusIdNot(UUID segmentId, String statusIdExcluido);
+
+    @EntityGraph(attributePaths = "segment")
+    List<FleetVehicle> findTop20ByNumberContainingIgnoreCaseAndActivoTrueAndStatusIdNotOrderByNumberAsc(String number, String statusIdExcluido);
+
+    @EntityGraph(attributePaths = "segment")
+    Optional<FleetVehicle> findByYangoCarIdAndActivoTrueAndStatusIdNot(String yangoCarId, String statusIdExcluido);
+
+    // ── Otros (sin filtro de estado) ──
 
     @EntityGraph(attributePaths = "segment")
     Optional<FleetVehicle> findFirstByNumberIgnoreCaseAndActivoTrueOrderByUpdatedAtDesc(String number);

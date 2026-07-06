@@ -6,8 +6,11 @@ import com.yego.backend.entity.yego_pro_ops.api.response.VehicleTraceEvent;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.*;
 import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleCard;
 import com.yego.backend.repository.yego_pro_ops.*;
 import com.yego.backend.repository.yego_principal.UserRepository;
+import com.yego.backend.repository.yego_api_externo.FleetCacheRepository;
 import com.yego.backend.service.MinIOService;
 import com.yego.backend.service.yego_garantizado.FlotaService;
 import com.yego.backend.service.yego_pro_ops.VehicleService;
@@ -19,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -44,10 +48,12 @@ public class VehicleServiceImpl implements VehicleService {
     private final FlotaService flotaService;
     private final MinIOService minIOService;
     private final UserRepository userRepository;
+    private final FleetCacheRepository fleetCacheRepository;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
     private static final String BUCKET_DOCUMENTACION = "documentacion-flota";
+    private static final String STATUS_INACTIVO = "not_working";
     private static final String EVT_DOC_CARGADO = "DOC_CARGADO";
     private static final String EVT_DOC_ELIMINADO = "DOC_ELIMINADO";
 
@@ -170,8 +176,8 @@ public class VehicleServiceImpl implements VehicleService {
     @Override
     public List<FleetVehicleResponse> listarVehiculosGuardados(java.util.UUID segmentId) {
         List<FleetVehicle> vehiculos = (segmentId != null)
-                ? fleetVehicleRepository.findBySegment_IdAndActivoTrue(segmentId)
-                : fleetVehicleRepository.findByActivoTrue();
+                ? fleetVehicleRepository.findBySegment_IdAndActivoTrueAndStatusIdNot(segmentId, STATUS_INACTIVO)
+                : fleetVehicleRepository.findByActivoTrueAndStatusIdNot(STATUS_INACTIVO);
 
         Map<String, String> nombresPorPark = resolverNombresPark();
 
@@ -298,7 +304,10 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     public List<VehicleTraceEvent> obtenerTrazabilidad(String yangoCarId) {
-        Map<String, String> nombresPorPark = resolverNombresPark();
+        return construirTrazabilidad(yangoCarId, resolverNombresPark());
+    }
+
+    private List<VehicleTraceEvent> construirTrazabilidad(String yangoCarId, Map<String, String> nombresPorPark) {
         List<VehicleTraceEvent> eventos = new ArrayList<>();
 
         // 1) Eventos de flota (INGRESO / CAMBIO_FLOTA)
@@ -402,6 +411,120 @@ public class VehicleServiceImpl implements VehicleService {
             log.warn("No se pudieron resolver nombres de park: {}", e.getMessage());
             return Map.of();
         }
+    }
+
+    /** Mapa park_id -> nombre desde la tabla local fleet_cache (rápido, sin API externa). */
+    private Map<String, String> resolverNombresParkLocal() {
+        return fleetCacheRepository.findAll().stream()
+                .filter(f -> f.getParkId() != null && f.getName() != null)
+                .collect(Collectors.toMap(f -> f.getParkId(), f -> f.getName(), (a, b) -> a));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<MobileVehicleCard> buscarVehiculosMobile(String placa) {
+        if (placa == null || placa.isBlank()) return List.of();
+        Map<String, String> nombresPorPark = resolverNombresParkLocal();
+        return fleetVehicleRepository.findTop20ByNumberContainingIgnoreCaseAndActivoTrueAndStatusIdNotOrderByNumberAsc(placa.trim(), STATUS_INACTIVO).stream()
+                .map(v -> {
+                    String parkId = v.getSegment() != null ? v.getSegment().getParkId() : null;
+                    return MobileVehicleCard.builder()
+                            .yangoCarId(v.getYangoCarId())
+                            .placa(v.getNumber())
+                            .marca(v.getBrand())
+                            .modelo(v.getModel())
+                            .anio(v.getYear())
+                            .estado(v.getStatusName())
+                            .flota(parkId != null ? nombresPorPark.getOrDefault(parkId, parkId) : null)
+                            .imagen(v.getFotoUrl())
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public MobileVehicleResponse obtenerVehiculoMobile(String yangoCarId) {
+        FleetVehicle v = fleetVehicleRepository.findByYangoCarIdAndActivoTrueAndStatusIdNot(yangoCarId, STATUS_INACTIVO)
+                .orElseThrow(() -> new IllegalArgumentException("Vehículo no encontrado o inactivo: " + yangoCarId));
+
+        String carId = v.getYangoCarId();
+        Map<String, String> nombresPorPark = resolverNombresParkLocal();
+        String parkId = v.getSegment() != null ? v.getSegment().getParkId() : null;
+
+        MobileVehicleResponse.General general = MobileVehicleResponse.General.builder()
+                .yangoCarId(carId)
+                .placa(v.getNumber())
+                .marca(v.getBrand())
+                .modelo(v.getModel())
+                .anio(v.getYear())
+                .color(v.getColorName() != null ? v.getColorName() : v.getColor())
+                .vin(v.getVin())
+                .estado(v.getStatusName())
+                .flota(parkId != null ? nombresPorPark.getOrDefault(parkId, parkId) : null)
+                .categorias(fromJson(v.getCategories()))
+                .amenities(fromJson(v.getAmenities()))
+                .rental(v.getRental())
+                .kilometraje(v.getMileage())
+                .build();
+
+        List<VehicleResponse.MaintenanceInfo> mantenimiento = obtenerMantenimientos(carId);
+        List<VehicleResponse.IncidentInfo> siniestros = obtenerSiniestros(carId);
+
+        return MobileVehicleResponse.builder()
+                .general(general)
+                .imagen(v.getFotoUrl())
+                .documentos(obtenerDocumentos(carId))
+                .mantenimiento(mantenimiento)
+                .kilometraje(obtenerKilometraje(carId))
+                .siniestros(siniestros)
+                .gastos(calcularGastos(mantenimiento, siniestros))
+                .trazabilidad(construirTrazabilidad(carId, nombresPorPark))
+                .build();
+    }
+
+    private MobileVehicleResponse.Gasto calcularGastos(List<VehicleResponse.MaintenanceInfo> mant,
+                                                       List<VehicleResponse.IncidentInfo> sin) {
+        BigDecimal preventivo = mant.stream()
+                .filter(m -> "preventivo".equalsIgnoreCase(m.getTipo()))
+                .map(m -> m.getCosto() != null ? m.getCosto() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal correctivo = mant.stream()
+                .filter(m -> "correctivo".equalsIgnoreCase(m.getTipo()))
+                .map(m -> m.getCosto() != null ? m.getCosto() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal siniestros = sin.stream()
+                .map(i -> i.getMontoDano() != null ? i.getMontoDano() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal total = preventivo.add(correctivo).add(siniestros);
+        double t = total.doubleValue();
+
+        // Gasto por mes (mantenimiento + siniestros), últimos 6 meses
+        Map<String, BigDecimal> porMesMap = new java.util.TreeMap<>();
+        for (VehicleResponse.MaintenanceInfo m : mant) {
+            if (m.getFecha() != null && m.getCosto() != null) {
+                String mes = m.getFecha().toString().substring(0, 7);
+                porMesMap.merge(mes, m.getCosto(), BigDecimal::add);
+            }
+        }
+        for (VehicleResponse.IncidentInfo i : sin) {
+            if (i.getFecha() != null && i.getMontoDano() != null) {
+                String mes = i.getFecha().toString().substring(0, 7);
+                porMesMap.merge(mes, i.getMontoDano(), BigDecimal::add);
+            }
+        }
+        List<MobileVehicleResponse.GastoMes> porMes = porMesMap.entrySet().stream()
+                .map(e -> MobileVehicleResponse.GastoMes.builder().mes(e.getKey()).monto(e.getValue()).build())
+                .collect(Collectors.toList());
+        if (porMes.size() > 6) porMes = porMes.subList(porMes.size() - 6, porMes.size());
+
+        return MobileVehicleResponse.Gasto.builder()
+                .total(total).preventivo(preventivo).correctivo(correctivo).siniestros(siniestros)
+                .pctPreventivo(t > 0 ? preventivo.doubleValue() / t * 100 : 0)
+                .pctCorrectivo(t > 0 ? correctivo.doubleValue() / t * 100 : 0)
+                .pctSiniestros(t > 0 ? siniestros.doubleValue() / t * 100 : 0)
+                .porMes(porMes)
+                .build();
     }
 
     private String str(Object o) {

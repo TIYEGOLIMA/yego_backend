@@ -40,7 +40,7 @@ public class FleetSegmentServiceImpl implements FleetSegmentService {
                             .nombre(partner != null ? partner.getName() : seg.getParkId())
                             .ciudad(partner != null ? partner.getCity() : null)
                             .activo(seg.getActivo())
-                            .totalVehiculos(vehicleRepository.countBySegment_IdAndActivoTrue(seg.getId()))
+                            .totalVehiculos(vehicleRepository.countBySegment_IdAndActivoTrueAndStatusIdNot(seg.getId(), "not_working"))
                             .build();
                 })
                 .collect(Collectors.toList());
@@ -78,7 +78,7 @@ public class FleetSegmentServiceImpl implements FleetSegmentService {
                 .nombre(partner != null ? partner.getName() : segment.getParkId())
                 .ciudad(partner != null ? partner.getCity() : null)
                 .activo(segment.getActivo())
-                .totalVehiculos(vehicleRepository.countBySegment_IdAndActivoTrue(segment.getId()))
+                .totalVehiculos(vehicleRepository.countBySegment_IdAndActivoTrueAndStatusIdNot(segment.getId(), "not_working"))
                 .build();
     }
 
