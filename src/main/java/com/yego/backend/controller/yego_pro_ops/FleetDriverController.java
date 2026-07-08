@@ -32,6 +32,10 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -39,6 +43,9 @@ import java.util.List;
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class FleetDriverController {
+
+    private static final DateTimeFormatter YANGO_DATETIME_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     private final FleetDriverService fleetDriverService;
     private final DriverOrdersService driverOrdersService;
@@ -51,6 +58,28 @@ public class FleetDriverController {
             @RequestParam(required = false) String dateFrom,
             @RequestParam(required = false) String dateTo) {
         return driverOrdersService.obtenerViajesCompletos(driverId, dateFrom, dateTo);
+    }
+
+    @GetMapping("/yango-trips")
+    public List<Map<String, Object>> obtenerSoloViajesYangoPorFecha(
+            @RequestParam(name = "driver_id") String driverId,
+            @RequestParam String fecha) {
+        LocalDate date = LocalDate.parse(fecha);
+        String desde = date.atStartOfDay().format(YANGO_DATETIME_FORMATTER) + "-05:00";
+        String hasta = date.atTime(23, 59, 59).format(YANGO_DATETIME_FORMATTER) + "-05:00";
+        DriverOrdersResponse response = driverOrdersService.obtenerViajesCompletos(driverId, desde, hasta);
+        if (response == null || response.getOrders() == null) {
+            return List.of();
+        }
+        return response.getOrders().stream()
+                .map(order -> {
+                    Map<String, Object> trip = new LinkedHashMap<>();
+                    trip.put("status", order.getStatus());
+                    trip.put("booked_at", order.getBookedAt());
+                    trip.put("ended_at", order.getEndedAt());
+                    return trip;
+                })
+                .toList();
     }
 
     @GetMapping("/driver/viajes-simplificados-por-fecha")

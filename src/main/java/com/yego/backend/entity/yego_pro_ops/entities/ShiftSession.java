@@ -33,6 +33,40 @@ public class ShiftSession {
     @Column(name = "driver_id", nullable = false, length = 255)
     private String driverId;
 
+    @Column(name = "vehicle_id", length = 255)
+    private String vehicleId;
+
+    @Column(name = "placa", length = 30)
+    private String placa;
+
+    @Column(name = "modelo", length = 255)
+    private String modelo;
+
+    @Column(name = "km_inicial")
+    private Integer kmInicial;
+
+    @Column(name = "km_final")
+    private Integer kmFinal;
+
+    @Column(name = "selfie_uri", columnDefinition = "TEXT")
+    private String selfieUri;
+
+    @Column(name = "car_photos", columnDefinition = "TEXT")
+    private String carPhotos;
+
+    @Column(name = "car_photos_cierre", columnDefinition = "TEXT")
+    private String carPhotosCierre;
+
+    @Column(name = "observaciones", columnDefinition = "TEXT")
+    private String observaciones;
+
+    @Column(name = "mantenimiento_requerido")
+    @Builder.Default
+    private Boolean mantenimientoRequerido = false;
+
+    @Column(name = "mantenimiento_descripcion", columnDefinition = "TEXT")
+    private String mantenimientoDescripcion;
+
     @Column(name = "started_at", nullable = false)
     private LocalDateTime startedAt;
 
@@ -69,4 +103,13 @@ public class ShiftSession {
     @Column(name = "deleted", nullable = false)
     @Builder.Default
     private Boolean deleted = false;
+
+    @Column(name = "deleted_by")
+    private Long deletedBy;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @Column(name = "delete_reason", columnDefinition = "TEXT")
+    private String deleteReason;
 }

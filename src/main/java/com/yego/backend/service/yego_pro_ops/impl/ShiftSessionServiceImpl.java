@@ -48,6 +48,18 @@ public class ShiftSessionServiceImpl implements ShiftSessionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<ShiftSessionResponse> getClosedSessionsForExternalConsult(
+            String driverId,
+            LocalDateTime desde,
+            LocalDateTime hasta) {
+        return shiftSessionRepository.findClosedForExternalConsult(driverId, desde, hasta)
+                .stream()
+                .map(this::toShiftSessionResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional
     public ShiftSessionResponse closeSession(UUID sessionId, Long closedBy) {
         ShiftSession session = shiftSessionRepository.findById(sessionId)
