@@ -61,7 +61,7 @@ public class FleetDriverController {
     }
 
     @GetMapping("/yango-trips")
-    public List<Map<String, Object>> obtenerSoloViajesYangoPorFecha(
+    public Map<String, Object> obtenerSoloViajesYangoPorFecha(
             @RequestParam(name = "driver_id") String driverId,
             @RequestParam String fecha) {
         LocalDate date = LocalDate.parse(fecha);
@@ -69,17 +69,9 @@ public class FleetDriverController {
         String hasta = date.atTime(23, 59, 59).format(YANGO_DATETIME_FORMATTER) + "-05:00";
         DriverOrdersResponse response = driverOrdersService.obtenerViajesCompletos(driverId, desde, hasta);
         if (response == null || response.getOrders() == null) {
-            return List.of();
+            return Map.of("cantidad_viajes", 0);
         }
-        return response.getOrders().stream()
-                .map(order -> {
-                    Map<String, Object> trip = new LinkedHashMap<>();
-                    trip.put("status", order.getStatus());
-                    trip.put("booked_at", order.getBookedAt());
-                    trip.put("ended_at", order.getEndedAt());
-                    return trip;
-                })
-                .toList();
+        return Map.of("cantidad_viajes", response.getOrders().size());
     }
 
     @GetMapping("/driver/viajes-simplificados-por-fecha")
