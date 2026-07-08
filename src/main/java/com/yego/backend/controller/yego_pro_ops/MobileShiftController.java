@@ -65,7 +65,7 @@ public class MobileShiftController {
     }
 
     /** Historial de turnos del conductor */
-    @GetMapping("/driver/{driverId}")
+    @GetMapping({"/driver/{driverId}", "/driver/{driverId}/history"})
     public ResponseEntity<List<MobileShiftResponse>> getHistory(@PathVariable String driverId) {
         return ResponseEntity.ok(service.getDriverHistory(driverId));
     }

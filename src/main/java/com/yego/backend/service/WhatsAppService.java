@@ -33,7 +33,7 @@ public class WhatsAppService {
     @Value("${whatsapp.api.key:F6898E0C248E-4610-8C7C-61DAF4876CED}")
     private String apiKey;
     
-    @Value("${whatsapp.api.base.url:https://wsp.yego.pro}")
+    @Value("${whatsapp.api.base-url:${whatsapp.api.base.url:https://wsp.yego.pro}}")
     private String baseUrl;
     
     private static final String TEAM = "TEAM_PERU";
@@ -53,16 +53,12 @@ public class WhatsAppService {
     public boolean enviarTexto(String grupoId, String mensaje) {
         try {
             String textoLimpio = sanitizarTexto(mensaje);
-            log.info("📤 [WhatsAppService] Enviando texto a grupo: {} | mensaje (length={}): '{}'", 
-                    grupoId, textoLimpio != null ? textoLimpio.length() : "null", textoLimpio);
+            log.info("📤 [WhatsAppService] Enviando texto a destino: {} | mensaje length={}",
+                    grupoId, textoLimpio != null ? textoLimpio.length() : "null");
             
             WhatsAppTextRequest request = new WhatsAppTextRequest();
             request.setNumber(grupoId);
             request.setText(textoLimpio != null ? textoLimpio : "");
-            
-            try {
-                log.info("📋 [WhatsAppService] JSON a enviar: {}", objectMapper.writeValueAsString(request));
-            } catch (Exception ignored) {}
             
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     baseUrl + "/message/sendText/" + TEAM,

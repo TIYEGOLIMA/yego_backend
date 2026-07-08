@@ -41,6 +41,8 @@ public class CloseShiftMobileRequest {
 
     private String otrosGastosDescripcion;
 
+    private List<String> fotosEvidencia;
+
     private List<String> carPhotosCierre;
 
     private String observaciones;

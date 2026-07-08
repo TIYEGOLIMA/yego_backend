@@ -235,6 +235,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         return uri.contains("/auth/login")
                 || uri.contains("/auth/register")
                 || uri.contains("/dispositivos/auth")
+                || uri.startsWith("/api/mobile/")
                 || uri.startsWith("/api/yango-external/");
     }
 

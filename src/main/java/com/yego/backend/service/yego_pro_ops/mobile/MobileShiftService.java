@@ -32,6 +32,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
@@ -43,6 +46,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional
 public class MobileShiftService {
+
+    private static final long YANGO_TIMEOUT_SECONDS = 8;
 
     private final ShiftSessionRepository shiftRepo;
     private final DriverCloseRepository closeRepo;
@@ -92,16 +97,27 @@ public class MobileShiftService {
     @Transactional(readOnly = true)
     public MobileShiftSummaryResponse getSummary(String sessionId) {
         ShiftSession session = findSession(sessionId);
+        log.info("Resumen móvil solicitado: session={}, driver={}", sessionId, session.getDriverId());
 
         YangoTripResult trips = fetchYangoTrips(session);
         DriverClose close = findClose(sessionId);
+        LocalDateTime fechaFinPreview = now();
 
         return MobileShiftSummaryResponse.builder()
                 .viajes(trips.viajes)
                 .producido(trips.producido)
                 .efectivo(trips.efectivo)
                 .yape(trips.yape)
-                .duracion(formatDuration(session.getStartedAt(), now()))
+                .tarjeta(trips.tarjeta)
+                .corporate(trips.corporate)
+                .tips(trips.tips)
+                .bonos(trips.bonos)
+                .promocion(trips.promocion)
+                .distancia(trips.distancia)
+                .promedioPorViaje(trips.promedioPorViaje)
+                .duracion(formatDuration(session.getStartedAt(), fechaFinPreview))
+                .fechaInicio(toInstant(session.getStartedAt()))
+                .fechaFinPreview(toInstant(fechaFinPreview))
                 .kmInicial(close.getOdometroInicial())
                 .build();
     }
@@ -140,6 +156,7 @@ public class MobileShiftService {
         close.setOtrosGastos(req.getOtrosGastos());
         close.setOtrosGastosDescripcion(req.getOtrosGastosDescripcion());
         close.setMontoTotalProducido(trips.producido);
+        close.setFotosEvidencia(toJson(req.getFotosEvidencia()));
         close.setCarPhotosCierre(toJson(req.getCarPhotosCierre()));
         close.setObservacionesCierre(req.getObservaciones());
         close.setMantenimientoRequerido(req.getMantenimientoRequerido());
@@ -215,44 +232,73 @@ public class MobileShiftService {
     }
 
     private YangoTripResult fetchYangoTrips(ShiftSession session) {
+        LocalDateTime from = session.getStartedAt();
+        LocalDateTime to = now();
+        String driverId = session.getDriverId();
+        String dateFrom = from.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String dateTo = to.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+
+        log.info("Consultando Yango para turno móvil: driver={}, desde={}, hasta={}",
+                driverId, dateFrom, dateTo);
         try {
-            LocalDateTime from = session.getStartedAt();
-            LocalDateTime to = now();
+            return CompletableFuture
+                    .supplyAsync(() -> fetchYangoTrips(driverId, dateFrom, dateTo))
+                    .get(YANGO_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            log.warn("Timeout consultando viajes de Yango ({}s). driver={}",
+                    YANGO_TIMEOUT_SECONDS, driverId);
+            return YangoTripResult.empty();
+        } catch (Exception e) {
+            log.warn("No se pudieron obtener viajes de Yango: {}", e.getMessage());
+            return YangoTripResult.empty();
+        }
+    }
 
-            String dateFrom = from.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-            String dateTo = to.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-
+    private YangoTripResult fetchYangoTrips(String driverId, String dateFrom, String dateTo) {
+        try {
             DriverOrdersResponse response = driverOrdersService.obtenerViajesCompletos(
-                    session.getDriverId(), dateFrom, dateTo);
+                    driverId, dateFrom, dateTo);
 
             if (response == null || response.getOrders() == null || response.getOrders().isEmpty()) {
-                return new YangoTripResult(0, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+                log.info("Yango trips: driver={}, viajes=0", driverId);
+                return YangoTripResult.empty();
             }
 
             int viajes = response.getOrders().size();
             BigDecimal producido = BigDecimal.ZERO;
             BigDecimal efectivo = BigDecimal.ZERO;
-            BigDecimal yape = BigDecimal.ZERO;
+            BigDecimal tarjeta = BigDecimal.ZERO;
+            BigDecimal corporate = BigDecimal.ZERO;
+            BigDecimal tips = BigDecimal.ZERO;
+            BigDecimal bonos = BigDecimal.ZERO;
+            BigDecimal promocion = BigDecimal.ZERO;
+            BigDecimal distancia = BigDecimal.ZERO;
 
             for (OrderInfoResponse order : response.getOrders()) {
                 Double price = order.getPrice() != null ? order.getPrice() : 0.0;
-                Double cash  = order.getCash()  != null ? order.getCash()  : 0.0;
-
-                BigDecimal total = BigDecimal.valueOf(price);
-                producido = producido.add(total);
-                efectivo = efectivo.add(BigDecimal.valueOf(cash));
-                // El resto (card, bonus, etc.) no es cash → va como yape para resumen
-                yape = yape.add(total.subtract(BigDecimal.valueOf(cash)));
+                producido = producido.add(BigDecimal.valueOf(price));
+                efectivo = efectivo.add(big(order.getCash()));
+                tarjeta = tarjeta.add(big(order.getCard()));
+                corporate = corporate.add(big(order.getPriceCorporate()));
+                tips = tips.add(big(order.getPriceTip()));
+                bonos = bonos.add(big(order.getPriceBonus()));
+                promocion = promocion.add(big(order.getPricePromotion()));
+                distancia = distancia.add(big(order.getDistance()));
             }
 
-            log.info("Yango trips: driver={}, viajes={}, producido={}, efectivo={}, yape={}",
-                    session.getDriverId(), viajes, producido, efectivo, yape);
+            BigDecimal yape = producido.subtract(efectivo);
+            BigDecimal promedio = viajes > 0
+                    ? producido.divide(BigDecimal.valueOf(viajes), 2, java.math.RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO;
 
-            return new YangoTripResult(viajes, producido, efectivo, yape);
+            log.info("Yango trips: driver={}, viajes={}, producido={}, efectivo={}, tarjeta={}",
+                    driverId, viajes, producido, efectivo, tarjeta);
+
+            return new YangoTripResult(viajes, producido, efectivo, yape, tarjeta, corporate, tips, bonos, promocion, distancia, promedio);
 
         } catch (Exception e) {
             log.warn("No se pudieron obtener viajes de Yango: {}", e.getMessage());
-            return new YangoTripResult(0, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+            return YangoTripResult.empty();
         }
     }
 
@@ -321,6 +367,8 @@ public class MobileShiftService {
 
     private BigDecimal nvl(BigDecimal value) { return value != null ? value : BigDecimal.ZERO; }
 
+    private BigDecimal big(Double value) { return value != null ? BigDecimal.valueOf(value) : BigDecimal.ZERO; }
+
     private Instant toInstant(LocalDateTime ldt) {
         return ldt != null ? ldt.atZone(ZoneId.systemDefault()).toInstant() : null;
     }
@@ -361,12 +409,46 @@ public class MobileShiftService {
         final BigDecimal producido;
         final BigDecimal efectivo;
         final BigDecimal yape;
+        final BigDecimal tarjeta;
+        final BigDecimal corporate;
+        final BigDecimal tips;
+        final BigDecimal bonos;
+        final BigDecimal promocion;
+        final BigDecimal distancia;
+        final BigDecimal promedioPorViaje;
 
-        YangoTripResult(int viajes, BigDecimal producido, BigDecimal efectivo, BigDecimal yape) {
+        static YangoTripResult empty() {
+            return new YangoTripResult(
+                    0, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO
+            );
+        }
+
+        YangoTripResult(
+                int viajes,
+                BigDecimal producido,
+                BigDecimal efectivo,
+                BigDecimal yape,
+                BigDecimal tarjeta,
+                BigDecimal corporate,
+                BigDecimal tips,
+                BigDecimal bonos,
+                BigDecimal promocion,
+                BigDecimal distancia,
+                BigDecimal promedioPorViaje
+        ) {
             this.viajes = viajes;
             this.producido = producido;
             this.efectivo = efectivo;
             this.yape = yape;
+            this.tarjeta = tarjeta;
+            this.corporate = corporate;
+            this.tips = tips;
+            this.bonos = bonos;
+            this.promocion = promocion;
+            this.distancia = distancia;
+            this.promedioPorViaje = promedioPorViaje;
         }
     }
 }

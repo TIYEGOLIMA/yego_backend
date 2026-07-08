@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @Data
 @Builder
@@ -17,6 +18,15 @@ public class MobileShiftSummaryResponse {
     private BigDecimal producido;
     private BigDecimal efectivo;
     private BigDecimal yape;
+    private BigDecimal tarjeta;
+    private BigDecimal corporate;
+    private BigDecimal tips;
+    private BigDecimal bonos;
+    private BigDecimal promocion;
+    private BigDecimal distancia;
+    private BigDecimal promedioPorViaje;
     private String duracion;
+    private Instant fechaInicio;
+    private Instant fechaFinPreview;
     private Integer kmInicial;
 }
