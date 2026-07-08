@@ -9,7 +9,9 @@ import java.util.List;
 @Repository
 public interface VehicleDocumentRepository extends JpaRepository<VehicleDocument, Long> {
 
-    List<VehicleDocument> findByYangoCarIdOrderByFechaFinAsc(String yangoCarId);
+    List<VehicleDocument> findByYangoCarIdAndEliminadoFalseOrderByFechaVigenteAsc(String yangoCarId);
 
-    List<VehicleDocument> findByYangoCarIdAndTipoOrderByFechaFinAsc(String yangoCarId, String tipo);
+    List<VehicleDocument> findByYangoCarIdOrderByCreatedAtAsc(String yangoCarId);
+
+    long countByYangoCarIdAndTipo(String yangoCarId, String tipo);
 }

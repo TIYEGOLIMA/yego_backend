@@ -406,6 +406,11 @@ public class YangoWeeklyService {
      * {@code driver_profile.id} = ID de conductor ya resuelto. Suma {@code amount} solo si la fila coincide con
      * «Bonificación por cumplir objetivo» y esa suma se resta después de {@code platform_bonus}.
      */
+    public Optional<Double> fetchSumAmountBonificacionCumplirObjetivo(
+            String driverProfileId, String parkId, PeriodRange weeklyRange) {
+        return tryFetchSumAmountBonificacionCumplirObjetivo(driverProfileId, parkId, weeklyRange);
+    }
+
     private Optional<Double> tryFetchSumAmountBonificacionCumplirObjetivo(
             String driverProfileId, String parkId, PeriodRange weeklySameAsIncome) {
         Map<String, Object> txn = new LinkedHashMap<>();
@@ -934,5 +939,5 @@ public class YangoWeeklyService {
         return r2(parent.get(field).asDouble(0.0));
     }
 
-    record PeriodRange(String dateFrom, String dateTo) {}
+    public record PeriodRange(String dateFrom, String dateTo) {}
 }

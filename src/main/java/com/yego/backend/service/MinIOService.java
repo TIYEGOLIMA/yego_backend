@@ -41,22 +41,52 @@ public class MinIOService {
      * @return URL del archivo subido o null si hay error
      */
     public String subirArchivo(MultipartFile file) {
+        return subirArchivo(file, bucketName, null);
+    }
+
+    /**
+     * Sube un archivo a un bucket específico con un nombre de objeto controlado.
+     *
+     * @param file       Archivo a subir
+     * @param bucket     Bucket destino
+     * @param objectName Nombre/ruta del objeto (ej. "ABC123/SOAT-1.pdf"). Si es null usa el original.
+     * @return URL del archivo subido o null si hay error
+     */
+    public String subirArchivo(MultipartFile file, String bucket, String objectName) {
         if (file == null || file.isEmpty()) {
             log.warn("⚠️ [MinIOService] Intento de subir archivo vacío o nulo");
             return null;
         }
 
         try {
-            log.info("📤 [MinIOService] Subiendo archivo: {} ({} bytes)", file.getOriginalFilename(), file.getSize());
+            final String targetBucket = (bucket != null && !bucket.isBlank()) ? bucket : bucketName;
+            final String nombreFinal = (objectName != null && !objectName.isBlank())
+                    ? objectName
+                    : file.getOriginalFilename();
+
+            log.info("📤 [MinIOService] Subiendo archivo '{}' a bucket '{}' ({} bytes)", nombreFinal, targetBucket, file.getSize());
 
             // Preparar los headers
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
+            // Recurso con el nombre de objeto deseado (el gateway usa el filename del recurso).
+            org.springframework.core.io.Resource resource;
+            try {
+                resource = new org.springframework.core.io.ByteArrayResource(file.getBytes()) {
+                    @Override
+                    public String getFilename() {
+                        return nombreFinal;
+                    }
+                };
+            } catch (Exception ex) {
+                resource = file.getResource();
+            }
+
             // Preparar el body con form-data
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-            body.add("bucket", bucketName);
-            body.add("file", file.getResource());
+            body.add("bucket", targetBucket);
+            body.add("file", resource);
 
             HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
 

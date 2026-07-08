@@ -63,6 +63,9 @@ public class DriverClose {
     @Column(name = "operacion_yape", length = 50)
     private String operacionYape;
 
+    @Column(name = "adelanto", precision = 10, scale = 2)
+    private BigDecimal adelanto;
+
     @Column(name = "otros_gastos", precision = 10, scale = 2)
     private BigDecimal otrosGastos;
 
@@ -95,6 +98,38 @@ public class DriverClose {
 
     @Column(name = "shift_session_id")
     private java.util.UUID shiftSessionId;
+
+    // ── Mobile fields (nullable, web doesn't use them) ──
+
+    @Column(name = "car_photos", columnDefinition = "TEXT")
+    private String carPhotos;
+
+    @Column(name = "selfie_uri", length = 500)
+    private String selfieUri;
+
+    @Column(name = "car_photos_cierre", columnDefinition = "TEXT")
+    private String carPhotosCierre;
+
+    @Column(name = "fotos_evidencia", columnDefinition = "TEXT")
+    private String fotosEvidencia;
+
+    @Column(name = "observaciones_apertura", columnDefinition = "TEXT")
+    private String observacionesApertura;
+
+    @Column(name = "observaciones_cierre", columnDefinition = "TEXT")
+    private String observacionesCierre;
+
+    @Column(name = "mantenimiento_requerido")
+    private Boolean mantenimientoRequerido;
+
+    @Column(name = "mantenimiento_descripcion", columnDefinition = "TEXT")
+    private String mantenimientoDescripcion;
+
+    @Column(name = "saldo_anterior", precision = 10, scale = 2)
+    private BigDecimal saldoAnterior;
+
+    @Column(name = "saldo_descripcion", length = 300)
+    private String saldoDescripcion;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

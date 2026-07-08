@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Data
 @Builder
@@ -21,6 +22,8 @@ public class VehicleResponse {
     private String id;
     @JsonProperty("parkId")
     private String parkId;
+    @JsonProperty("segmentId")
+    private UUID segmentId;
     @JsonProperty("brand")
     private String brand;
     @JsonProperty("model")
@@ -76,8 +79,7 @@ public class VehicleResponse {
         private Long id;
         private String tipo;
         private String nombre;
-        private LocalDate fechaInicio;
-        private LocalDate fechaFin;
+        private LocalDate fechaVigente;
         private String archivoUrl;
         private String estado;
     }

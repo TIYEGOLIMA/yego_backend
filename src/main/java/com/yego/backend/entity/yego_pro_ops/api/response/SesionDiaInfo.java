@@ -41,4 +41,7 @@ public class SesionDiaInfo {
 
     @JsonProperty("status")
     private String status;
+
+    @JsonProperty("adelanto")
+    private BigDecimal adelanto;
 }

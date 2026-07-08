@@ -23,6 +23,8 @@ import com.yego.backend.repository.yego_pro_ops.TripRepository;
 import com.yego.backend.service.yego_pro_ops.DriverOrdersService;
 import com.yego.backend.service.yego_pro_ops.LiquidacionService;
 import com.yego.backend.service.yego_pro_ops.ShiftSessionService;
+import com.yego.backend.service.yego_api_externo.YangoWeeklyService;
+import com.yego.backend.service.yego_api_externo.YangoWeeklyService.PeriodRange;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -66,6 +68,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
     private final BonusThresholdRepository bonusThresholdRepository;
     private final PaymentPercentageRepository paymentPercentageRepository;
     private final DriverCloseRepository driverCloseRepository;
+    private final YangoWeeklyService yangoWeeklyService;
 
     public LiquidacionServiceImpl(
             ShiftSessionRepository shiftSessionRepository,
@@ -75,7 +78,8 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             FacturacionSemanalRepository facturacionSemanalRepository,
             BonusThresholdRepository bonusThresholdRepository,
             PaymentPercentageRepository paymentPercentageRepository,
-            DriverCloseRepository driverCloseRepository) {
+            DriverCloseRepository driverCloseRepository,
+            YangoWeeklyService yangoWeeklyService) {
         this.shiftSessionRepository = shiftSessionRepository;
         this.tripRepository = tripRepository;
         this.shiftSessionService = shiftSessionService;
@@ -84,6 +88,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         this.bonusThresholdRepository = bonusThresholdRepository;
         this.paymentPercentageRepository = paymentPercentageRepository;
         this.driverCloseRepository = driverCloseRepository;
+        this.yangoWeeklyService = yangoWeeklyService;
     }
 
     @Override
@@ -91,13 +96,10 @@ public class LiquidacionServiceImpl implements LiquidacionService {
     public LiquidacionSemanalResponse getLiquidacionSemanal(String driverId, LocalDate weekStart) {
         LocalDate weekEnd = weekStart.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY));
 
-        List<ShiftSession> sessions = shiftSessionRepository.findByDriverIdOrderByStartedAtDesc(driverId).stream()
-                .filter(s -> {
-                    LocalDate startDate = s.getStartedAt().toLocalDate();
-                    LocalDate endDate = s.getClosedAt() != null ? s.getClosedAt().toLocalDate() : LocalDate.now();
-                    return !startDate.isAfter(weekEnd) && !endDate.isBefore(weekStart);
-                })
-                .sorted(Comparator.comparing(ShiftSession::getStartedAt))
+        List<ShiftSession> sessions = shiftSessionRepository
+                .findByDriverIdAndStartedAtBetweenOrderByStartedAtAsc(driverId, weekStart.atStartOfDay(), weekEnd.atTime(23, 59, 59))
+                .stream()
+                .filter(s -> "completada".equals(s.getStatus()) || "settled".equals(s.getStatus()))
                 .collect(Collectors.toList());
 
         if (sessions.isEmpty()) {
@@ -105,15 +107,13 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         }
 
         List<UUID> sessionIds = sessions.stream().map(ShiftSession::getId).collect(Collectors.toList());
-        List<Trip> allTrips = new ArrayList<>();
-        for (UUID sid : sessionIds) {
-            allTrips.addAll(tripRepository.findByShiftSessionId(sid));
-        }
+        List<Trip> allTrips = tripRepository.findByShiftSessionIdIn(sessionIds);
+
+        Map<UUID, List<Trip>> tripsPorSessionId = allTrips.stream()
+                .collect(Collectors.groupingBy(Trip::getShiftSessionId));
 
         Map<LocalDate, List<ShiftSession>> sessionsByDay = new LinkedHashMap<>();
         for (ShiftSession s : sessions) {
-            LocalDate startDate = s.getStartedAt().toLocalDate();
-            LocalDate endDate = s.getClosedAt() != null ? s.getClosedAt().toLocalDate() : LocalDate.now();
             LocalDate dia = s.getStartedAt().toLocalDate();
             if (!dia.isBefore(weekStart) && !dia.isAfter(weekEnd)) {
                 sessionsByDay.computeIfAbsent(dia, k -> new ArrayList<>()).add(s);
@@ -121,16 +121,20 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         }
 
         boolean tieneActiva = sessions.stream().anyMatch(s -> "active".equals(s.getStatus()));
-        boolean tieneCerrada = sessions.stream().anyMatch(s -> "closed".equals(s.getStatus()) || "settled".equals(s.getStatus()));
+        boolean tieneCerrada = sessions.stream().anyMatch(s -> "completada".equals(s.getStatus()));
 
         LocalDateTime lastSettled = shiftSessionRepository.findLastSettledAtByDriverId(driverId).orElse(null);
 
+        Map<UUID, BigDecimal> tripsPorSession = allTrips.stream()
+                .collect(Collectors.groupingBy(Trip::getShiftSessionId,
+                        Collectors.reducing(BigDecimal.ZERO,
+                                t -> t.getAmount() != null ? t.getAmount() : BigDecimal.ZERO,
+                                BigDecimal::add)));
+
         BigDecimal totalPendiente = sessions.stream()
-                .filter(s -> "closed".equals(s.getStatus())
+                .filter(s -> "completada".equals(s.getStatus())
                         && (lastSettled == null || (s.getClosedAt() != null && !s.getClosedAt().isBefore(lastSettled))))
-                .map(s -> tripRepository.findByShiftSessionId(s.getId()).stream()
-                        .map(t -> t.getAmount() != null ? t.getAmount() : BigDecimal.ZERO)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .map(s -> tripsPorSession.getOrDefault(s.getId(), BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         List<DiaLiquidacionInfo> dias = new ArrayList<>();
@@ -151,9 +155,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             List<SesionDiaInfo> sesionesDetalle = new ArrayList<>();
 
             for (ShiftSession s : sesionesDia) {
-                List<Trip> tripsSesion = allTrips.stream()
-                        .filter(t -> t.getShiftSessionId().equals(s.getId()))
-                        .collect(Collectors.toList());
+                List<Trip> tripsSesion = tripsPorSessionId.getOrDefault(s.getId(), List.of());
 
                 int v = tripsSesion.size();
                 BigDecimal ing = tripsSesion.stream().map(t -> t.getAmount() != null ? t.getAmount() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -163,7 +165,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 ingresosDia = ingresosDia.add(ing);
                 kmDia = kmDia.add(k);
 
-                if ("closed".equals(s.getStatus())
+                if ("completada".equals(s.getStatus())
                         && (lastSettled == null || (s.getClosedAt() != null && !s.getClosedAt().isBefore(lastSettled)))) {
                     ingresosPendientes = ingresosPendientes.add(ing);
                 } else if ("settled".equals(s.getStatus())) {
@@ -186,21 +188,21 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 estado = "Sin actividad";
             } else {
                 boolean hayActiva = sesionesDia.stream().anyMatch(s -> "active".equals(s.getStatus()));
-                boolean hayCerradaPendiente = sesionesDia.stream().anyMatch(s ->
-                    "closed".equals(s.getStatus())
+                boolean hayPendienteValidacion = sesionesDia.stream().anyMatch(s ->
+                    "por_validar".equals(s.getStatus())
                         && (lastSettled == null || (s.getClosedAt() != null && !s.getClosedAt().isBefore(lastSettled)))
                 );
                 boolean haySettled = sesionesDia.stream().anyMatch(s -> "settled".equals(s.getStatus()));
-                boolean todasSettled = sesionesDia.stream().allMatch(s -> "settled".equals(s.getStatus()));
+                boolean todasSettled = sesionesDia.stream().allMatch(s -> "settled".equals(s.getStatus()) || "completada".equals(s.getStatus()));
 
                 if (todasSettled) {
                     estado = "Liquidado";
                 } else if (hayActiva) {
                     estado = "En curso";
-                } else if (hayCerradaPendiente && haySettled) {
+                } else if (hayPendienteValidacion && haySettled) {
                     estado = "Pendiente parcial";
-                } else if (hayCerradaPendiente) {
-                    estado = "Cerrado";
+                } else if (hayPendienteValidacion) {
+                    estado = "Por validar";
                 } else if (haySettled) {
                     estado = "Liquidado";
                 } else {
@@ -235,7 +237,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .orElse(null);
 
         List<UUID> sesionesPendientes = sessions.stream()
-                .filter(s -> "closed".equals(s.getStatus())
+                .filter(s -> "completada".equals(s.getStatus())
                         && (lastSettled == null || (s.getClosedAt() != null && !s.getClosedAt().isBefore(lastSettled))))
                 .map(ShiftSession::getId)
                 .collect(Collectors.toList());
@@ -247,8 +249,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         int totalViajesYango = 0;
         BigDecimal viajesPorHora = BigDecimal.ZERO;
 
-        Set<String> sessionTripIds = sessions.stream()
-                .flatMap(s -> tripRepository.findByShiftSessionId(s.getId()).stream())
+        Set<String> sessionTripIds = allTrips.stream()
                 .map(Trip::getExternalTripId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
@@ -274,6 +275,22 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             log.warn("[LiquidacionService] error consultando Yango para getLiquidacionSemanal driverId={}: {}", driverId, e.getMessage());
         }
 
+        // Obtener bonificación por cumplir objetivo (bono Yango Lunes)
+        BigDecimal bonoYangoLunes = BigDecimal.ZERO;
+        try {
+            LocalDate lunesDespues = weekEnd.plusDays(1);
+            PeriodRange weeklyRange = new PeriodRange(
+                    lunesDespues.format(DATE_FORMATTER) + "T00:00:00-05:00",
+                    lunesDespues.format(DATE_FORMATTER) + "T23:59:59-05:00");
+            Optional<Double> bonifObjetivo = yangoWeeklyService
+                    .fetchSumAmountBonificacionCumplirObjetivo(driverId, DEFAULT_PARK_ID, weeklyRange);
+            if (bonifObjetivo.isPresent() && bonifObjetivo.get() > 0) {
+                bonoYangoLunes = BigDecimal.valueOf(bonifObjetivo.get());
+            }
+        } catch (Exception e) {
+            log.warn("[LiquidacionService] error obteniendo bonoYangoLunes driverId={}: {}", driverId, e.getMessage());
+        }
+
         List<DriverClose> cierresSemana = driverCloseRepository.findByDriverIdAndFechaBetween(driverId, weekStart, weekEnd);
         BigDecimal producidoCierres = cierresSemana.stream()
                 .map(c -> nz(c.getMontoTotalProducido()))
@@ -288,12 +305,16 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .filter(c -> c.getShiftSessionId() != null && c.getMontoTotalProducido() != null)
                 .collect(Collectors.toMap(DriverClose::getShiftSessionId, DriverClose::getMontoTotalProducido, (a, b) -> b));
 
+        Map<UUID, BigDecimal> adelantoPorSesion = cierresSemana.stream()
+                .filter(c -> c.getShiftSessionId() != null && c.getAdelanto() != null && c.getAdelanto().compareTo(BigDecimal.ZERO) > 0)
+                .collect(Collectors.toMap(DriverClose::getShiftSessionId, DriverClose::getAdelanto, (a, b) -> a.add(b)));
+
         BigDecimal kmFinal = kmYango.compareTo(BigDecimal.ZERO) > 0 ? kmYango : totalKm;
         BigDecimal gastoMantenimiento = kmFinal.multiply(TASA_MANTENIMIENTO).setScale(2, RoundingMode.HALF_UP);
         BigDecimal montoNeto = montoTotalProducido.subtract(comisionApp);
         if (montoNeto.compareTo(BigDecimal.ZERO) < 0) montoNeto = BigDecimal.ZERO;
 
-        BigDecimal produccionBonificable = montoNeto.add(bonoYango).subtract(gastoCombustible).subtract(gastoMantenimiento);
+        BigDecimal produccionBonificable = montoNeto.add(bonoYango).add(bonoYangoLunes).subtract(gastoCombustible).subtract(gastoMantenimiento);
         if (produccionBonificable.compareTo(BigDecimal.ZERO) < 0) produccionBonificable = BigDecimal.ZERO;
 
         int viajesParaCalc = Math.max(totalViajes, totalViajesYango);
@@ -318,23 +339,22 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         List<SesionDiaInfo> sesionesUnicas = new ArrayList<>();
         for (ShiftSession s : sessions) {
             if (!visto.add(s.getId())) continue;
-            List<Trip> trips = allTrips.stream().filter(t -> t.getShiftSessionId().equals(s.getId())).collect(Collectors.toList());
+            List<Trip> tripsSesion = tripsPorSessionId.getOrDefault(s.getId(), List.of());
             BigDecimal efectivoSesion = nz(s.getTotalCash());
-            BigDecimal producidoSesion = producidoPorSesion.get(s.getId());
-            if (producidoSesion == null) {
-                LocalDateTime finSesion = s.getClosedAt() != null ? s.getClosedAt() : LocalDateTime.now();
-                producidoSesion = calcularProducidoYango(s.getDriverId(), s.getStartedAt(), finSesion);
-            }
+            BigDecimal producidoSesion = producidoPorSesion.getOrDefault(s.getId(), BigDecimal.ZERO);
+            BigDecimal adelantoSesion = adelantoPorSesion.getOrDefault(s.getId(), BigDecimal.ZERO);
+            BigDecimal efectivoNeto = efectivoSesion.subtract(adelantoSesion).max(BigDecimal.ZERO);
             sesionesUnicas.add(SesionDiaInfo.builder()
                     .sessionId(s.getId())
                     .inicio(s.getStartedAt() != null ? s.getStartedAt().format(DATETIME_FORMATTER) : null)
                     .fin(s.getClosedAt() != null ? s.getClosedAt().format(DATETIME_FORMATTER) : null)
-                    .viajes(trips.size())
+                    .viajes(tripsSesion.size())
                     .ingresos(efectivoSesion)
-                    .efectivo(efectivoSesion)
+                    .efectivo(efectivoNeto)
                     .montoTotalProducido(producidoSesion)
-                    .km(trips.stream().map(t -> t.getDistanceKm() != null ? t.getDistanceKm() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add))
+                    .km(tripsSesion.stream().map(t -> t.getDistanceKm() != null ? t.getDistanceKm() : BigDecimal.ZERO).reduce(BigDecimal.ZERO, BigDecimal::add))
                     .status(s.getStatus())
+                    .adelanto(adelantoSesion)
                     .build());
         }
 
@@ -343,12 +363,29 @@ public class LiquidacionServiceImpl implements LiquidacionService {
 
         BigDecimal bonificacionEmpresa = null;
         BigDecimal pagoTotalFinal = null;
+        BigDecimal totalAdelantos = BigDecimal.ZERO;
+        BigDecimal pagoTotalConAdelantos = null;
         if (semanaCerradaSemanal) {
             Optional<FacturacionSemanal> facturacionExistente = facturacionSemanalRepository
                     .findByDriverIdAndFechaInicioAndFechaFin(driverId, weekStart, weekEnd);
             if (facturacionExistente.isPresent()) {
                 bonificacionEmpresa = facturacionExistente.get().getBonificacionEmpresa();
                 pagoTotalFinal = facturacionExistente.get().getPagoTotalFinal();
+                totalAdelantos = facturacionExistente.get().getTotalAdelantos() != null
+                        ? facturacionExistente.get().getTotalAdelantos() : BigDecimal.ZERO;
+                pagoTotalConAdelantos = facturacionExistente.get().getPagoTotalConAdelantos();
+            }
+        }
+
+        // Calcular total adelantos de los cierres de la semana
+        if (totalAdelantos.compareTo(BigDecimal.ZERO) == 0 && !semanaCerradaSemanal) {
+            List<DriverClose> cierresAdelantos = driverCloseRepository
+                    .findByDriverIdAndFechaBetween(driverId, weekStart, weekEnd);
+            totalAdelantos = cierresAdelantos.stream()
+                    .map(c -> c.getAdelanto() != null ? c.getAdelanto() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (totalAdelantos.compareTo(BigDecimal.ZERO) > 0) {
+                pagoTotalConAdelantos = pagoTotal.subtract(totalAdelantos);
             }
         }
 
@@ -357,10 +394,11 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 .totalSesiones(sessions.size()).totalViajes(totalViajes).totalIngresos(totalPendiente).totalKm(totalKm)
                 .primerViaje(primerViaje).ultimoViaje(ultimoViaje).dias(dias)
                 .sesionesPendientes(sesionesPendientes).tieneSesionesCerradas(tieneCerrada).tieneSesionActiva(tieneActiva)
-                .montoTotalProducido(montoTotalProducido).bonoYango(bonoYango).comisionApp(comisionApp)
+                .montoTotalProducido(montoTotalProducido).bonoYango(bonoYango).bonoYangoLunes(bonoYangoLunes).comisionApp(comisionApp)
                 .montoNeto(montoNeto).produccionBonificable(produccionBonificable).bonoAdicViajes(bonoAdicViajes)
                 .bono(bono).porcentajePago(porcentajePago).pago(pago).pagoTotal(pagoTotal)
                 .bonificacionEmpresa(bonificacionEmpresa).pagoTotalFinal(pagoTotalFinal)
+                .totalAdelantos(totalAdelantos).pagoTotalConAdelantos(pagoTotalConAdelantos)
                 .utilidad(utilidad).utilidadPorViaje(utilidadPorViaje).pagoPorViaje(pagoPorViaje)
                 .kmRecorrido(kmFinal).gastoMantenimiento(gastoMantenimiento).gastoCombustible(gastoCombustible).viajesPorHora(viajesPorHora).sesionesDetalle(sesionesUnicas).semanaCerrada(semanaCerradaSemanal)
                 .build();
@@ -385,7 +423,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         boolean esPrimera = shiftSessionRepository.findLastSettledAtByDriverId(driverId).isEmpty();
 
         List<ShiftSession> sessionsCerradas = shiftSessionRepository.findByDriverIdOrderByStartedAtDesc(driverId).stream()
-                .filter(s -> "closed".equals(s.getStatus()))
+                .filter(s -> "completada".equals(s.getStatus()))
                 .filter(s -> s.getClosedAt() != null && !s.getClosedAt().isBefore(desdeFinal))
                 .filter(s -> s.getStartedAt() != null && !s.getStartedAt().isAfter(hastaFinal))
                 .sorted(Comparator.comparing(ShiftSession::getStartedAt))
@@ -526,7 +564,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         final LocalDateTime hastaFinal = hasta;
 
         List<ShiftSession> sessionsCerradas = shiftSessionRepository.findByDriverIdOrderByStartedAtDesc(driverId).stream()
-                .filter(s -> "closed".equals(s.getStatus()))
+                .filter(s -> "completada".equals(s.getStatus()))
                 .filter(s -> s.getClosedAt() != null && !s.getClosedAt().isBefore(desdeFinal))
                 .filter(s -> s.getStartedAt() != null && !s.getStartedAt().isAfter(hastaFinal))
                 .collect(Collectors.toList());
@@ -541,7 +579,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             }
             ShiftSession session = ShiftSession.builder()
                     .driverId(driverId).startedAt(desdeFinal).closedAt(hastaFinal)
-                    .status("closed").totalTrips(yango.getOrders().size()).totalAmount(BigDecimal.ZERO)
+                    .status("por_validar").totalTrips(yango.getOrders().size()).totalAmount(BigDecimal.ZERO)
                     .build();
             session = shiftSessionRepository.save(session);
             sessionId = session.getId();
@@ -567,7 +605,6 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         }
 
         for (ShiftSession s : sessionsCerradas) {
-            shiftSessionService.settleSession(s.getId(), userId);
             if (sessionId == null) sessionId = s.getId();
 
             double gnvSoles = request.getGnvSoles() != null ? request.getGnvSoles() : 0;
@@ -587,6 +624,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                     .gasolinaGalones(request.getGasolinaGalones()).gasolinaSoles(BigDecimal.valueOf(gasolinaSoles))
                     .liquidaEfectivo(BigDecimal.valueOf(request.getLiquidaEfectivo() != null ? request.getLiquidaEfectivo() : 0))
                     .liquidaYape(BigDecimal.valueOf(request.getLiquidaYape() != null ? request.getLiquidaYape() : 0))
+                    .operacionYape(request.getOperacionYape())
                     .otrosGastos(BigDecimal.valueOf(otrosGastos))
                     .otrosGastosDescripcion(request.getOtrosGastosDescripcion())
                     .totalIngresos(BigDecimal.valueOf(totalIngresos)).totalGastos(BigDecimal.valueOf(totalGastos))
@@ -603,6 +641,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                 actual.setGasolinaSoles(cierre.getGasolinaSoles());
                 actual.setLiquidaEfectivo(cierre.getLiquidaEfectivo());
                 actual.setLiquidaYape(cierre.getLiquidaYape());
+                actual.setOperacionYape(cierre.getOperacionYape());
                 actual.setOtrosGastos(cierre.getOtrosGastos());
                 actual.setOtrosGastosDescripcion(cierre.getOtrosGastosDescripcion());
                 actual.setTotalIngresos(cierre.getTotalIngresos());

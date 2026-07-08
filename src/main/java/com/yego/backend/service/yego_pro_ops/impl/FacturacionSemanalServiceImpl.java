@@ -49,6 +49,7 @@ public class FacturacionSemanalServiceImpl implements FacturacionSemanalService 
             actual.setKmRecorrido(facturacion.getKmRecorrido());
             actual.setGastoCombustible(facturacion.getGastoCombustible());
             actual.setBonoYango(facturacion.getBonoYango());
+            actual.setBonoYangoLunes(facturacion.getBonoYangoLunes());
             actual.setGastoMantenimiento(facturacion.getGastoMantenimiento());
             actual.setProduccionBonificable(facturacion.getProduccionBonificable());
             actual.setBonoAdicViajes(facturacion.getBonoAdicViajes());

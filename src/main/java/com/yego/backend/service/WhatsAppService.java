@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_marketing_mensajes.api.request.WhatsAppMediaRequest;
 import com.yego.backend.entity.yego_marketing_mensajes.api.request.WhatsAppTextRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.ParameterizedTypeReference;
@@ -40,7 +41,7 @@ public class WhatsAppService {
     private static final List<String> EXTENSIONES_VIDEO = Arrays.asList(".mp4", ".avi", ".mov", ".mkv", ".webm", ".flv", ".wmv", ".3gp", ".m4v");
     private static final List<String> EXTENSIONES_DOCUMENTO = Arrays.asList(".pdf", ".doc", ".docx", ".xls", ".xlsx", ".txt");
 
-    public WhatsAppService(RestTemplate restTemplate, ObjectMapper objectMapper, ApplicationContext applicationContext) {
+    public WhatsAppService(@Qualifier("whatsAppRestTemplate") RestTemplate restTemplate, ObjectMapper objectMapper, ApplicationContext applicationContext) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.applicationContext = applicationContext;

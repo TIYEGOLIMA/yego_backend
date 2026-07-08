@@ -59,4 +59,13 @@ public class LiquidarRequest {
 
     @JsonProperty("otrosGastosDescripcion")
     private String otrosGastosDescripcion;
+
+    @JsonProperty("operacionYape")
+    private String operacionYape;
+
+    @JsonProperty("adelanto")
+    private Double adelanto;
+
+    @JsonProperty("montoTotalProducido")
+    private Double montoTotalProducido;
 }

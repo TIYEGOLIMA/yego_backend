@@ -1,16 +1,23 @@
 package com.yego.backend.controller.yego_pro_ops;
 
+import com.yego.backend.entity.yego_pro_ops.api.response.FleetVehicleResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.VehicleTraceEvent;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.*;
 import com.yego.backend.service.yego_pro_ops.VehicleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @RestController
@@ -53,6 +60,37 @@ public class VehicleController {
         return Map.of("total", total, "cars", allCars);
     }
 
+    // ── Flota cacheada (segmentación) ──
+
+    @GetMapping("/fleet")
+    public Map<String, Object> listarFlotaGuardada(@RequestParam(required = false) UUID segmentId) {
+        List<FleetVehicleResponse> cars = vehicleService.listarVehiculosGuardados(segmentId);
+        return Map.of("total", cars.size(), "cars", cars);
+    }
+
+    @PostMapping("/fleet/sync")
+    public Map<String, Object> sincronizar(@RequestParam(required = false) UUID segmentId) {
+        int procesados = (segmentId != null)
+                ? vehicleService.sincronizarFlota(segmentId)
+                : vehicleService.sincronizarTodas();
+        return Map.of("procesados", procesados);
+    }
+
+    @GetMapping("/by-placa/{placa}")
+    public VehicleResponse detallePorPlaca(@PathVariable String placa) {
+        return vehicleService.obtenerDetallePorPlaca(placa);
+    }
+
+    @GetMapping("/{yangoCarId}/history")
+    public List<VehicleTraceEvent> trazabilidad(@PathVariable String yangoCarId) {
+        return vehicleService.obtenerTrazabilidad(yangoCarId);
+    }
+
+    private Long usuarioId(Authentication auth) {
+        if (auth == null || auth.getName() == null) return null;
+        try { return Long.parseLong(auth.getName()); } catch (NumberFormatException e) { return null; }
+    }
+
     @GetMapping("/{carId}/details")
     public VehicleResponse detalles(@PathVariable String carId,
                                      @RequestParam(defaultValue = "64085dd85e124e2c808806f70d527ea8") String parkId) {
@@ -78,10 +116,30 @@ public class VehicleController {
         return vehicleService.agregarDocumento(yangoCarId, doc);
     }
 
+    @PostMapping(value = "/{yangoCarId}/documents/upload", consumes = {"multipart/form-data"})
+    @ResponseStatus(HttpStatus.CREATED)
+    public VehicleResponse.DocumentInfo agregarDocumentoConArchivo(
+            @PathVariable String yangoCarId,
+            @RequestParam String tipo,
+            @RequestParam(required = false) String nombre,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaVigente,
+            @RequestParam("file") MultipartFile file,
+            Authentication auth) {
+        return vehicleService.agregarDocumentoConArchivo(yangoCarId, tipo, nombre, fechaVigente, file, usuarioId(auth));
+    }
+
+    @PostMapping(value = "/{yangoCarId}/maintenance/upload", consumes = {"multipart/form-data"})
+    public Map<String, String> subirArchivoMantenimiento(
+            @PathVariable String yangoCarId,
+            @RequestParam("file") MultipartFile file) {
+        String url = vehicleService.subirArchivoMantenimiento(yangoCarId, file);
+        return Map.of("url", url);
+    }
+
     @DeleteMapping("/documents/{docId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void eliminarDocumento(@PathVariable Long docId) {
-        vehicleService.eliminarDocumento(docId);
+    public void eliminarDocumento(@PathVariable Long docId, Authentication auth) {
+        vehicleService.eliminarDocumento(docId, usuarioId(auth));
     }
 
     @GetMapping("/{yangoCarId}/maintenance")

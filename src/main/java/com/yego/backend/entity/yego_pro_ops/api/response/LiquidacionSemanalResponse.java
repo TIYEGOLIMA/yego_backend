@@ -62,6 +62,9 @@ public class LiquidacionSemanalResponse {
     @JsonProperty("bonoYango")
     private BigDecimal bonoYango;
 
+    @JsonProperty("bonoYangoLunes")
+    private BigDecimal bonoYangoLunes;
+
     @JsonProperty("comisionApp")
     private BigDecimal comisionApp;
 
@@ -91,6 +94,12 @@ public class LiquidacionSemanalResponse {
 
     @JsonProperty("pagoTotalFinal")
     private BigDecimal pagoTotalFinal;
+
+    @JsonProperty("totalAdelantos")
+    private BigDecimal totalAdelantos;
+
+    @JsonProperty("pagoTotalConAdelantos")
+    private BigDecimal pagoTotalConAdelantos;
 
     @JsonProperty("utilidad")
     private BigDecimal utilidad;

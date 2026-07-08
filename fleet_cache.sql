@@ -1,7 +1,0 @@
-CREATE TABLE IF NOT EXISTS fleet_cache (
-    park_id    VARCHAR(255) PRIMARY KEY,
-    name       VARCHAR(255) NOT NULL,
-    city       VARCHAR(255),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);

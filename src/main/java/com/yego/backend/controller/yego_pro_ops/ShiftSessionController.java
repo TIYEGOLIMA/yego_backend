@@ -24,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -118,9 +119,25 @@ public class ShiftSessionController {
             @PathVariable UUID sessionId,
             @RequestParam Long userId,
             @RequestParam(required = false) String reason) {
-        log.info("[ShiftSessionController] eliminar sesión sessionId={} userId={} reason={}", sessionId, userId, reason);
+        log.info("[ShiftSessionController] eliminar sesión sessionId={} userId={}", sessionId, userId);
         try {
             shiftSessionService.eliminarSesion(sessionId, userId, reason);
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
+    }
+
+    @PostMapping("/{sessionId}/status")
+    public ShiftSessionResponse updateStatus(
+            @PathVariable UUID sessionId,
+            @RequestBody Map<String, String> body) {
+        String status = body.get("status");
+        if (status == null || status.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El campo 'status' es requerido");
+        }
+        log.info("[ShiftSessionController] actualizar estado sessionId={} status={}", sessionId, status);
+        try {
+            return shiftSessionService.updateSessionStatus(sessionId, status);
         } catch (RuntimeException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         }

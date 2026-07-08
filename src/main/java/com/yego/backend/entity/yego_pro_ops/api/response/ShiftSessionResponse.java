@@ -43,6 +43,15 @@ public class ShiftSessionResponse {
     @JsonProperty("totalCash")
     private BigDecimal totalCash;
 
+    @JsonProperty("liquidaEfectivo")
+    private BigDecimal liquidaEfectivo;
+
+    @JsonProperty("liquidaYape")
+    private BigDecimal liquidaYape;
+
+    @JsonProperty("adelanto")
+    private BigDecimal adelanto;
+
     @JsonProperty("createdAt")
     private LocalDateTime createdAt;
 

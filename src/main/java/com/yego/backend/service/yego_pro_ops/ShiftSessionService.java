@@ -18,5 +18,7 @@ public interface ShiftSessionService {
 
     ShiftSessionResponse settleSession(UUID sessionId, Long settledBy);
 
+    ShiftSessionResponse updateSessionStatus(UUID sessionId, String newStatus);
+
     void eliminarSesion(UUID sessionId, Long userId, String reason);
 }

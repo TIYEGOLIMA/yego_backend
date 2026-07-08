@@ -22,6 +22,9 @@ public interface ShiftSessionRepository extends JpaRepository<ShiftSession, UUID
     @Query("SELECT s FROM ShiftSession s WHERE s.driverId = :driverId AND s.deleted = false ORDER BY s.startedAt DESC")
     List<ShiftSession> findByDriverIdOrderByStartedAtDesc(@Param("driverId") String driverId);
 
+    @Query("SELECT s FROM ShiftSession s WHERE s.driverId = :driverId AND s.deleted = false AND s.startedAt BETWEEN :desde AND :hasta ORDER BY s.startedAt ASC")
+    List<ShiftSession> findByDriverIdAndStartedAtBetweenOrderByStartedAtAsc(@Param("driverId") String driverId, @Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta);
+
     @Query("SELECT MAX(s.settledAt) FROM ShiftSession s WHERE s.driverId = :driverId AND s.status = 'settled' AND s.deleted = false")
     Optional<java.time.LocalDateTime> findLastSettledAtByDriverId(@Param("driverId") String driverId);
 
