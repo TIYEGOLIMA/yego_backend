@@ -38,7 +38,7 @@ class MarketingMensajeServiceImplTest {
     void rechazaHorarioQueNoEsJsonValido() {
         TestContext context = context();
         MarketingMensajeRequest request = requestBase();
-        request.setWhatsapp(true);
+        request.setWhatsapp(false);
         request.setGrupos(List.of("grupo-1"));
         request.setHorasEspecificas("{invalido");
 
@@ -52,7 +52,7 @@ class MarketingMensajeServiceImplTest {
     void normalizaDestinatariosAntesDePersistir() {
         TestContext context = context();
         MarketingMensajeRequest request = requestBase();
-        request.setWhatsapp(true);
+        request.setWhatsapp(false);
         request.setGrupos(List.of(" grupo-1 ", "", "grupo-1", "grupo-2"));
         request.setHorasEspecificas("{\"10:00\":[\"Lun\"]}");
         when(context.messageRepository.save(any(MarketingMensaje.class)))
@@ -67,6 +67,7 @@ class MarketingMensajeServiceImplTest {
         ArgumentCaptor<MarketingMensaje> captor = ArgumentCaptor.forClass(MarketingMensaje.class);
         verify(context.messageRepository).save(captor.capture());
         assertThat(captor.getValue().getGrupos()).isEqualTo("[\"grupo-1\",\"grupo-2\"]");
+        assertThat(captor.getValue().getWhatsapp()).isTrue();
     }
 
     private MarketingMensajeRequest requestBase() {

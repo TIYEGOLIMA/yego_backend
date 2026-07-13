@@ -100,11 +100,8 @@ public class MarketingMensajeScheduler {
     }
 
     private boolean tieneCanalConDestinatarios(MarketingMensaje mensaje) {
-        boolean whatsapp = Boolean.TRUE.equals(mensaje.getWhatsapp())
-                && tieneTexto(mensaje.getGrupos());
-        boolean fleet = Boolean.TRUE.equals(mensaje.getYandex())
-                && tieneTexto(mensaje.getFlotas());
-        return whatsapp || fleet;
+        return !parseJsonList(mensaje.getGrupos()).isEmpty()
+                || !parseJsonList(mensaje.getFlotas()).isEmpty();
     }
 
     private void procesarSiCorresponde(
@@ -146,10 +143,10 @@ public class MarketingMensajeScheduler {
         MarketingDeliveryResult whatsapp = MarketingDeliveryResult.vacio();
         MarketingDeliveryResult fleet = MarketingDeliveryResult.vacio();
 
-        if (Boolean.TRUE.equals(mensaje.getWhatsapp())) {
+        if (!grupos.isEmpty()) {
             whatsapp = enviarWhatsAppSeguro(mensaje, grupos, scheduledFor);
         }
-        if (Boolean.TRUE.equals(mensaje.getYandex())) {
+        if (!flotas.isEmpty()) {
             fleet = enviarFleetSeguro(mensaje, flotas, scheduledFor);
         }
 

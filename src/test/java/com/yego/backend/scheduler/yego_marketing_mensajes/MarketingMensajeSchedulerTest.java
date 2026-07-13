@@ -63,11 +63,37 @@ class MarketingMensajeSchedulerTest {
         mensaje.setMensaje("Mensaje");
         mensaje.setWhatsapp(whatsapp);
         mensaje.setYandex(fleet);
-        mensaje.setGrupos(objectMapper.writeValueAsString(List.of("grupo-1")));
-        mensaje.setFlotas(objectMapper.writeValueAsString(List.of("park-1")));
+        mensaje.setGrupos(objectMapper.writeValueAsString(
+                whatsapp ? List.of("grupo-1") : List.of()));
+        mensaje.setFlotas(objectMapper.writeValueAsString(
+                fleet ? List.of("park-1") : List.of()));
         mensaje.setHorasEspecificas(objectMapper.writeValueAsString(
                 Map.of(hora, List.of(nombreDia(fecha.getDayOfWeek())))));
         return mensaje;
+    }
+
+    @Test
+    void enviaWhatsAppCuandoHayGrupoAunqueBanderaSeaFalse() throws Exception {
+        MarketingMensajeRepository repository = mock(MarketingMensajeRepository.class);
+        MarketingWhatsAppSender whatsappSender = mock(MarketingWhatsAppSender.class);
+        MarketingFleetSender fleetSender = mock(MarketingFleetSender.class);
+        Environment environment = mock(Environment.class);
+        ObjectMapper objectMapper = new ObjectMapper();
+
+        MarketingMensaje mensaje = mensajeProgramado(objectMapper, false, false);
+        mensaje.setGrupos(objectMapper.writeValueAsString(List.of("grupo-1")));
+        when(environment.getActiveProfiles()).thenReturn(new String[]{"prod"});
+        when(repository.findByActivoTrueAndHorasEspecificasIsNotNull())
+                .thenReturn(List.of(mensaje));
+        when(whatsappSender.enviar(any(), any(), any()))
+                .thenReturn(new MarketingDeliveryResult(1, 0, 0, 1));
+
+        new MarketingMensajeScheduler(
+                repository, whatsappSender, fleetSender, objectMapper, environment)
+                .verificarYEnviarMensajesProgramados();
+
+        verify(whatsappSender).enviar(eq(mensaje), eq(List.of("grupo-1")), any(Instant.class));
+        verify(fleetSender, never()).enviar(any(), any(), any());
     }
 
     private String nombreDia(DayOfWeek day) {

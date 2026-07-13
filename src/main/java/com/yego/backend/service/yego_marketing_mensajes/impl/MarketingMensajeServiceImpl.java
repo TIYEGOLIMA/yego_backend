@@ -121,11 +121,12 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         mensaje.setModo(request.getModo());
         mensaje.setTipo(request.getTipo());
         mensaje.setArchivo(urlArchivo != null ? urlArchivo : request.getArchivo());
-        mensaje.setWhatsapp(Boolean.TRUE.equals(request.getWhatsapp()));
-        mensaje.setYandex(Boolean.TRUE.equals(request.getYandex()));
         mensaje.setDiasActivos(convertirListaAJson(normalizarLista(request.getDiasActivos())));
         mensaje.setGrupos(convertirListaAJson(normalizarLista(request.getGrupos())));
         mensaje.setFlotas(convertirListaAJson(normalizarLista(request.getFlotas())));
+        mensaje.setWhatsapp(Boolean.TRUE.equals(request.getWhatsapp()));
+        mensaje.setYandex(Boolean.TRUE.equals(request.getYandex()));
+        activarCanalesConDestinatarios(mensaje);
         guardarHorasEspecificas(mensaje, request.getHorasEspecificas());
         mensaje.setActivo(request.getActivo() != null ? request.getActivo() : true);
         validarCanales(mensaje);
@@ -180,6 +181,7 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         if (request.getFlotas() != null) {
             mensaje.setFlotas(convertirListaAJson(normalizarLista(request.getFlotas())));
         }
+        activarCanalesConDestinatarios(mensaje);
 
         guardarHorasEspecificas(mensaje, request.getHorasEspecificas());
 
@@ -432,6 +434,15 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         }
         if (fleet && convertirJsonALista(mensaje.getFlotas()).isEmpty()) {
             throw badRequest("Selecciona al menos una flota para Fleet");
+        }
+    }
+
+    private void activarCanalesConDestinatarios(MarketingMensaje mensaje) {
+        if (!convertirJsonALista(mensaje.getGrupos()).isEmpty()) {
+            mensaje.setWhatsapp(true);
+        }
+        if (!convertirJsonALista(mensaje.getFlotas()).isEmpty()) {
+            mensaje.setYandex(true);
         }
     }
 
