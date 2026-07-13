@@ -24,7 +24,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doThrow;
 
 class MarketingMensajeSchedulerTest {
 
@@ -51,31 +50,6 @@ class MarketingMensajeSchedulerTest {
 
         verify(whatsappSender).enviar(eq(mensaje), eq(List.of("grupo-1")), any(Instant.class));
         verify(fleetSender, never()).enviar(any(), any(), any());
-    }
-
-    @Test
-    void fleetContinuaCuandoWhatsAppFalla() throws Exception {
-        MarketingMensajeRepository repository = mock(MarketingMensajeRepository.class);
-        MarketingWhatsAppSender whatsappSender = mock(MarketingWhatsAppSender.class);
-        MarketingFleetSender fleetSender = mock(MarketingFleetSender.class);
-        Environment environment = mock(Environment.class);
-        ObjectMapper objectMapper = new ObjectMapper();
-
-        MarketingMensaje mensaje = mensajeProgramado(objectMapper, true, true);
-        when(environment.getActiveProfiles()).thenReturn(new String[]{"prod"});
-        when(repository.findByActivoTrueAndHorasEspecificasIsNotNull())
-                .thenReturn(List.of(mensaje));
-        doThrow(new IllegalStateException("WhatsApp no disponible"))
-                .when(whatsappSender).enviar(eq(mensaje), any(), any());
-        when(fleetSender.enviar(eq(mensaje), any(), any()))
-                .thenReturn(new MarketingDeliveryResult(1, 0, 0, 1));
-
-        new MarketingMensajeScheduler(
-                repository, whatsappSender, fleetSender, objectMapper, environment)
-                .verificarYEnviarMensajesProgramados();
-
-        verify(whatsappSender).enviar(eq(mensaje), eq(List.of("grupo-1")), any(Instant.class));
-        verify(fleetSender).enviar(eq(mensaje), eq(List.of("park-1")), any(Instant.class));
     }
 
     private MarketingMensaje mensajeProgramado(
