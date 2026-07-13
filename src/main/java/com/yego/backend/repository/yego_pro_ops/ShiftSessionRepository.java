@@ -16,6 +16,8 @@ public interface ShiftSessionRepository extends JpaRepository<ShiftSession, UUID
 
     Optional<ShiftSession> findByDriverIdAndStatusAndDeletedFalse(String driverId, String status);
 
+    List<ShiftSession> findByStatusAndDeletedFalseOrderByStartedAtDesc(String status);
+
     @Query("SELECT s FROM ShiftSession s WHERE s.driverId = :driverId AND s.status = 'settled' AND s.deleted = false ORDER BY s.closedAt DESC LIMIT 1")
     Optional<ShiftSession> findTopByDriverIdAndStatusOrderByClosedAtDesc(@Param("driverId") String driverId);
 

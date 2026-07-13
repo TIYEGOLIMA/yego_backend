@@ -2,8 +2,8 @@ package com.yego.backend.scheduler.yego_marketing_mensajes;
 
 import com.yego.backend.entity.yego_marketing_mensajes.entities.ModuleMarketingGroup;
 import com.yego.backend.repository.yego_marketing_mensajes.ModuleMarketingGroupRepository;
-import com.yego.backend.service.WhatsAppService;
 import com.yego.backend.service.yego_marketing_mensajes.MarketingMensajeService;
+import com.yego.backend.service.yego_marketing_mensajes.sender.MarketingWhatsAppSender;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
@@ -11,23 +11,20 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Component
 @Slf4j
 public class WhatsAppGroupSyncScheduler {
 
-    private final WhatsAppService whatsAppService;
+    private final MarketingWhatsAppSender whatsAppSender;
     private final ModuleMarketingGroupRepository groupRepository;
     private final MarketingMensajeService marketingMensajeService;
 
-    private final AtomicBoolean sincronizando = new AtomicBoolean(false);
-
-    public WhatsAppGroupSyncScheduler(WhatsAppService whatsAppService,
+    public WhatsAppGroupSyncScheduler(MarketingWhatsAppSender whatsAppSender,
                                        ModuleMarketingGroupRepository groupRepository,
                                        MarketingMensajeService marketingMensajeService) {
-        this.whatsAppService = whatsAppService;
+        this.whatsAppSender = whatsAppSender;
         this.groupRepository = groupRepository;
         this.marketingMensajeService = marketingMensajeService;
     }
@@ -38,28 +35,10 @@ public class WhatsAppGroupSyncScheduler {
         sincronizarGrupos();
     }
 
-    /**
-     * Punto de entrada público para disparar sincronización cuando se detecta
-     * un error de grupo inválido ([object Object]) al enviar mensajes.
-     * Usa AtomicBoolean para evitar sincronizaciones concurrentes.
-     */
-    public void sincronizarPorError() {
-        if (!sincronizando.compareAndSet(false, true)) {
-            log.info("🔄 [GroupSync] Sincronización ya en curso, omitiendo");
-            return;
-        }
-        try {
-            log.info("🔄 [GroupSync] Sincronización disparada por error de grupo inválido");
-            sincronizarGrupos();
-        } finally {
-            sincronizando.set(false);
-        }
-    }
-
     @Transactional
     public void sincronizarGrupos() {
         try {
-            List<Map<String, Object>> gruposApi = whatsAppService.obtenerGruposDesdeApi();
+            List<Map<String, Object>> gruposApi = whatsAppSender.obtenerGrupos();
 
             if (gruposApi.isEmpty()) {
                 log.warn("⚠️ [GroupSync] No se obtuvieron grupos desde la API, omitiendo sincronización");

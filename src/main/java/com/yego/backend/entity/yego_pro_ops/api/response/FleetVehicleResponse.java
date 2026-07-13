@@ -72,4 +72,19 @@ public class FleetVehicleResponse {
 
     @JsonProperty("foto_url")
     private String fotoUrl;
+
+    @JsonProperty("documentos_count")
+    private Long documentosCount;
+
+    @JsonProperty("shift_status")
+    private String shiftStatus;
+
+    @JsonProperty("active_shift_id")
+    private String activeShiftId;
+
+    @JsonProperty("active_driver_id")
+    private String activeDriverId;
+
+    @JsonProperty("active_started_at")
+    private String activeStartedAt;
 }

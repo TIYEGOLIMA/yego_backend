@@ -1,6 +1,8 @@
 package com.yego.backend.service.yego_marketing_mensajes.impl;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_garantizado.api.response.FlotaResponse;
 import com.yego.backend.entity.yego_marketing_mensajes.api.request.MarketingMensajeRequest;
@@ -12,13 +14,15 @@ import com.yego.backend.entity.yego_marketing_mensajes.entities.ModuleMarketingG
 import com.yego.backend.repository.yego_marketing_mensajes.MarketingMensajeRepository;
 import com.yego.backend.repository.yego_marketing_mensajes.ModuleMarketingGroupRepository;
 import com.yego.backend.service.MinIOService;
+import com.yego.backend.service.yego_garantizado.FlotaService;
 import com.yego.backend.service.yego_marketing_mensajes.MarketingMensajeService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.multipart.MultipartFile;
 
 import org.apache.poi.ss.usermodel.Cell;
@@ -30,8 +34,10 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import java.awt.Color;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 
 import com.lowagie.text.Document;
+import com.lowagie.text.DocumentException;
 import com.lowagie.text.FontFactory;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
@@ -42,7 +48,7 @@ import com.lowagie.text.pdf.PdfWriter;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
+import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -56,7 +62,7 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
 
     private final MarketingMensajeRepository marketingMensajeRepository;
     private final ModuleMarketingGroupRepository moduleMarketingGroupRepository;
-    private final RestTemplate restTemplate;
+    private final FlotaService flotaService;
     private final ObjectMapper objectMapper;
     private final MinIOService minIOService;
 
@@ -89,13 +95,14 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
 
     public MarketingMensajeServiceImpl(MarketingMensajeRepository marketingMensajeRepository, 
                                       ModuleMarketingGroupRepository moduleMarketingGroupRepository,
-                                      RestTemplate restTemplate, 
-                                      MinIOService minIOService) {
+                                      FlotaService flotaService,
+                                      MinIOService minIOService,
+                                      ObjectMapper objectMapper) {
         this.marketingMensajeRepository = marketingMensajeRepository;
         this.moduleMarketingGroupRepository = moduleMarketingGroupRepository;
-        this.restTemplate = restTemplate;
+        this.flotaService = flotaService;
         this.minIOService = minIOService;
-        this.objectMapper = new ObjectMapper();
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -114,13 +121,14 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         mensaje.setModo(request.getModo());
         mensaje.setTipo(request.getTipo());
         mensaje.setArchivo(urlArchivo != null ? urlArchivo : request.getArchivo());
-        mensaje.setWhatsapp(request.getWhatsapp());
-        mensaje.setYandex(request.getYandex());
-        mensaje.setDiasActivos(convertirListaAJson(request.getDiasActivos()));
-        mensaje.setGrupos(convertirListaAJson(request.getGrupos()));
-        mensaje.setFlotas(convertirListaAJson(request.getFlotas()));
+        mensaje.setWhatsapp(Boolean.TRUE.equals(request.getWhatsapp()));
+        mensaje.setYandex(Boolean.TRUE.equals(request.getYandex()));
+        mensaje.setDiasActivos(convertirListaAJson(normalizarLista(request.getDiasActivos())));
+        mensaje.setGrupos(convertirListaAJson(normalizarLista(request.getGrupos())));
+        mensaje.setFlotas(convertirListaAJson(normalizarLista(request.getFlotas())));
         guardarHorasEspecificas(mensaje, request.getHorasEspecificas());
         mensaje.setActivo(request.getActivo() != null ? request.getActivo() : true);
+        validarCanales(mensaje);
 
         MarketingMensaje mensajeGuardado = marketingMensajeRepository.save(mensaje);
         log.info("Mensaje creado con ID: {}", mensajeGuardado.getId());
@@ -134,7 +142,7 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         log.info("Actualizando mensaje con ID: {}", id);
 
         MarketingMensaje mensaje = marketingMensajeRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Mensaje con ID " + id + " no encontrado"));
+                .orElseThrow(() -> notFound(id));
 
         String tipoAnterior = mensaje.getTipo();
 
@@ -164,18 +172,19 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         if (request.getYandex() != null) mensaje.setYandex(request.getYandex());
 
         if (request.getDiasActivos() != null) {
-            mensaje.setDiasActivos(convertirListaAJson(limpiarListaDeJsonStrings(request.getDiasActivos())));
+            mensaje.setDiasActivos(convertirListaAJson(normalizarLista(request.getDiasActivos())));
         }
         if (request.getGrupos() != null) {
-            mensaje.setGrupos(convertirListaAJson(limpiarListaDeJsonStrings(request.getGrupos())));
+            mensaje.setGrupos(convertirListaAJson(normalizarLista(request.getGrupos())));
         }
         if (request.getFlotas() != null) {
-            mensaje.setFlotas(convertirListaAJson(limpiarListaDeJsonStrings(request.getFlotas())));
+            mensaje.setFlotas(convertirListaAJson(normalizarLista(request.getFlotas())));
         }
 
         guardarHorasEspecificas(mensaje, request.getHorasEspecificas());
 
         if (request.getActivo() != null) mensaje.setActivo(request.getActivo());
+        validarCanales(mensaje);
 
         MarketingMensaje mensajeActualizado = marketingMensajeRepository.save(mensaje);
         log.info("Mensaje actualizado con ID: {}", mensajeActualizado.getId());
@@ -186,7 +195,7 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
     @Override
     public MarketingMensajeResponse obtenerMensajePorId(Long id) {
         MarketingMensaje mensaje = marketingMensajeRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Mensaje con ID " + id + " no encontrado"));
+                .orElseThrow(() -> notFound(id));
         return convertirAResponse(mensaje, null);
     }
 
@@ -214,10 +223,9 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
     @Override
     @Transactional
     public void eliminarMensaje(Long id) {
-        if (!marketingMensajeRepository.existsById(id)) {
-            throw new IllegalArgumentException("Mensaje con ID " + id + " no encontrado");
-        }
-        marketingMensajeRepository.deleteById(id);
+        MarketingMensaje mensaje = marketingMensajeRepository.findById(id)
+                .orElseThrow(() -> notFound(id));
+        marketingMensajeRepository.delete(mensaje);
         log.info("Mensaje eliminado con ID: {}", id);
     }
 
@@ -232,23 +240,17 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
             if (gruposCache != null && now < gruposCacheExpiry) {
                 return gruposCache;
             }
-            try {
-                List<GrupoWhatsAppResponse> grupos = moduleMarketingGroupRepository.findAll().stream()
-                        .map(this::mapGrupoToResponse)
-                        .collect(Collectors.toList());
-                gruposCache = grupos;
-                gruposCacheExpiry = now + CACHE_TTL_MS;
-                log.info("Grupos de WhatsApp cargados: {} (caché 5 min)", grupos.size());
-                return grupos;
-            } catch (Exception e) {
-                log.error("Error obteniendo grupos de WhatsApp: {}", e.getMessage(), e);
-                return Collections.emptyList();
-            }
+            List<GrupoWhatsAppResponse> grupos = moduleMarketingGroupRepository.findAll().stream()
+                    .map(this::mapGrupoToResponse)
+                    .collect(Collectors.toList());
+            gruposCache = grupos;
+            gruposCacheExpiry = now + CACHE_TTL_MS;
+            log.info("Grupos de WhatsApp cargados: {} (caché 5 min)", grupos.size());
+            return grupos;
         }
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public List<FlotaResponse> obtenerFlotas() {
         long now = System.currentTimeMillis();
         if (flotasCache != null && now < flotasCacheExpiry) {
@@ -259,29 +261,11 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
             if (flotasCache != null && now < flotasCacheExpiry) {
                 return flotasCache;
             }
-            try {
-                String url = "http://162.55.214.109:6000/v2/partners";
-                Map<String, Object> response = restTemplate.postForObject(url, null, Map.class);
-                List<FlotaResponse> flotas = new ArrayList<>();
-                if (response != null && response.containsKey("partners")) {
-                    List<Map<String, Object>> partners = (List<Map<String, Object>>) response.get("partners");
-                    for (Map<String, Object> item : partners) {
-                        FlotaResponse flota = new FlotaResponse();
-                        flota.setId(item.get("id").toString());
-                        flota.setName(item.get("name").toString());
-                        flota.setCity(item.get("city") != null ? item.get("city").toString() : null);
-                        flota.setSpecifications((List<String>) item.get("specifications"));
-                        flotas.add(flota);
-                    }
-                }
-                flotasCache = flotas;
-                flotasCacheExpiry = now + CACHE_TTL_MS;
-                log.info("Flotas cargadas: {} (caché 5 min)", flotas.size());
-                return flotas;
-            } catch (Exception e) {
-                log.error("Error obteniendo flotas: {}", e.getMessage(), e);
-                return Collections.emptyList();
-            }
+            List<FlotaResponse> flotas = List.copyOf(flotaService.obtenerTodosLosPartners());
+            flotasCache = flotas;
+            flotasCacheExpiry = now + CACHE_TTL_MS;
+            log.info("Flotas cargadas: {} (caché 5 min)", flotas.size());
+            return flotas;
         }
     }
 
@@ -344,7 +328,7 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
             workbook.write(out);
             log.info("Excel generado con {} mensajes", mensajes.size());
             return out.toByteArray();
-        } catch (Exception e) {
+        } catch (IOException e) {
             log.error("Error generando Excel: {}", e.getMessage(), e);
             throw new RuntimeException("Error generando Excel de mensajes", e);
         }
@@ -357,7 +341,7 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
             Document document = new Document(PageSize.A4.rotate());
             PdfWriter.getInstance(document, out);
             document.open();
-            document.add(new Paragraph("Listado de mensajes - SMS Marketing YEGO", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14)));
+            document.add(new Paragraph("Listado de mensajes - Yego Marketing", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14)));
             document.add(new Paragraph(" "));
 
             PdfPTable table = new PdfPTable(8);
@@ -383,7 +367,7 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
             document.close();
             log.info("PDF generado con {} mensajes", mensajes.size());
             return out.toByteArray();
-        } catch (Exception e) {
+        } catch (DocumentException | IOException e) {
             log.error("Error generando PDF: {}", e.getMessage(), e);
             throw new RuntimeException("Error generando PDF de mensajes", e);
         }
@@ -393,10 +377,8 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
     public void invalidarCacheGrupos() {
         this.gruposCache = null;
         this.gruposCacheExpiry = 0;
-        log.info("🔄 [MarketingMensajeService] Caché de grupos invalidada");
+        log.info("Cache de grupos de Marketing invalidada");
     }
-
-    // ── Métodos privados auxiliares ──────────────────────────────────────
 
     private String subirArchivoSiPresente(MultipartFile archivo) {
         if (archivo == null || archivo.isEmpty()) return null;
@@ -425,11 +407,41 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
     private void guardarHorasEspecificas(MarketingMensaje mensaje, String horasEspecificas) {
         if (horasEspecificas == null || horasEspecificas.trim().isEmpty()) return;
         try {
-            objectMapper.readTree(horasEspecificas);
-        } catch (Exception e) {
-            log.warn("Horas específicas no es JSON válido: {}", e.getMessage());
+            JsonNode value = objectMapper.readTree(horasEspecificas);
+            if (!value.isObject()) {
+                throw badRequest("Las horas específicas deben ser un objeto JSON");
+            }
+        } catch (JsonProcessingException e) {
+            throw badRequest("Las horas específicas no contienen JSON válido");
         }
         mensaje.setHorasEspecificas(horasEspecificas);
+    }
+
+    private void validarCanales(MarketingMensaje mensaje) {
+        if (!Boolean.TRUE.equals(mensaje.getActivo())) {
+            return;
+        }
+
+        boolean whatsapp = Boolean.TRUE.equals(mensaje.getWhatsapp());
+        boolean fleet = Boolean.TRUE.equals(mensaje.getYandex());
+        if (!whatsapp && !fleet) {
+            throw badRequest("Una campaña activa debe tener al menos un canal");
+        }
+        if (whatsapp && convertirJsonALista(mensaje.getGrupos()).isEmpty()) {
+            throw badRequest("Selecciona al menos un grupo para WhatsApp");
+        }
+        if (fleet && convertirJsonALista(mensaje.getFlotas()).isEmpty()) {
+            throw badRequest("Selecciona al menos una flota para Fleet");
+        }
+    }
+
+    private ResponseStatusException notFound(Long id) {
+        return new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "Mensaje con ID " + id + " no encontrado");
+    }
+
+    private ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 
     private GrupoWhatsAppResponse mapGrupoToResponse(ModuleMarketingGroup grupo) {
@@ -490,109 +502,42 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
             if (auth != null && auth.isAuthenticated() && auth.getName() != null) {
                 return Long.parseLong(auth.getName());
             }
-        } catch (Exception e) {
-            log.error("Error obteniendo userId del contexto de seguridad: {}", e.getMessage());
+        } catch (NumberFormatException e) {
+            log.warn("El identificador del usuario autenticado no es numérico: {}", e.getMessage());
         }
         return null;
     }
-
-    // ── JSON <-> List helpers ───────────────────────────────────────────
 
     private String convertirListaAJson(List<String> lista) {
         if (lista == null || lista.isEmpty()) return null;
         try {
             return objectMapper.writeValueAsString(lista);
-        } catch (Exception e) {
-            log.error("Error convirtiendo lista a JSON: {}", e.getMessage());
-            return null;
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("No se pudo serializar la lista de Marketing", e);
         }
     }
 
     private List<String> convertirJsonALista(String json) {
         if (json == null || json.trim().isEmpty()) return Collections.emptyList();
-        String jsonLimpio = limpiarJsonString(json);
         try {
-            List<String> resultado = objectMapper.readValue(jsonLimpio, new TypeReference<List<String>>() {});
-            List<String> resultadoLimpio = new ArrayList<>();
-            for (String item : resultado) {
-                if (item != null && item.trim().startsWith("[") && item.trim().endsWith("]")) {
-                    resultadoLimpio.addAll(convertirJsonALista(item));
-                } else {
-                    resultadoLimpio.add(item);
-                }
-            }
-            return resultadoLimpio;
-        } catch (Exception e) {
-            log.warn("Error convirtiendo JSON a lista: {} | JSON: {}", 
-                e.getMessage(), json.substring(0, Math.min(100, json.length())));
+            return normalizarLista(objectMapper.readValue(
+                    json, new TypeReference<List<String>>() {}));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Datos JSON inválidos en Marketing", e);
+        }
+    }
+
+    private List<String> normalizarLista(List<String> values) {
+        if (values == null) {
             return Collections.emptyList();
         }
+        return values.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .distinct()
+                .toList();
     }
-
-    @SuppressWarnings("unchecked")
-    private String limpiarJsonString(String json) {
-        if (json == null || json.trim().isEmpty()) return json;
-        String jsonLimpio = json.trim();
-        for (int i = 0; i < 5; i++) {
-            try {
-                Object parsed = objectMapper.readValue(jsonLimpio, Object.class);
-                if (parsed instanceof List) {
-                    List<Object> lista = (List<Object>) parsed;
-                    if (lista.size() == 1 && lista.get(0) instanceof String) {
-                        String elemento = (String) lista.get(0);
-                        if ((elemento.trim().startsWith("[") && elemento.trim().endsWith("]")) ||
-                            (elemento.trim().startsWith("{") && elemento.trim().endsWith("}"))) {
-                            jsonLimpio = elemento;
-                            continue;
-                        }
-                    }
-                }
-                break;
-            } catch (Exception e) {
-                break;
-            }
-        }
-        return jsonLimpio;
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> limpiarListaDeJsonStrings(List<String> lista) {
-        if (lista == null || lista.isEmpty()) return Collections.emptyList();
-        List<String> resultado = new ArrayList<>();
-        for (String item : lista) {
-            if (item == null || item.trim().isEmpty()) continue;
-            String trimmed = item.trim();
-            if ((trimmed.startsWith("[") && trimmed.endsWith("]")) ||
-                (trimmed.startsWith("{") && trimmed.endsWith("}"))) {
-                try {
-                    Object parsed = objectMapper.readValue(trimmed, Object.class);
-                    if (parsed instanceof List) {
-                        List<Object> parsedList = (List<Object>) parsed;
-                        if (parsedList.isEmpty()) continue;
-                        for (Object element : parsedList) {
-                            if (element != null) {
-                                String str = element.toString();
-                                if (str.trim().startsWith("[") && str.trim().endsWith("]")) {
-                                    resultado.addAll(limpiarListaDeJsonStrings(Collections.singletonList(str)));
-                                } else {
-                                    resultado.add(str);
-                                }
-                            }
-                        }
-                    } else {
-                        resultado.add(item);
-                    }
-                } catch (Exception e) {
-                    resultado.add(item);
-                }
-            } else {
-                resultado.add(item);
-            }
-        }
-        return resultado;
-    }
-
-    // ── Export helpers ───────────────────────────────────────────────────
 
     private List<MarketingMensajeResponse> filtrarYOrdenarParaExport(
             String searchTerm, String modo, String tipo, String canales, String fechaDesde, String fechaHasta) {
@@ -635,22 +580,26 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
     private List<MarketingMensajeResponse> filtrarPorRangoFechas(
             List<MarketingMensajeResponse> list, String fechaDesde, String fechaHasta) {
         if (fechaDesde != null && !fechaDesde.trim().isEmpty()) {
-            try {
-                LocalDate desde = LocalDate.parse(fechaDesde.trim());
-                list = list.stream().filter(m -> 
-                    m.getCreatedAt() != null && !m.getCreatedAt().toLocalDate().isBefore(desde)
-                ).collect(Collectors.toList());
-            } catch (Exception ignored) { }
+            LocalDate desde = parseDate(fechaDesde, "fechaDesde");
+            list = list.stream().filter(m ->
+                m.getCreatedAt() != null && !m.getCreatedAt().toLocalDate().isBefore(desde)
+            ).collect(Collectors.toList());
         }
         if (fechaHasta != null && !fechaHasta.trim().isEmpty()) {
-            try {
-                LocalDate hasta = LocalDate.parse(fechaHasta.trim());
-                list = list.stream().filter(m -> 
-                    m.getCreatedAt() != null && !m.getCreatedAt().toLocalDate().isAfter(hasta)
-                ).collect(Collectors.toList());
-            } catch (Exception ignored) { }
+            LocalDate hasta = parseDate(fechaHasta, "fechaHasta");
+            list = list.stream().filter(m ->
+                m.getCreatedAt() != null && !m.getCreatedAt().toLocalDate().isAfter(hasta)
+            ).collect(Collectors.toList());
         }
         return list;
+    }
+
+    private LocalDate parseDate(String value, String field) {
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (DateTimeParseException e) {
+            throw badRequest(field + " debe tener formato yyyy-MM-dd");
+        }
     }
 
     private static boolean contains(String text, String query) {

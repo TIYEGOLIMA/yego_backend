@@ -15,15 +15,19 @@ public interface FleetVehicleRepository extends JpaRepository<FleetVehicle, Stri
     // ── Listado (excluye vehículos inactivos: status_id <> statusIdExcluido) ──
 
     @EntityGraph(attributePaths = "segment")
-    List<FleetVehicle> findByActivoTrueAndStatusIdNot(String statusIdExcluido);
+    List<FleetVehicle> findBySegment_ParkIdAndSegment_ActivoTrueAndActivoTrueAndStatusIdNotOrderByNumberAsc(String parkId, String statusIdExcluido);
 
     @EntityGraph(attributePaths = "segment")
-    List<FleetVehicle> findBySegment_IdAndActivoTrueAndStatusIdNot(UUID segmentId, String statusIdExcluido);
+    List<FleetVehicle> findBySegment_IdAndSegment_ParkIdAndSegment_ActivoTrueAndActivoTrueAndStatusIdNotOrderByNumberAsc(UUID segmentId, String parkId, String statusIdExcluido);
 
     long countBySegment_IdAndActivoTrueAndStatusIdNot(UUID segmentId, String statusIdExcluido);
 
     @EntityGraph(attributePaths = "segment")
-    List<FleetVehicle> findTop20ByNumberContainingIgnoreCaseAndActivoTrueAndStatusIdNotOrderByNumberAsc(String number, String statusIdExcluido);
+    List<FleetVehicle> findTop20BySegment_ParkIdAndSegment_ActivoTrueAndNumberContainingIgnoreCaseAndActivoTrueAndStatusIdNotOrderByNumberAsc(
+            String parkId,
+            String number,
+            String statusIdExcluido
+    );
 
     @EntityGraph(attributePaths = "segment")
     Optional<FleetVehicle> findByYangoCarIdAndActivoTrueAndStatusIdNot(String yangoCarId, String statusIdExcluido);

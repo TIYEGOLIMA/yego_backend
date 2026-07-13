@@ -1,19 +1,23 @@
 package com.yego.backend.service.yego_pro_ops.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.yego.backend.entity.yego_api_externo.entities.DriverApi;
 import com.yego.backend.entity.yego_pro_ops.api.response.FleetVehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleTraceEvent;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.mobile.AdminDashboardResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.*;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleCard;
 import com.yego.backend.repository.yego_pro_ops.*;
 import com.yego.backend.repository.yego_principal.UserRepository;
+import com.yego.backend.repository.yego_api_externo.DriverApiRepository;
 import com.yego.backend.repository.yego_api_externo.FleetCacheRepository;
 import com.yego.backend.service.MinIOService;
 import com.yego.backend.service.yego_garantizado.FlotaService;
 import com.yego.backend.service.yego_pro_ops.VehicleService;
+import com.yego.backend.service.yego_pro_ops.mobile.MobileShiftLocationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.*;
@@ -23,7 +27,9 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -45,15 +51,19 @@ public class VehicleServiceImpl implements VehicleService {
     private final FleetSegmentRepository fleetSegmentRepository;
     private final FleetVehicleRepository fleetVehicleRepository;
     private final FleetVehicleHistoryRepository fleetVehicleHistoryRepository;
+    private final ShiftSessionRepository shiftSessionRepository;
     private final FlotaService flotaService;
     private final MinIOService minIOService;
     private final UserRepository userRepository;
+    private final DriverApiRepository driverApiRepository;
     private final FleetCacheRepository fleetCacheRepository;
+    private final MobileShiftLocationService mobileShiftLocationService;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
     private static final String BUCKET_DOCUMENTACION = "documentacion-flota";
     private static final String STATUS_INACTIVO = "not_working";
+    private static final String PARK_ID_YEGO_PRO = "64085dd85e124e2c808806f70d527ea8";
     private static final String EVT_DOC_CARGADO = "DOC_CARGADO";
     private static final String EVT_DOC_ELIMINADO = "DOC_ELIMINADO";
 
@@ -175,14 +185,45 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     public List<FleetVehicleResponse> listarVehiculosGuardados(java.util.UUID segmentId) {
-        List<FleetVehicle> vehiculos = (segmentId != null)
-                ? fleetVehicleRepository.findBySegment_IdAndActivoTrueAndStatusIdNot(segmentId, STATUS_INACTIVO)
-                : fleetVehicleRepository.findByActivoTrueAndStatusIdNot(STATUS_INACTIVO);
+        return construirFleetVehicleResponses(listarVehiculosYegoPro(segmentId), mapearTurnosActivosPorVehiculo());
+    }
 
-        Map<String, String> nombresPorPark = resolverNombresPark();
+    @Override
+    @Transactional(readOnly = true)
+    public AdminDashboardResponse obtenerDashboardAdmin() {
+        Map<String, ShiftSession> turnosPorVehiculo = mapearTurnosActivosPorVehiculo();
+        List<FleetVehicleResponse> vehicles = construirFleetVehicleResponses(listarVehiculosYegoPro(null), turnosPorVehiculo);
+        Map<String, DriverApi> conductoresPorId = mapearConductoresPorTurno(turnosPorVehiculo.values());
+        List<AdminDashboardResponse.ActiveShiftItem> activeShifts = vehicles.stream()
+                .map(v -> toActiveShiftItem(v, resolverTurnoActivo(v, turnosPorVehiculo), conductoresPorId))
+                .filter(Objects::nonNull)
+                .toList();
 
+        long activeVehicles = vehicles.stream().filter(this::isWorkingVehicle).count();
+        long vehiclesInShift = activeShifts.size();
+
+        return AdminDashboardResponse.builder()
+                .totalVehicles(vehicles.size())
+                .activeVehicles(activeVehicles)
+                .vehiclesInShift(vehiclesInShift)
+                .vehiclesFree(Math.max(vehicles.size() - vehiclesInShift, 0))
+                .vehiclesWithoutPhoto(vehicles.stream().filter(v -> v.getFotoUrl() == null || v.getFotoUrl().isBlank()).count())
+                .vehiclesWithoutDocuments(vehicles.stream().filter(v -> v.getDocumentosCount() == null || v.getDocumentosCount() == 0).count())
+                .activeShifts(activeShifts)
+                .build();
+    }
+
+    private List<FleetVehicle> listarVehiculosYegoPro(UUID segmentId) {
+        return (segmentId != null)
+                ? fleetVehicleRepository.findBySegment_IdAndSegment_ParkIdAndSegment_ActivoTrueAndActivoTrueAndStatusIdNotOrderByNumberAsc(segmentId, PARK_ID_YEGO_PRO, STATUS_INACTIVO)
+                : fleetVehicleRepository.findBySegment_ParkIdAndSegment_ActivoTrueAndActivoTrueAndStatusIdNotOrderByNumberAsc(PARK_ID_YEGO_PRO, STATUS_INACTIVO);
+    }
+
+    private List<FleetVehicleResponse> construirFleetVehicleResponses(List<FleetVehicle> vehiculos, Map<String, ShiftSession> turnosActivosPorVehiculo) {
+        Map<String, String> nombresPorPark = resolverNombresParkLocal();
+        Map<String, Long> documentosPorVehiculo = contarDocumentosActivos(vehiculos);
         return vehiculos.stream()
-                .map(v -> toFleetVehicleResponse(v, nombresPorPark))
+                .map(v -> toFleetVehicleResponse(v, nombresPorPark, documentosPorVehiculo, resolverTurnoActivo(v, turnosActivosPorVehiculo)))
                 .collect(Collectors.toList());
     }
 
@@ -373,7 +414,7 @@ public class VehicleServiceImpl implements VehicleService {
         return resp;
     }
 
-    private FleetVehicleResponse toFleetVehicleResponse(FleetVehicle v, Map<String, String> nombresPorPark) {
+    private FleetVehicleResponse toFleetVehicleResponse(FleetVehicle v, Map<String, String> nombresPorPark, Map<String, Long> documentosPorVehiculo, ShiftSession activeShift) {
         VehicleResponse.YangoStatus status = null;
         if (v.getStatusId() != null || v.getStatusName() != null) {
             status = VehicleResponse.YangoStatus.builder()
@@ -399,7 +440,133 @@ public class VehicleServiceImpl implements VehicleService {
                 .mileage(v.getMileage())
                 .rental(v.getRental())
                 .fotoUrl(v.getFotoUrl())
+                .documentosCount(documentosPorVehiculo.getOrDefault(v.getYangoCarId(), 0L))
+                .shiftStatus(activeShift != null ? "in_shift" : "free")
+                .activeShiftId(activeShift != null ? activeShift.getId().toString() : null)
+                .activeDriverId(activeShift != null ? activeShift.getDriverId() : null)
+                .activeStartedAt(activeShift != null ? activeShift.getStartedAt().toString() : null)
                 .build();
+    }
+
+    private Map<String, ShiftSession> mapearTurnosActivosPorVehiculo() {
+        Map<String, ShiftSession> map = new HashMap<>();
+        for (ShiftSession session : shiftSessionRepository.findByStatusAndDeletedFalseOrderByStartedAtDesc("active")) {
+            putIfPresent(map, session.getVehicleId(), session);
+            putIfPresent(map, normalizarPlaca(session.getPlaca()), session);
+        }
+        return map;
+    }
+
+    private ShiftSession resolverTurnoActivo(FleetVehicleResponse vehicle, Map<String, ShiftSession> turnosActivos) {
+        ShiftSession byId = turnosActivos.get(vehicle.getId());
+        if (byId != null) return byId;
+        return turnosActivos.get(normalizarPlaca(vehicle.getNumber()));
+    }
+
+    private ShiftSession resolverTurnoActivo(FleetVehicle vehicle, Map<String, ShiftSession> turnosActivos) {
+        ShiftSession byId = turnosActivos.get(vehicle.getYangoCarId());
+        if (byId != null) return byId;
+        return turnosActivos.get(normalizarPlaca(vehicle.getNumber()));
+    }
+
+    private void putIfPresent(Map<String, ShiftSession> map, String key, ShiftSession session) {
+        if (key != null && !key.isBlank()) {
+            map.putIfAbsent(key, session);
+        }
+    }
+
+    private String normalizarPlaca(String placa) {
+        return placa == null ? null : placa.replaceAll("[^A-Za-z0-9]", "").toUpperCase();
+    }
+
+    private Map<String, DriverApi> mapearConductoresPorTurno(Collection<ShiftSession> turnos) {
+        List<String> driverIds = turnos.stream()
+                .map(ShiftSession::getDriverId)
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .toList();
+        if (driverIds.isEmpty()) return Map.of();
+
+        return driverApiRepository.findAllById(driverIds).stream()
+                .collect(Collectors.toMap(DriverApi::getDriverId, driver -> driver, (first, ignored) -> first));
+    }
+
+    private AdminDashboardResponse.ActiveShiftItem toActiveShiftItem(
+            FleetVehicleResponse vehicle,
+            ShiftSession shift,
+            Map<String, DriverApi> conductoresPorId
+    ) {
+        if (shift == null) return null;
+        DriverApi conductor = conductoresPorId.get(shift.getDriverId());
+        return AdminDashboardResponse.ActiveShiftItem.builder()
+                .sessionId(shift.getId().toString())
+                .driverId(shift.getDriverId())
+                .driverName(resolveDriverName(conductor))
+                .driverPhone(conductor != null ? conductor.getPhone() : null)
+                .driverLicense(conductor != null ? firstNonBlank(conductor.getLicenseNumber(), conductor.getLicenseNormalizedNumber()) : null)
+                .vehicleId(vehicle.getId())
+                .placa(vehicle.getNumber())
+                .modelo(vehicleLabel(vehicle))
+                .startedAt(shift.getStartedAt() != null ? shift.getStartedAt().toString() : null)
+                .duration(formatDuration(shift.getStartedAt(), LocalDateTime.now()))
+                .kmInicial(shift.getKmInicial())
+                .status(shift.getStatus())
+                .build();
+    }
+
+    private String resolveDriverName(DriverApi driver) {
+        if (driver == null) return null;
+        return firstNonBlank(
+                driver.getFullName(),
+                (firstNonBlank(driver.getFirstName(), "") + " " + firstNonBlank(driver.getLastName(), "")).trim()
+        );
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String vehicleLabel(FleetVehicleResponse vehicle) {
+        return Arrays.asList(vehicle.getBrand(), vehicle.getModel(), vehicle.getYear() != null ? String.valueOf(vehicle.getYear()) : null)
+                .stream()
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.joining(" "));
+    }
+
+    private boolean isWorkingVehicle(FleetVehicleResponse vehicle) {
+        if (vehicle.getStatus() == null) return true;
+        String value = Optional.ofNullable(vehicle.getStatus().getId()).orElse(vehicle.getStatus().getName());
+        if (value == null) return true;
+        String lower = value.toLowerCase();
+        return lower.contains("working") || lower.contains("activo") || lower.contains("active");
+    }
+
+    private String formatDuration(LocalDateTime from, LocalDateTime to) {
+        if (from == null || to == null || to.isBefore(from)) return "0h 00m";
+        Duration duration = Duration.between(from, to);
+        long hours = duration.toHours();
+        long minutes = duration.toMinutesPart();
+        return String.format("%dh %02dm", hours, minutes);
+    }
+
+    private Map<String, Long> contarDocumentosActivos(List<FleetVehicle> vehiculos) {
+        List<String> ids = vehiculos.stream()
+                .map(FleetVehicle::getYangoCarId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (ids.isEmpty()) return Map.of();
+
+        return documentRepository.countActivosByYangoCarIds(ids).stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row[0],
+                        row -> (Long) row[1],
+                        (a, b) -> a
+                ));
     }
 
     private Map<String, String> resolverNombresPark() {
@@ -425,7 +592,11 @@ public class VehicleServiceImpl implements VehicleService {
     public List<MobileVehicleCard> buscarVehiculosMobile(String placa) {
         if (placa == null || placa.isBlank()) return List.of();
         Map<String, String> nombresPorPark = resolverNombresParkLocal();
-        return fleetVehicleRepository.findTop20ByNumberContainingIgnoreCaseAndActivoTrueAndStatusIdNotOrderByNumberAsc(placa.trim(), STATUS_INACTIVO).stream()
+        return fleetVehicleRepository.findTop20BySegment_ParkIdAndSegment_ActivoTrueAndNumberContainingIgnoreCaseAndActivoTrueAndStatusIdNotOrderByNumberAsc(
+                        PARK_ID_YEGO_PRO,
+                        placa.trim(),
+                        STATUS_INACTIVO
+                ).stream()
                 .map(v -> {
                     String parkId = v.getSegment() != null ? v.getSegment().getParkId() : null;
                     return MobileVehicleCard.builder()
@@ -470,6 +641,7 @@ public class VehicleServiceImpl implements VehicleService {
 
         List<VehicleResponse.MaintenanceInfo> mantenimiento = obtenerMantenimientos(carId);
         List<VehicleResponse.IncidentInfo> siniestros = obtenerSiniestros(carId);
+        ShiftSession activeShift = resolverTurnoActivo(v, mapearTurnosActivosPorVehiculo());
 
         return MobileVehicleResponse.builder()
                 .general(general)
@@ -480,6 +652,24 @@ public class VehicleServiceImpl implements VehicleService {
                 .siniestros(siniestros)
                 .gastos(calcularGastos(mantenimiento, siniestros))
                 .trazabilidad(construirTrazabilidad(carId, nombresPorPark))
+                .activeShift(toMobileActiveShift(activeShift))
+                .lastLocation(activeShift != null ? mobileShiftLocationService.getLastLocation(activeShift.getId()) : null)
+                .build();
+    }
+
+    private MobileVehicleResponse.ActiveShift toMobileActiveShift(ShiftSession shift) {
+        if (shift == null) return null;
+        DriverApi conductor = driverApiRepository.findById(shift.getDriverId()).orElse(null);
+        return MobileVehicleResponse.ActiveShift.builder()
+                .sessionId(shift.getId().toString())
+                .driverId(shift.getDriverId())
+                .driverName(resolveDriverName(conductor))
+                .driverPhone(conductor != null ? conductor.getPhone() : null)
+                .driverLicense(conductor != null ? firstNonBlank(conductor.getLicenseNumber(), conductor.getLicenseNormalizedNumber()) : null)
+                .startedAt(shift.getStartedAt() != null ? shift.getStartedAt().toString() : null)
+                .duration(formatDuration(shift.getStartedAt(), LocalDateTime.now()))
+                .kmInicial(shift.getKmInicial())
+                .status(shift.getStatus())
                 .build();
     }
 

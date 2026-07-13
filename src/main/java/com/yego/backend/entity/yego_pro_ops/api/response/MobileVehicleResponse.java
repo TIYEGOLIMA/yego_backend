@@ -1,5 +1,6 @@
 package com.yego.backend.entity.yego_pro_ops.api.response;
 
+import com.yego.backend.entity.yego_pro_ops.api.response.mobile.ShiftLocationResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,6 +27,8 @@ public class MobileVehicleResponse {
     private List<VehicleResponse.IncidentInfo> siniestros;
     private Gasto gastos;
     private List<VehicleTraceEvent> trazabilidad;
+    private ActiveShift activeShift;
+    private ShiftLocationResponse lastLocation;
 
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class General {
@@ -60,5 +63,18 @@ public class MobileVehicleResponse {
     public static class GastoMes {
         private String mes;
         private BigDecimal monto;
+    }
+
+    @Data @Builder @NoArgsConstructor @AllArgsConstructor
+    public static class ActiveShift {
+        private String sessionId;
+        private String driverId;
+        private String driverName;
+        private String driverPhone;
+        private String driverLicense;
+        private String startedAt;
+        private String duration;
+        private Integer kmInicial;
+        private String status;
     }
 }

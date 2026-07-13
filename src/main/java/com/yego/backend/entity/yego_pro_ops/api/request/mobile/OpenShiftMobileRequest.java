@@ -16,8 +16,6 @@ import java.util.List;
 @AllArgsConstructor
 public class OpenShiftMobileRequest {
 
-    @NotBlank(message = "driverId es requerido")
-    private String driverId;
 
     @NotBlank(message = "vehicleId es requerido")
     private String vehicleId;

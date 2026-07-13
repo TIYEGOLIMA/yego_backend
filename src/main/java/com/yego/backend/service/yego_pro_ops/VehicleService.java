@@ -5,6 +5,7 @@ import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleCard;
 import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleTraceEvent;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.mobile.AdminDashboardResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,6 +26,9 @@ public interface VehicleService {
 
     /** Lista vehículos guardados; si segmentId es null, devuelve todos. */
     List<FleetVehicleResponse> listarVehiculosGuardados(UUID segmentId);
+
+    /** Resumen operativo para dashboard móvil admin. */
+    AdminDashboardResponse obtenerDashboardAdmin();
 
     /** Sincroniza todas las flotas activas con Yango. Devuelve nº de vehículos procesados. */
     int sincronizarTodas();

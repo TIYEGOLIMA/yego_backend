@@ -57,8 +57,8 @@ public class MobileShiftService {
 
     // ─── Abrir Turno ─────────────────────────────────────────────
 
-    public MobileShiftResponse openShift(OpenShiftMobileRequest req) {
-        assertNoActiveShift(req.getDriverId());
+    public MobileShiftResponse openShift(String driverId, OpenShiftMobileRequest req) {
+        assertNoActiveShift(driverId);
 
         FleetVehicle vehicle = vehicleRepo.findById(req.getVehicleId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehículo no encontrado"));
@@ -66,14 +66,18 @@ public class MobileShiftService {
         LocalDateTime startedAt = now();
 
         ShiftSession session = ShiftSession.builder()
-                .driverId(req.getDriverId())
+                .driverId(driverId)
+                .vehicleId(req.getVehicleId())
+                .placa(req.getPlaca())
+                .modelo(buildVehicleLabel(vehicle))
+                .kmInicial(req.getKmInicial())
                 .startedAt(startedAt)
                 .status("active")
                 .build();
         session = shiftRepo.save(session);
 
         DriverClose close = DriverClose.builder()
-                .driverId(req.getDriverId())
+                .driverId(driverId)
                 .userId(0L)
                 .shiftSessionId(session.getId())
                 .placa(req.getPlaca())
@@ -87,7 +91,7 @@ public class MobileShiftService {
                 .build();
         closeRepo.save(close);
 
-        log.info("Turno abierto: session={}, driver={}, placa={}", session.getId(), req.getDriverId(), req.getPlaca());
+        log.info("Turno abierto: session={}, driver={}, placa={}", session.getId(), driverId, req.getPlaca());
 
         return buildResponse(session, close, vehicle, null);
     }
@@ -190,6 +194,14 @@ public class MobileShiftService {
                     return buildResponse(session, close, null, null);
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public void assertSessionBelongsToDriver(String sessionId, String driverId) {
+        ShiftSession session = findSession(sessionId);
+        if (!session.getDriverId().equals(driverId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No puedes acceder a un turno de otro conductor");
+        }
     }
 
     // ─── Helpers ─────────────────────────────────────────────────
@@ -368,6 +380,13 @@ public class MobileShiftService {
     private BigDecimal nvl(BigDecimal value) { return value != null ? value : BigDecimal.ZERO; }
 
     private BigDecimal big(Double value) { return value != null ? BigDecimal.valueOf(value) : BigDecimal.ZERO; }
+
+    private String buildVehicleLabel(FleetVehicle vehicle) {
+        if (vehicle == null) return null;
+        return java.util.stream.Stream.of(vehicle.getBrand(), vehicle.getModel(), vehicle.getYear() != null ? String.valueOf(vehicle.getYear()) : null)
+                .filter(value -> value != null && !value.isBlank())
+                .collect(Collectors.joining(" "));
+    }
 
     private Instant toInstant(LocalDateTime ldt) {
         return ldt != null ? ldt.atZone(ZoneId.systemDefault()).toInstant() : null;

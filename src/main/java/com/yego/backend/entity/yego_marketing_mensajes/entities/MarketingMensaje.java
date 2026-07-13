@@ -42,11 +42,11 @@ public class MarketingMensaje {
     @Column(name = "archivo", columnDefinition = "TEXT")
     private String archivo;
 
-    @Column(name = "whatsapp")
-    private Boolean whatsapp;
+    @Column(name = "whatsapp", nullable = false)
+    private Boolean whatsapp = false;
 
-    @Column(name = "yandex")
-    private Boolean yandex;
+    @Column(name = "yandex", nullable = false)
+    private Boolean yandex = false;
 
     @Column(name = "dias_activos", columnDefinition = "TEXT")
     @JdbcTypeCode(SqlTypes.JSON)
@@ -81,6 +81,12 @@ public class MarketingMensaje {
         if (activo == null) {
             activo = true;
         }
+        if (whatsapp == null) {
+            whatsapp = false;
+        }
+        if (yandex == null) {
+            yandex = false;
+        }
     }
 
     @PreUpdate
@@ -88,4 +94,3 @@ public class MarketingMensaje {
         updatedAt = LocalDateTime.now(ZONE_LIMA);
     }
 }
-
