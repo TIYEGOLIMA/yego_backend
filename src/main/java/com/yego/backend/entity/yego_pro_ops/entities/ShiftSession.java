@@ -92,6 +92,42 @@ public class ShiftSession {
     @Builder.Default
     private BigDecimal totalCash = BigDecimal.ZERO;
 
+    @Column(name = "total_yape", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal totalYape = BigDecimal.ZERO;
+
+    @Column(name = "total_card", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal totalCard = BigDecimal.ZERO;
+
+    @Column(name = "total_corporate", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal totalCorporate = BigDecimal.ZERO;
+
+    @Column(name = "total_tips", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal totalTips = BigDecimal.ZERO;
+
+    @Column(name = "total_bonus", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal totalBonus = BigDecimal.ZERO;
+
+    @Column(name = "total_promotion", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal totalPromotion = BigDecimal.ZERO;
+
+    @Column(name = "total_distance", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal totalDistance = BigDecimal.ZERO;
+
+    @Column(name = "average_per_trip", precision = 12, scale = 2)
+    @Builder.Default
+    private BigDecimal averagePerTrip = BigDecimal.ZERO;
+
+    @Column(name = "summary_snapshot_saved")
+    @Builder.Default
+    private Boolean summarySnapshotSaved = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

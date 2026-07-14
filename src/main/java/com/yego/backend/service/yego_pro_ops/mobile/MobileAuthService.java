@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
@@ -31,6 +32,8 @@ public class MobileAuthService {
     private final DriverApiRepository driverRepository;
     private final MobileOtpEvolutionGoService otpWhatsAppService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final MobileDriverSessionService mobileSessionService;
+    private final MobileShiftService shiftService;
     private final Map<String, OtpEntry> otpStore = new ConcurrentHashMap<>();
     private final Map<String, RateLimitEntry> requestLimits = new ConcurrentHashMap<>();
     private final Map<String, VerifyFailureEntry> verifyFailures = new ConcurrentHashMap<>();
@@ -62,13 +65,14 @@ public class MobileAuthService {
     @Value("${mobile.otp.verify-fail-limit:${MOBILE_OTP_VERIFY_FAIL_LIMIT:5}}")
     private int otpVerifyFailLimit;
 
-    public MobileOtpResponse requestOtp(String licenseNumber, String appVersion, String clientIp) {
+    public MobileOtpResponse requestOtp(String licenseNumber, String deviceId, String appVersion, String clientIp) {
         assertSupportedAppVersion(appVersion);
         String license = normalizeLicense(licenseNumber);
         assertOtpRequestAllowed("ip:" + firstNonBlank(clientIp, "unknown"));
         assertOtpRequestAllowed("license:" + license);
 
         DriverApi driver = findDriverByLicense(license);
+        mobileSessionService.assertLoginAllowed(driver.getDriverId(), deviceId);
         String phone = normalizePhone(driver.getPhone());
 
         if (phone == null || phone.isBlank()) {
@@ -116,7 +120,8 @@ public class MobileAuthService {
                 .build();
     }
 
-    public MobileAuthResponse verifyOtp(String licenseNumber, String code, String appVersion) {
+    @Transactional
+    public MobileAuthResponse verifyOtp(String licenseNumber, String code, String deviceId, String appVersion) {
         assertSupportedAppVersion(appVersion);
         String license = normalizeLicense(licenseNumber);
         OtpEntry entry = otpStore.get(license);
@@ -134,10 +139,14 @@ public class MobileAuthService {
         otpStore.remove(license);
         verifyFailures.remove(license);
         DriverApi driver = entry.driver();
+        long tokenTtlSeconds = Math.max(60, jwtExpirationSeconds);
+        String mobileSessionId = mobileSessionService
+                .activate(driver.getDriverId(), deviceId, tokenTtlSeconds)
+                .toString();
 
         return MobileAuthResponse.builder()
                 .success(true)
-                .token(generateMobileToken(driver))
+                .token(generateMobileToken(driver, mobileSessionId, tokenTtlSeconds))
                 .driver(MobileAuthResponse.Driver.builder()
                         .id(driver.getDriverId())
                         .nombre(resolveName(driver))
@@ -147,14 +156,21 @@ public class MobileAuthService {
                 .build();
     }
 
-    private String generateMobileToken(DriverApi driver) {
+    @Transactional
+    public void logout(String driverId, String mobileSessionId) {
+        shiftService.assertDriverCanLogout(driverId);
+        mobileSessionService.revoke(driverId, mobileSessionId);
+    }
+
+    private String generateMobileToken(DriverApi driver, String mobileSessionId, long tokenTtlSeconds) {
         return jwtTokenProvider.generate(
                 driver.getDriverId(),
                 Map.of(
                         "driverId", driver.getDriverId(),
                         "role", "CONDUCTOR",
-                        "type", MOBILE_TOKEN_TYPE),
-                Math.max(60, jwtExpirationSeconds));
+                        "type", MOBILE_TOKEN_TYPE,
+                        "mobileSessionId", mobileSessionId),
+                tokenTtlSeconds);
     }
 
     private void assertSupportedAppVersion(String appVersion) {

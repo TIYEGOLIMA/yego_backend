@@ -15,17 +15,26 @@ public class MobileDriverAuthService {
     private static final String TOKEN_TYPE = "mobile_driver";
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final MobileDriverSessionService mobileSessionService;
 
     public String requireDriverId(HttpServletRequest request) {
+        return requireIdentity(request).driverId();
+    }
+
+    public MobileDriverIdentity requireIdentity(HttpServletRequest request) {
         Claims claims = parseClaims(request);
         String type = claims.get("type", String.class);
         String driverId = claims.get("driverId", String.class);
+        String mobileSessionId = claims.get("mobileSessionId", String.class);
 
-        if (!TOKEN_TYPE.equals(type) || driverId == null || driverId.isBlank()) {
+        if (!TOKEN_TYPE.equals(type)
+                || driverId == null || driverId.isBlank()
+                || mobileSessionId == null || mobileSessionId.isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token movil invalido");
         }
 
-        return driverId;
+        mobileSessionService.validate(driverId, mobileSessionId);
+        return new MobileDriverIdentity(driverId, mobileSessionId);
     }
 
     private Claims parseClaims(HttpServletRequest request) {
@@ -48,5 +57,8 @@ public class MobileDriverAuthService {
         }
         String token = header.substring(7).trim();
         return token.isBlank() ? null : token;
+    }
+
+    public record MobileDriverIdentity(String driverId, String mobileSessionId) {
     }
 }

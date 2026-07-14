@@ -56,11 +56,16 @@ public class MobileShiftService {
     private final FleetVehicleRepository vehicleRepo;
     private final DriverOrdersService driverOrdersService;
     private final ObjectMapper objectMapper;
+    private final DatabaseLockService lockService;
 
     // ─── Abrir Turno ─────────────────────────────────────────────
 
     public MobileShiftResponse openShift(String driverId, OpenShiftMobileRequest req) {
-        assertNoActiveShift(driverId);
+        lockService.acquireAll(List.of(
+                "active-shift-driver:" + driverId,
+                "active-shift-vehicle:" + req.getVehicleId()
+        ));
+        assertNoActiveShift(driverId, req.getVehicleId());
 
         FleetVehicle vehicle = vehicleRepo.findById(req.getVehicleId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Vehículo no encontrado"));
@@ -106,7 +111,8 @@ public class MobileShiftService {
         log.info("Resumen móvil solicitado: session={}, driver={}", sessionId, session.getDriverId());
 
         LocalDateTime rangeEnd = resolveTripRangeEnd(session);
-        YangoTripResult trips = fetchYangoTrips(session, rangeEnd);
+        boolean live = "active".equals(session.getStatus()) && session.getClosedAt() == null;
+        YangoTripResult trips = live ? fetchYangoTrips(session, rangeEnd) : fromStoredSummary(session);
         DriverClose close = findClose(sessionId);
 
         return MobileShiftSummaryResponse.builder()
@@ -125,6 +131,8 @@ public class MobileShiftService {
                 .fechaInicio(toInstant(session.getStartedAt()))
                 .fechaFinPreview(toInstant(rangeEnd))
                 .kmInicial(close.getOdometroInicial())
+                .live(live)
+                .status(session.getStatus())
                 .build();
     }
 
@@ -145,6 +153,15 @@ public class MobileShiftService {
         session.setTotalTrips(trips.viajes);
         session.setTotalAmount(trips.producido);
         session.setTotalCash(trips.efectivo);
+        session.setTotalYape(trips.yape);
+        session.setTotalCard(trips.tarjeta);
+        session.setTotalCorporate(trips.corporate);
+        session.setTotalTips(trips.tips);
+        session.setTotalBonus(trips.bonos);
+        session.setTotalPromotion(trips.promocion);
+        session.setTotalDistance(trips.distancia);
+        session.setAveragePerTrip(trips.promedioPorViaje);
+        session.setSummarySnapshotSaved(true);
         shiftRepo.save(session);
 
         // 3. Actualizar cierre financiero
@@ -208,7 +225,19 @@ public class MobileShiftService {
 
     // ─── Helpers ─────────────────────────────────────────────────
 
-    private void assertNoActiveShift(String driverId) {
+    public void assertDriverCanLogout(String driverId) {
+        assertNoActiveDriverShift(driverId);
+    }
+
+    private void assertNoActiveShift(String driverId, String vehicleId) {
+        assertNoActiveDriverShift(driverId);
+        shiftRepo.findByVehicleIdAndStatusAndDeletedFalse(vehicleId, "active")
+                .ifPresent(session -> {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "El vehículo ya está asignado a otro turno activo");
+                });
+    }
+
+    private void assertNoActiveDriverShift(String driverId) {
         shiftRepo.findByDriverIdAndStatusAndDeletedFalse(driverId, "active")
                 .ifPresent(s -> {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "Ya tienes un turno activo");
@@ -269,6 +298,26 @@ public class MobileShiftService {
 
     private LocalDateTime resolveTripRangeEnd(ShiftSession session) {
         return session.getClosedAt() != null ? session.getClosedAt() : now();
+    }
+
+    private YangoTripResult fromStoredSummary(ShiftSession session) {
+        BigDecimal producido = nvl(session.getTotalAmount());
+        BigDecimal efectivo = nvl(session.getTotalCash());
+        boolean hasFullSnapshot = Boolean.TRUE.equals(session.getSummarySnapshotSaved());
+        BigDecimal yape = hasFullSnapshot ? nvl(session.getTotalYape()) : producido.subtract(efectivo);
+        return new YangoTripResult(
+                session.getTotalTrips() != null ? session.getTotalTrips() : 0,
+                producido,
+                efectivo,
+                yape,
+                hasFullSnapshot ? nvl(session.getTotalCard()) : BigDecimal.ZERO,
+                hasFullSnapshot ? nvl(session.getTotalCorporate()) : BigDecimal.ZERO,
+                hasFullSnapshot ? nvl(session.getTotalTips()) : BigDecimal.ZERO,
+                hasFullSnapshot ? nvl(session.getTotalBonus()) : BigDecimal.ZERO,
+                hasFullSnapshot ? nvl(session.getTotalPromotion()) : BigDecimal.ZERO,
+                hasFullSnapshot ? nvl(session.getTotalDistance()) : BigDecimal.ZERO,
+                hasFullSnapshot ? nvl(session.getAveragePerTrip()) : BigDecimal.ZERO
+        );
     }
 
     private YangoTripResult fetchYangoTrips(String driverId, String dateFrom, String dateTo) {

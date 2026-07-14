@@ -29,4 +29,6 @@ public class MobileShiftSummaryResponse {
     private Instant fechaInicio;
     private Instant fechaFinPreview;
     private Integer kmInicial;
+    private boolean live;
+    private String status;
 }

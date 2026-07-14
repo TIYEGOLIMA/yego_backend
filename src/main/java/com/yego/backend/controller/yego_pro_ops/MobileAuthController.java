@@ -5,6 +5,7 @@ import com.yego.backend.entity.yego_pro_ops.api.request.mobile.MobileOtpVerifyRe
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.MobileAuthResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.MobileOtpResponse;
 import com.yego.backend.service.yego_pro_ops.mobile.MobileAuthService;
+import com.yego.backend.service.yego_pro_ops.mobile.MobileDriverAuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MobileAuthController {
 
     private final MobileAuthService service;
+    private final MobileDriverAuthService mobileDriverAuthService;
 
     @PostMapping("/request-otp")
     public ResponseEntity<MobileOtpResponse> requestOtp(
@@ -33,6 +35,7 @@ public class MobileAuthController {
         log.info("Solicitud OTP movil: licencia={}", request.getLicenseNumber());
         return ResponseEntity.ok(service.requestOtp(
                 request.getLicenseNumber(),
+                request.getDeviceId(),
                 request.getAppVersion(),
                 resolveClientIp(httpRequest)
         ));
@@ -43,8 +46,16 @@ public class MobileAuthController {
         return ResponseEntity.ok(service.verifyOtp(
                 request.getLicenseNumber(),
                 request.getCode(),
+                request.getDeviceId(),
                 request.getAppVersion()
         ));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout(HttpServletRequest request) {
+        MobileDriverAuthService.MobileDriverIdentity identity = mobileDriverAuthService.requireIdentity(request);
+        service.logout(identity.driverId(), identity.mobileSessionId());
+        return ResponseEntity.noContent().build();
     }
 
     private String resolveClientIp(HttpServletRequest request) {
