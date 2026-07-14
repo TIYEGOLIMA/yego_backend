@@ -6,6 +6,7 @@ import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleTraceEvent;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.AdminDashboardResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.mobile.VehiclePhotoContent;
 import com.yego.backend.entity.yego_pro_ops.entities.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -47,6 +48,9 @@ public interface VehicleService {
 
     /** Respuesta agregada para app móvil: todo del auto por yangoCarId (BD local). */
     MobileVehicleResponse obtenerVehiculoMobile(String yangoCarId);
+
+    /** Obtiene una foto de vehículo Yego Pro para el flujo autenticado de administración móvil. */
+    VehiclePhotoContent obtenerFotoVehiculoMobile(String yangoCarId);
 
     List<VehicleResponse.DocumentInfo> obtenerDocumentos(String yangoCarId);
 

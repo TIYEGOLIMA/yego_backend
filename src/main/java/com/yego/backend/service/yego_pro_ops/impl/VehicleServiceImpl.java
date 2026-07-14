@@ -6,6 +6,7 @@ import com.yego.backend.entity.yego_pro_ops.api.response.FleetVehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleTraceEvent;
 import com.yego.backend.entity.yego_pro_ops.api.response.VehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.AdminDashboardResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.mobile.VehiclePhotoContent;
 import com.yego.backend.entity.yego_pro_ops.entities.*;
 import com.yego.backend.entity.yego_principal.entities.User;
 import com.yego.backend.integration.YangoCookiePool;
@@ -28,6 +29,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
+import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -444,7 +446,7 @@ public class VehicleServiceImpl implements VehicleService {
                 .amenities(fromJson(v.getAmenities()))
                 .mileage(v.getMileage())
                 .rental(v.getRental())
-                .fotoUrl(v.getFotoUrl())
+                .fotoUrl(resolveAdminMobilePhotoUrl(v))
                 .documentosCount(documentosPorVehiculo.getOrDefault(v.getYangoCarId(), 0L))
                 .shiftStatus(activeShift != null ? "in_shift" : "free")
                 .activeShiftId(activeShift != null ? activeShift.getId().toString() : null)
@@ -653,7 +655,7 @@ public class VehicleServiceImpl implements VehicleService {
 
         return MobileVehicleResponse.builder()
                 .general(general)
-                .imagen(v.getFotoUrl())
+                .imagen(resolveAdminMobilePhotoUrl(v))
                 .documentos(obtenerDocumentos(carId))
                 .mantenimiento(mantenimiento)
                 .kilometraje(obtenerKilometraje(carId))
@@ -663,6 +665,64 @@ public class VehicleServiceImpl implements VehicleService {
                 .activeShift(toMobileActiveShift(activeShift))
                 .lastLocation(activeShift != null ? mobileShiftLocationService.getLastLocation(activeShift.getId()) : null)
                 .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public VehiclePhotoContent obtenerFotoVehiculoMobile(String yangoCarId) {
+        FleetVehicle vehicle = fleetVehicleRepository.findById(yangoCarId)
+                .filter(v -> v.getSegment() != null && PARK_ID_YEGO_PRO.equals(v.getSegment().getParkId()))
+                .orElseThrow(() -> new IllegalArgumentException("Vehículo Yego Pro no encontrado"));
+        URI uri = parseYangoPhotoUri(vehicle.getFotoUrl());
+
+        HttpHeaders headers = crearHeaders(vehicle.getSegment().getParkId());
+        headers.remove(HttpHeaders.CONTENT_TYPE);
+        headers.setAccept(List.of(MediaType.IMAGE_JPEG, MediaType.IMAGE_PNG, MediaType.ALL));
+
+        try {
+            ResponseEntity<byte[]> response = restTemplate.exchange(
+                    uri, HttpMethod.GET, new HttpEntity<>(headers), byte[].class);
+            byte[] content = response.getBody();
+            if (!response.getStatusCode().is2xxSuccessful() || content == null || content.length == 0) {
+                throw new IllegalArgumentException("No se pudo obtener la foto del vehículo");
+            }
+
+            MediaType responseType = response.getHeaders().getContentType();
+            String contentType = responseType != null && "image".equalsIgnoreCase(responseType.getType())
+                    ? responseType.toString()
+                    : MediaType.IMAGE_JPEG_VALUE;
+            return new VehiclePhotoContent(content, contentType);
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("No se pudo servir la foto móvil del vehículo {}: {}", yangoCarId, e.getMessage());
+            throw new IllegalArgumentException("No se pudo obtener la foto del vehículo");
+        }
+    }
+
+    private String resolveAdminMobilePhotoUrl(FleetVehicle vehicle) {
+        if (vehicle.getFotoUrl() == null || vehicle.getFotoUrl().isBlank()) return null;
+        try {
+            parseYangoPhotoUri(vehicle.getFotoUrl());
+            return "/mobile/admin/vehicles/" + vehicle.getYangoCarId() + "/photo";
+        } catch (IllegalArgumentException ignored) {
+            return vehicle.getFotoUrl();
+        }
+    }
+
+    private URI parseYangoPhotoUri(String photoUrl) {
+        if (photoUrl == null || photoUrl.isBlank()) {
+            throw new IllegalArgumentException("El vehículo no tiene foto");
+        }
+        try {
+            URI uri = URI.create(photoUrl);
+            if (!"https".equalsIgnoreCase(uri.getScheme()) || !"fleet.yango.com".equalsIgnoreCase(uri.getHost())) {
+                throw new IllegalArgumentException("La foto no pertenece al origen permitido");
+            }
+            return uri;
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("La URL de la foto no es válida");
+        }
     }
 
     private MobileVehicleResponse.ActiveShift toMobileActiveShift(ShiftSession shift) {
