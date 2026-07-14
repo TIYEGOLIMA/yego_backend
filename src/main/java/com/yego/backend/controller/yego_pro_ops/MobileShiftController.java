@@ -88,8 +88,15 @@ public class MobileShiftController {
     public ResponseEntity<MobileShiftResponse> getActive(HttpServletRequest httpRequest) {
         String driverId = mobileDriverAuthService.requireDriverId(httpRequest);
         return service.findActiveByDriver(driverId)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.noContent().build());
+                .map(activeShift -> {
+                    log.debug("Turno activo móvil encontrado: driver={}, session={}, placa={}",
+                            driverId, activeShift.getSessionId(), activeShift.getPlaca());
+                    return ResponseEntity.ok(activeShift);
+                })
+                .orElseGet(() -> {
+                    log.debug("Sin turno activo móvil: driver={}", driverId);
+                    return ResponseEntity.noContent().build();
+                });
     }
 
     @GetMapping("/active/{driverId}")
