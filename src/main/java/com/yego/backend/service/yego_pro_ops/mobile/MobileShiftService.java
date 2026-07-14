@@ -105,9 +105,9 @@ public class MobileShiftService {
         ShiftSession session = findSession(sessionId);
         log.info("Resumen móvil solicitado: session={}, driver={}", sessionId, session.getDriverId());
 
-        YangoTripResult trips = fetchYangoTrips(session);
+        LocalDateTime rangeEnd = resolveTripRangeEnd(session);
+        YangoTripResult trips = fetchYangoTrips(session, rangeEnd);
         DriverClose close = findClose(sessionId);
-        LocalDateTime fechaFinPreview = now();
 
         return MobileShiftSummaryResponse.builder()
                 .viajes(trips.viajes)
@@ -121,9 +121,9 @@ public class MobileShiftService {
                 .promocion(trips.promocion)
                 .distancia(trips.distancia)
                 .promedioPorViaje(trips.promedioPorViaje)
-                .duracion(formatDuration(session.getStartedAt(), fechaFinPreview))
+                .duracion(formatDuration(session.getStartedAt(), rangeEnd))
                 .fechaInicio(toInstant(session.getStartedAt()))
-                .fechaFinPreview(toInstant(fechaFinPreview))
+                .fechaFinPreview(toInstant(rangeEnd))
                 .kmInicial(close.getOdometroInicial())
                 .build();
     }
@@ -137,7 +137,7 @@ public class MobileShiftService {
         LocalDateTime closedAt = now();
 
         // 1. Consultar Yango
-        YangoTripResult trips = fetchYangoTrips(session);
+        YangoTripResult trips = fetchYangoTrips(session, closedAt);
 
         // 2. Actualizar sesión
         session.setClosedAt(closedAt);
@@ -245,12 +245,11 @@ public class MobileShiftService {
         }
     }
 
-    private YangoTripResult fetchYangoTrips(ShiftSession session) {
+    private YangoTripResult fetchYangoTrips(ShiftSession session, LocalDateTime rangeEnd) {
         LocalDateTime from = session.getStartedAt();
-        LocalDateTime to = now();
         String driverId = session.getDriverId();
         String dateFrom = toYangoDateTime(from);
-        String dateTo = toYangoDateTime(to);
+        String dateTo = toYangoDateTime(rangeEnd);
 
         log.info("Consultando Yango para turno móvil: driver={}, desde={}, hasta={}",
                 driverId, dateFrom, dateTo);
@@ -266,6 +265,10 @@ public class MobileShiftService {
             log.warn("No se pudieron obtener viajes de Yango: {}", e.getMessage());
             return YangoTripResult.empty();
         }
+    }
+
+    private LocalDateTime resolveTripRangeEnd(ShiftSession session) {
+        return session.getClosedAt() != null ? session.getClosedAt() : now();
     }
 
     private YangoTripResult fetchYangoTrips(String driverId, String dateFrom, String dateTo) {
