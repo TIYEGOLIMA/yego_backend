@@ -14,12 +14,9 @@ import com.yego.backend.service.yego_principal.AuthService;
 import com.yego.backend.service.yego_principal.AuditService;
 import com.yego.backend.service.yego_principal.SessionService;
 import com.yego.backend.service.yego_ticketerera.QueueAgentService;
+import com.yego.backend.config.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.JwtParser;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.security.Keys;
-import javax.crypto.SecretKey;
+import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,7 +24,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -37,7 +34,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -54,14 +50,7 @@ public class AuthServiceImpl implements AuthService {
     private final SessionService sessionService;
     private final AuditService auditService;
     private final QueueAgentService queueAgentService;
-    /** Cost 10: balance seguridad/velocidad; 12 era muy lento en cambio de contraseña. */
-    private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder(10);
-    
-    @Value("${jwt.secret}")
-    private String jwtSecret;
-    
-    @Value("${jwt.expiration:28800}")
-    private Long jwtExpiration;
+    private final PasswordEncoder passwordEncoder;
     
     @Value("${auth.password-policy.excluded-user-ids:1,4,5,6,27,37}")
     private String excludedUserIdsConfig;
@@ -69,6 +58,11 @@ public class AuthServiceImpl implements AuthService {
     /** Si false, no se fuerza cambio por antigüedad de contraseña (sin 403 PASSWORD_EXPIRED por caducidad). */
     @Value("${auth.password-policy.weekly-renewal-enabled:false}")
     private boolean weeklyPasswordRenewalEnabled;
+
+    @Value("${auth.registration.default-role:USER}")
+    private String registrationDefaultRole;
+
+    private final JwtTokenProvider jwtTokenProvider;
     
     private java.util.Set<Long> getExcludedUserIdsPasswordPolicy() {
         if (excludedUserIdsConfig == null || excludedUserIdsConfig.isBlank()) {
@@ -82,14 +76,6 @@ public class AuthServiceImpl implements AuthService {
             } catch (NumberFormatException ignored) { }
         }
         return set.isEmpty() ? java.util.Set.of(1L, 4L, 5L, 6L, 27L, 37L) : set;
-    }
-    
-    private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(jwtSecret.getBytes());
-    }
-    
-    private JwtParser getJwtParser() {
-        return Jwts.parser().setSigningKey(getSigningKey()).build();
     }
     
     @Override
@@ -159,8 +145,9 @@ public class AuthServiceImpl implements AuthService {
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
-            log.warn("[AuthService] Error al renovar token: {}", e.getMessage());
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token inválido o expirado");
+            log.error("[AuthService] Fallo inesperado renovando token", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "No se pudo renovar la sesión");
         }
     }
 
@@ -194,9 +181,7 @@ public class AuthServiceImpl implements AuthService {
     public LoginTokenResult refreshToken(String token, HttpServletRequest request) {
         try {
             // Decodificar el token para obtener información del usuario
-            Claims claims = getJwtParser()
-                    .parseClaimsJws(token)
-                    .getBody();
+            Claims claims = jwtTokenProvider.parse(token);
             
             String username = claims.get("username", String.class);
             Long userId = claims.get("userId", Long.class);
@@ -247,9 +232,15 @@ public class AuthServiceImpl implements AuthService {
 
             return new LoginTokenResult(newAccessToken, "Token renovado correctamente", getUserProfile(userId));
                     
-        } catch (Exception e) {
-            log.warn("Error renovando token: {}", e.getMessage());
+        } catch (ResponseStatusException e) {
+            throw e;
+        } catch (JwtException | IllegalArgumentException e) {
+            log.debug("Token de renovación inválido ({})", e.getClass().getSimpleName());
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token inválido o expirado");
+        } catch (Exception e) {
+            log.error("Fallo inesperado renovando token", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "No se pudo renovar la sesión");
         }
     }
     
@@ -292,16 +283,25 @@ public class AuthServiceImpl implements AuthService {
         if (userRepository.existsByUsernameOrEmail(registerDto.getUsername(), registerDto.getEmail())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "El usuario o email ya existe");
         }
+
+        if (!validatePassword(registerDto.getPassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "La contraseña no cumple con los requisitos de seguridad");
+        }
         
         // Hash de la contraseña
         String passwordHash = passwordEncoder.encode(registerDto.getPassword());
         
-        // Crear usuario
-        // Buscar rol por defecto "usuario" o el primer rol activo disponible
-        Role defaultRole = roleRepository.findByName("ADMIN")
-                .orElseGet(() -> roleRepository.findActiveRoles().stream()
-                        .findFirst()
-                        .orElseThrow(() -> new IllegalStateException("No hay roles disponibles en el sistema")));
+        String defaultRoleName = registrationDefaultRole == null
+                ? "USER"
+                : registrationDefaultRole.trim().toUpperCase();
+        if (java.util.Set.of("ADMIN", "ADMINISTRADOR", "SUPERADMIN").contains(defaultRoleName)) {
+            throw new IllegalStateException("El rol por defecto de registro no puede ser administrativo");
+        }
+        Role defaultRole = roleRepository.findByName(defaultRoleName)
+                .filter(role -> Boolean.TRUE.equals(role.getActivo()))
+                .orElseThrow(() -> new IllegalStateException(
+                        "El rol de registro configurado no existe o está inactivo"));
         
         User user = User.builder()
                 .username(registerDto.getUsername())
@@ -364,6 +364,9 @@ public class AuthServiceImpl implements AuthService {
     
     @Override
     public boolean validatePassword(String password) {
+        if (password == null || password.isBlank()) {
+            return false;
+        }
         // Verificar contraseñas débiles
         List<String> weakPasswords = Arrays.asList("123456", "admin", "password", "123456789", "qwerty");
         if (weakPasswords.contains(password.toLowerCase())) {
@@ -427,13 +430,11 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public Object decodeToken(String token) {
         try {
-            Claims claims = getJwtParser()
-                    .parseClaimsJws(token)
-                    .getBody();
+            Claims claims = jwtTokenProvider.parse(token);
             
             return claims;
-        } catch (Exception e) {
-            log.warn("⚠️ Error decodificando token: {}", e.getMessage());
+        } catch (JwtException | IllegalArgumentException e) {
+            log.debug("Token no decodificable ({})", e.getClass().getSimpleName());
             return null;
         }
     }
@@ -474,18 +475,7 @@ public class AuthServiceImpl implements AuthService {
     }
     
     private String generateToken(UserResponseDto user) {
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + jwtExpiration * 1000);
-        
-        return Jwts.builder()
-                .setSubject(user.getId().toString())
-                .claim("username", user.getUsername())
-                .claim("userId", user.getId())
-                .claim("role", user.getRoleName())
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
-                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
-                .compact();
+        return jwtTokenProvider.generate(user);
     }
     
     private UserResponseDto mapToUserResponseDto(User user) {
@@ -587,4 +577,3 @@ public class AuthServiceImpl implements AuthService {
                 .build();
     }
 }
-

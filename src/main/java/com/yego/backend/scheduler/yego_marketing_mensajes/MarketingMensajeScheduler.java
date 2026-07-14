@@ -8,7 +8,7 @@ import com.yego.backend.service.yego_marketing_mensajes.sender.MarketingDelivery
 import com.yego.backend.service.yego_marketing_mensajes.sender.MarketingFleetSender;
 import com.yego.backend.service.yego_marketing_mensajes.sender.MarketingWhatsAppSender;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.env.Environment;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
+@Profile("prod")
 @Slf4j
 public class MarketingMensajeScheduler {
 
@@ -50,31 +51,22 @@ public class MarketingMensajeScheduler {
     private final MarketingWhatsAppSender whatsAppSender;
     private final MarketingFleetSender fleetSender;
     private final ObjectMapper objectMapper;
-    private final Environment environment;
 
     public MarketingMensajeScheduler(
             MarketingMensajeRepository marketingMensajeRepository,
             MarketingWhatsAppSender whatsAppSender,
             MarketingFleetSender fleetSender,
-            ObjectMapper objectMapper,
-            Environment environment) {
+            ObjectMapper objectMapper) {
         this.marketingMensajeRepository = marketingMensajeRepository;
         this.whatsAppSender = whatsAppSender;
         this.fleetSender = fleetSender;
         this.objectMapper = objectMapper;
-        this.environment = environment;
     }
 
     @Scheduled(
             fixedDelayString = "${marketing.scheduler.fixed-delay-ms:300000}",
             initialDelayString = "${marketing.scheduler.initial-delay-ms:60000}")
     public void verificarYEnviarMensajesProgramados() {
-        List<String> activeProfiles = Arrays.asList(environment.getActiveProfiles());
-        if (activeProfiles.contains("dev") || activeProfiles.contains("local")) {
-            log.debug("[MarketingScheduler] Omitido en desarrollo profiles={}", activeProfiles);
-            return;
-        }
-
         try {
             LocalDate fechaActual = LocalDate.now(ZONA_LIMA);
             LocalTime horaActual = LocalTime.now(ZONA_LIMA);

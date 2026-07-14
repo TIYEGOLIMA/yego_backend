@@ -1,12 +1,10 @@
 package com.yego.backend.service.yego_pro_ops.mobile;
 
+import com.yego.backend.config.JwtTokenProvider;
 import com.yego.backend.entity.yego_api_externo.entities.DriverApi;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.MobileAuthResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.MobileOtpResponse;
 import com.yego.backend.repository.yego_api_externo.DriverApiRepository;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,9 +16,7 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.Map;
-import java.util.Date;
 import java.util.concurrent.ConcurrentHashMap;
-import javax.crypto.SecretKey;
 
 @Slf4j
 @Service
@@ -34,15 +30,13 @@ public class MobileAuthService {
 
     private final DriverApiRepository driverRepository;
     private final MobileOtpEvolutionGoService otpWhatsAppService;
+    private final JwtTokenProvider jwtTokenProvider;
     private final Map<String, OtpEntry> otpStore = new ConcurrentHashMap<>();
     private final Map<String, RateLimitEntry> requestLimits = new ConcurrentHashMap<>();
     private final Map<String, VerifyFailureEntry> verifyFailures = new ConcurrentHashMap<>();
 
     @Value("${mobile.otp.ttl-minutes:${MOBILE_OTP_TTL_MINUTES:1}}")
     private int otpTtlMinutes;
-
-    @Value("${jwt.secret}")
-    private String jwtSecret;
 
     @Value("${jwt.expiration:604800}")
     private long jwtExpirationSeconds;
@@ -154,22 +148,13 @@ public class MobileAuthService {
     }
 
     private String generateMobileToken(DriverApi driver) {
-        Date issuedAt = new Date();
-        Date expiresAt = new Date(issuedAt.getTime() + Math.max(60, jwtExpirationSeconds) * 1000L);
-
-        return Jwts.builder()
-                .setSubject(driver.getDriverId())
-                .claim("driverId", driver.getDriverId())
-                .claim("role", "CONDUCTOR")
-                .claim("type", MOBILE_TOKEN_TYPE)
-                .setIssuedAt(issuedAt)
-                .setExpiration(expiresAt)
-                .signWith(getSigningKey(), SignatureAlgorithm.HS512)
-                .compact();
-    }
-
-    private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(jwtSecret.getBytes());
+        return jwtTokenProvider.generate(
+                driver.getDriverId(),
+                Map.of(
+                        "driverId", driver.getDriverId(),
+                        "role", "CONDUCTOR",
+                        "type", MOBILE_TOKEN_TYPE),
+                Math.max(60, jwtExpirationSeconds));
     }
 
     private void assertSupportedAppVersion(String appVersion) {

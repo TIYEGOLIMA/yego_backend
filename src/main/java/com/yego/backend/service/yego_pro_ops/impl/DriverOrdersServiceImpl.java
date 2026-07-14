@@ -1,7 +1,9 @@
 package com.yego.backend.service.yego_pro_ops.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.config.yego_pro_ops.ProxyConfig;
+import com.yego.backend.integration.YangoCookiePool;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverTripsSimplifiedResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.MultipleDriversTripsSimplifiedResponse;
@@ -53,8 +55,10 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
             RestTemplate restTemplate,
             @Qualifier("yangoProxyRestTemplate") RestTemplate yangoProxyRestTemplate,
             ProxyConfig proxyConfig,
+            YangoCookiePool cookiePool,
+            ObjectMapper objectMapper,
             DriverCloseService driverCloseService) {
-        super(restTemplate, yangoProxyRestTemplate, proxyConfig);
+        super(restTemplate, yangoProxyRestTemplate, proxyConfig, cookiePool, objectMapper);
         this.driverCloseService = driverCloseService;
     }
 

@@ -15,7 +15,6 @@ public class SessionResponseDto {
     private Long id;
     private Long userId;
     private SessionUserDto user;
-    private String tokenHash;
     private String ipAddress;
     private String userAgent;
     private LocalDateTime expiresAt;
@@ -35,4 +34,3 @@ public class SessionResponseDto {
     private String isp;
     private String organization;
 }
-

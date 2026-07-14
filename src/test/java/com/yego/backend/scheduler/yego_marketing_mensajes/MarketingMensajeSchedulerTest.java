@@ -7,7 +7,6 @@ import com.yego.backend.service.yego_marketing_mensajes.sender.MarketingDelivery
 import com.yego.backend.service.yego_marketing_mensajes.sender.MarketingFleetSender;
 import com.yego.backend.service.yego_marketing_mensajes.sender.MarketingWhatsAppSender;
 import org.junit.jupiter.api.Test;
-import org.springframework.core.env.Environment;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
@@ -34,18 +33,16 @@ class MarketingMensajeSchedulerTest {
         MarketingMensajeRepository repository = mock(MarketingMensajeRepository.class);
         MarketingWhatsAppSender whatsappSender = mock(MarketingWhatsAppSender.class);
         MarketingFleetSender fleetSender = mock(MarketingFleetSender.class);
-        Environment environment = mock(Environment.class);
         ObjectMapper objectMapper = new ObjectMapper();
 
         MarketingMensaje mensaje = mensajeProgramado(objectMapper, true, false);
-        when(environment.getActiveProfiles()).thenReturn(new String[]{"prod"});
         when(repository.findByActivoTrueAndHorasEspecificasIsNotNull())
                 .thenReturn(List.of(mensaje));
         when(whatsappSender.enviar(any(), any(), any()))
                 .thenReturn(new MarketingDeliveryResult(1, 0, 0, 1));
 
         new MarketingMensajeScheduler(
-                repository, whatsappSender, fleetSender, objectMapper, environment)
+                repository, whatsappSender, fleetSender, objectMapper)
                 .verificarYEnviarMensajesProgramados();
 
         verify(whatsappSender).enviar(eq(mensaje), eq(List.of("grupo-1")), any(Instant.class));
@@ -77,19 +74,17 @@ class MarketingMensajeSchedulerTest {
         MarketingMensajeRepository repository = mock(MarketingMensajeRepository.class);
         MarketingWhatsAppSender whatsappSender = mock(MarketingWhatsAppSender.class);
         MarketingFleetSender fleetSender = mock(MarketingFleetSender.class);
-        Environment environment = mock(Environment.class);
         ObjectMapper objectMapper = new ObjectMapper();
 
         MarketingMensaje mensaje = mensajeProgramado(objectMapper, false, false);
         mensaje.setGrupos(objectMapper.writeValueAsString(List.of("grupo-1")));
-        when(environment.getActiveProfiles()).thenReturn(new String[]{"prod"});
         when(repository.findByActivoTrueAndHorasEspecificasIsNotNull())
                 .thenReturn(List.of(mensaje));
         when(whatsappSender.enviar(any(), any(), any()))
                 .thenReturn(new MarketingDeliveryResult(1, 0, 0, 1));
 
         new MarketingMensajeScheduler(
-                repository, whatsappSender, fleetSender, objectMapper, environment)
+                repository, whatsappSender, fleetSender, objectMapper)
                 .verificarYEnviarMensajesProgramados();
 
         verify(whatsappSender).enviar(eq(mensaje), eq(List.of("grupo-1")), any(Instant.class));

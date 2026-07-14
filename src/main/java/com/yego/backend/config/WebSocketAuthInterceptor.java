@@ -7,11 +7,8 @@ import com.yego.backend.service.yego_principal.ModuleService;
 import com.yego.backend.service.yego_principal.WebSocketModuleMappingService;
 import com.yego.backend.service.yego_principal.WebSocketSessionService;
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -23,8 +20,8 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.SecretKey;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Interceptor de autenticación para WebSocket
@@ -35,13 +32,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class WebSocketAuthInterceptor implements ChannelInterceptor {
     
-    @Value("${jwt.secret}")
-    private String jwtSecret;
-    
     private final ModuleService moduleService;
     private final WebSocketSessionService webSocketSessionService;
     private final WebSocketModuleMappingService webSocketModuleMappingService;
     private final DispositivoRepository dispositivoRepository;
+    private final JwtTokenProvider jwtTokenProvider;
     
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -88,30 +83,25 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                 String token = authHeader.substring(7);
                 
                 try {
-            if (!validateToken(token)) {
-                log.warn("[WebSocket] Token JWT inválido");
-                throw new org.springframework.messaging.MessageDeliveryException("Token JWT inválido");
-            }
-            
                         Claims claims = getClaimsFromToken(token);
 
-                        Integer dispositivoIdInt = claims.get("dispositivoId", Integer.class);
-                        if (dispositivoIdInt != null) {
-                            Integer tokenVersionClaim = claims.get("tokenVersion", Integer.class);
-                            Dispositivo dispositivo = dispositivoRepository.findById(dispositivoIdInt.longValue()).orElse(null);
+                        Long dispositivoId = getLongClaim(claims, "dispositivoId");
+                        if (dispositivoId != null) {
+                            Integer tokenVersionClaim = getIntegerClaim(claims, "tokenVersion");
+                            Dispositivo dispositivo = dispositivoRepository.findById(dispositivoId).orElse(null);
                             if (dispositivo == null || Boolean.FALSE.equals(dispositivo.getActive())) {
-                                log.warn("[WebSocket] Dispositivo no encontrado o inactivo: {}", dispositivoIdInt);
+                                log.debug("[WebSocket] Dispositivo no encontrado o inactivo: {}", dispositivoId);
                                 throw new org.springframework.messaging.MessageDeliveryException("Dispositivo inactivo");
                             }
                             int versionActual = dispositivo.getTokenVersion() != null ? dispositivo.getTokenVersion() : 0;
                             int versionToken = tokenVersionClaim != null ? tokenVersionClaim : 0;
                             if (versionActual != versionToken) {
                                 log.warn("[WebSocket] Token revocado para dispositivo {} (token={}, actual={})",
-                                        dispositivoIdInt, versionToken, versionActual);
+                                        dispositivoId, versionToken, versionActual);
                                 throw new org.springframework.messaging.MessageDeliveryException("Token revocado");
                             }
 
-                            String deviceId = "device-" + dispositivoIdInt;
+                            String deviceId = "device-" + dispositivoId;
                             String tipo = claims.get("tipo", String.class);
                             UsernamePasswordAuthenticationToken deviceAuth =
                                 new UsernamePasswordAuthenticationToken(
@@ -127,8 +117,8 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                                 webSocketSessionService.markAsDevice(sessionId, deviceId);
                                 log.debug("[WebSocket] Dispositivo conectado: {} (tipo={}, sede={}, módulo={})",
                                     deviceId, tipo,
-                                    claims.get("sedeId", Integer.class),
-                                    claims.get("moduleId", Integer.class));
+                                    getLongClaim(claims, "sedeId"),
+                                    getLongClaim(claims, "moduleId"));
                             }
                             return message;
                         }
@@ -138,57 +128,54 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                             username = claims.getSubject();
                         }
                         String role = claims.get("role", String.class);
-                        Integer userIdInt = claims.get("userId", Integer.class);
-                        String userId = userIdInt != null ? userIdInt.toString() : username;
-                        
-                        UsernamePasswordAuthenticationToken authentication = 
-                            new UsernamePasswordAuthenticationToken(
-                                userId, 
-                                null, 
-                                List.of(new SimpleGrantedAuthority("ROLE_" + role))
-                            );
-                        
+                        if (username == null || username.isBlank() || role == null || role.isBlank()) {
+                            throw new org.springframework.messaging.MessageDeliveryException("Token JWT inválido");
+                        }
+
+                        Long userIdLong = getLongClaim(claims, "userId");
+                        boolean mobileDriver = "CONDUCTOR".equalsIgnoreCase(role);
+                        if (userIdLong == null && !mobileDriver) {
+                            throw new org.springframework.messaging.MessageDeliveryException("Token JWT inválido");
+                        }
+
+                        String userId = userIdLong != null ? userIdLong.toString() : username;
+                        List<ModuleResponse> userModules = List.of();
+                        if (userIdLong != null) {
+                            try {
+                                userModules = moduleService.obtenerModulosPorUsuario(userIdLong);
+                            } catch (IllegalStateException exception) {
+                                log.warn("[WebSocket] Conexión rechazada para usuario {}: límite alcanzado", userId);
+                                throw new org.springframework.messaging.MessageDeliveryException(
+                                        "Límite de conexiones alcanzado. Intente más tarde.");
+                            } catch (RuntimeException exception) {
+                                log.debug("[WebSocket] Usuario rechazado: id={} ({})",
+                                        userId, exception.getClass().getSimpleName());
+                                throw new org.springframework.messaging.MessageDeliveryException(
+                                        "Usuario no encontrado o inactivo");
+                            }
+                        }
+
+                        UsernamePasswordAuthenticationToken authentication =
+                                new UsernamePasswordAuthenticationToken(
+                                        userId,
+                                        null,
+                                        List.of(new SimpleGrantedAuthority(
+                                                "ROLE_" + role.toUpperCase(Locale.ROOT))));
                         SecurityContextHolder.getContext().setAuthentication(authentication);
                         accessor.setUser(authentication);
-                        
-            // CRÍTICO: Verificar que el usuario existe ANTES de autenticar
-            // Esto previene conexiones con tokens válidos pero de usuarios eliminados
-            Long userIdLong = userIdInt != null ? userIdInt : (userId != null && userId.matches("\\d+") ? Long.parseLong(userId) : null);
-            if (userIdLong != null) {
-                try {
-                    // Intentar obtener módulos - si el usuario no existe, esto lanzará RuntimeException
-                    List<ModuleResponse> userModules = moduleService.obtenerModulosPorUsuario(userIdLong);
-                    String sessionId = accessor.getSessionId();
-                    if (sessionId != null) {
-                        webSocketSessionService.saveUserModules(sessionId, userModules, userId);
-                        log.debug("[WebSocket] Usuario autenticado: {} (ID: {}) con rol: {} - Módulos: {}", 
-                            username, userId, role, userModules.size());
-                    }
-                } catch (IllegalStateException e) {
-                    // Límite de conexiones alcanzado
-                    log.error("[WebSocket] Límite de conexiones alcanzado para usuario {}: {}", userId, e.getMessage());
-                    throw new org.springframework.messaging.MessageDeliveryException("Límite de conexiones alcanzado. Intente más tarde.");
-                } catch (RuntimeException e) {
-                    // Usuario no encontrado o inactivo - RECHAZAR conexión INMEDIATAMENTE
-                    if (e.getMessage() != null && e.getMessage().contains("Usuario no encontrado")) {
-                        log.error("[WebSocket] CONEXIÓN BLOQUEADA: Usuario {} (ID: {}) no existe en la BD. Token válido pero usuario eliminado. Rechazando conexión.", username, userId);
-                        // Limpiar autenticación que ya se estableció
-                        SecurityContextHolder.clearContext();
-                        throw new org.springframework.messaging.MessageDeliveryException("Usuario no encontrado o inactivo. Por favor, inicie sesión nuevamente.");
-                    }
-                    // Otros errores - solo loggear warning pero permitir conexión
-                    log.warn("[WebSocket] Error obteniendo módulos del usuario {}: {}", userId, e.getMessage());
-                } catch (Exception e) {
-                    // Otros errores - solo loggear warning pero permitir conexión
-                    log.warn("[WebSocket] Error obteniendo módulos del usuario {}: {}", userId, e.getMessage());
-                }
-            }
+
+                        String sessionId = accessor.getSessionId();
+                        if (sessionId != null && userIdLong != null) {
+                            webSocketSessionService.saveUserModules(sessionId, userModules, userId);
+                            log.debug("[WebSocket] Usuario autenticado: id={} rol={} módulos={}",
+                                    userId, role, userModules.size());
+                        }
             
         } catch (org.springframework.messaging.MessageDeliveryException e) {
             throw e;
         } catch (Exception e) {
-            log.warn("[WebSocket] Error validando token: {}", e.getMessage());
-            throw new org.springframework.messaging.MessageDeliveryException("Error validando token: " + e.getMessage());
+            log.debug("[WebSocket] Token rechazado ({})", e.getClass().getSimpleName());
+            throw new org.springframework.messaging.MessageDeliveryException("Token JWT inválido");
         }
         
         return message;
@@ -254,21 +241,17 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         return message;
     }
     
-    private boolean validateToken(String token) {
-        try {
-            getClaimsFromToken(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-    
     private Claims getClaimsFromToken(String token) {
-        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
-        return Jwts.parser()
-                .verifyWith(key)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
+        return jwtTokenProvider.parse(token);
+    }
+
+    private static Long getLongClaim(Claims claims, String name) {
+        Object value = claims.get(name);
+        return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private static Integer getIntegerClaim(Claims claims, String name) {
+        Object value = claims.get(name);
+        return value instanceof Number number ? number.intValue() : null;
     }
 }

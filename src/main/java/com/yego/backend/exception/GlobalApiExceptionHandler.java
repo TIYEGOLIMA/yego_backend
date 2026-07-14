@@ -71,17 +71,10 @@ public class GlobalApiExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Map<String, Object>> handleUnreadable(HttpMessageNotReadableException ex) {
-        String msg = "Cuerpo JSON inválido o incompleto";
-        if (ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
-            String cause = ex.getMostSpecificCause().getMessage();
-            if (cause.length() < 200) {
-                msg = msg + ": " + cause;
-            }
-        }
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(errorBody("BAD_REQUEST", msg));
+                .body(errorBody("BAD_REQUEST", "Cuerpo JSON inválido o incompleto"));
     }
 
     /**
@@ -92,16 +85,16 @@ public class GlobalApiExceptionHandler {
     public void handleAsyncBrokenPipe(AsyncRequestNotUsableException ex) {
         Throwable deepest = deepestCause(ex);
         if (deepest instanceof java.io.IOException) {
-            log.warn("Cliente desconectó durante la respuesta ({})", shorten(deepest.getMessage()));
+            log.debug("Cliente desconectó durante la respuesta ({})", shorten(deepest.getMessage()));
             return;
         }
-        log.warn("Petición asíncrona no usable ({})", shorten(ex.getMessage()));
+        log.debug("Petición asíncrona no usable ({})", shorten(ex.getMessage()));
     }
 
     /** Tomcat: mismo escenario cuando el navegador cancela antes de tiempo. */
     @ExceptionHandler(ClientAbortException.class)
     public void handleTomcatClientAbort(ClientAbortException ex) {
-        log.warn("Cliente cerró la conexión durante la respuesta ({})", shorten(ex.getMessage()));
+        log.debug("Cliente cerró la conexión durante la respuesta ({})", shorten(ex.getMessage()));
     }
 
     private static Throwable deepestCause(Throwable t) {

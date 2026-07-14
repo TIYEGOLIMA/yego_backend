@@ -2,12 +2,14 @@ package com.yego.backend.entity.yego_marketing_mensajes.entities;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "module_marketing_groups")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class ModuleMarketingGroup {
@@ -59,4 +61,3 @@ public class ModuleMarketingGroup {
     @Column(name = "is_community_announce")
     private Boolean isCommunityAnnounce;
 }
-

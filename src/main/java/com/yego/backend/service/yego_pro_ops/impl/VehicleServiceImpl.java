@@ -8,6 +8,7 @@ import com.yego.backend.entity.yego_pro_ops.api.response.VehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.AdminDashboardResponse;
 import com.yego.backend.entity.yego_pro_ops.entities.*;
 import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.integration.YangoCookiePool;
 import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleCard;
 import com.yego.backend.repository.yego_pro_ops.*;
@@ -42,7 +43,7 @@ public class VehicleServiceImpl implements VehicleService {
     private static final String YANGO_DETAILS_URL = "https://fleet.yango.com/api/api/v1/cards/car/details";
     private static final String YANGO_QC_HISTORY_URL = "https://fleet.yango.com/api/fleet/fleet-quality-control/v2/rqc/history";
 
-    private static final String YANGO_COOKIE_TEMPLATE = "i=LTfkD3HfqRCxqohgZeQ9z+FvXH7O5pWNsr8FmcsxS4KKmU5iKT51F+CoSQTst9xR7wVucbl5sJXpT0hebl/bCi+uGh4=; yandexuid=8271762941782249884; yashr=7968351331782249884; lang=es-419; yuidss=8271762941782249884; ymex=2097609886.yrts.1782249886; gdpr=0; _ym_uid=178224988651060427; _ym_d=1782249887; _ym_isad=2; Session_id=3:1782250583.5.0.1782250583600:WbD9Jg:dc7a.1.2:1|2223153146.0.2.0:3.3:1782250583|60:11994002.97621.FaHKxYH5WeraxZ6s71vAYcqDLtI; sessar=1.1908701.CiCgDFkhEsxSAGLwP8SPMEZyPVQbEX-x4JEQ7tsZcHngFg.LlYYj4MWDSkWSuh4Q-XXYja70AMqv8R5CL2OvkuSGi8; sessionid2=3:1782250583.5.0.1782250583600:WbD9Jg:dc7a.1.2:1|2223153146.0.2.0:3.3:1782250583|60:11994002.97621.fakesign0000000000000000000; yp=2097610583.udn.cDpnaW9tYXJvcnRlZ2E%3D; ys=udn.cDpnaW9tYXJvcnRlZ2E%3D; L=XQVWX3Z3c3hSXVpCRmx3cm1Qf1RXTXdSPh9aAAcTHgMyPAIt.1782250583.1984663.382117.d587626a363cd04b15a46df63ba6b5a2; yandex_login=giomarortega; _yasc=GdjDMpYx1FqzF4nDG4+00/3B57OdsK96k5suLEJ9EFBt76kpdjdus1d0VIgpvnrc5ZjuGlS8qA==; park_id=64085dd85e124e2c808806f70d527ea8";
+
 
     private final VehicleDocumentRepository documentRepository;
     private final VehicleMaintenanceRepository maintenanceRepository;
@@ -60,6 +61,7 @@ public class VehicleServiceImpl implements VehicleService {
     private final MobileShiftLocationService mobileShiftLocationService;
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
+    private final YangoCookiePool yangoCookiePool;
 
     private static final String BUCKET_DOCUMENTACION = "documentacion-flota";
     private static final String STATUS_INACTIVO = "not_working";
@@ -68,7 +70,10 @@ public class VehicleServiceImpl implements VehicleService {
     private static final String EVT_DOC_ELIMINADO = "DOC_ELIMINADO";
 
     private HttpHeaders crearHeaders(String parkId) {
-        String cookie = YANGO_COOKIE_TEMPLATE.replaceFirst("park_id=[a-f0-9]+", "park_id=" + parkId);
+        String configuredCookie = yangoCookiePool.randomCookie();
+        String cookie = configuredCookie.contains("park_id=")
+                ? configuredCookie.replaceFirst("park_id=[^;]+", "park_id=" + parkId)
+                : configuredCookie + "; park_id=" + parkId;
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Cookie", cookie);

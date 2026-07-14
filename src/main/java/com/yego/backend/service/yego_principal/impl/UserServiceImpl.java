@@ -12,25 +12,21 @@ import com.yego.backend.repository.yego_ticketerera.SedeRepository;
 import com.yego.backend.entity.yego_ticketerera.entities.Sede;
 import com.yego.backend.service.yego_principal.UserService;
 import com.yego.backend.handler.yego_principal.UserNotificationHandler;
+import com.yego.backend.integration.FactilizaDniClient;
+import com.yego.backend.integration.FactilizaDniClient.FactilizaException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import jakarta.persistence.EntityNotFoundException;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.net.URI;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
 
 @Slf4j
 @Service
@@ -41,9 +37,9 @@ public class UserServiceImpl implements UserService {
     private final RoleRepository roleRepository;
     private final AreaRepository areaRepository;
     private final SedeRepository sedeRepository;
-    private final BCryptPasswordEncoder passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
     private final UserNotificationHandler userNotificationHandler;
-    private final ObjectMapper objectMapper;
+    private final FactilizaDniClient factilizaDniClient;
 
     private static final Set<Long> USER_IDS_EXCLUIDOS_LISTADO = Set.of(1L, 4L, 6L);
 
@@ -332,48 +328,23 @@ public class UserServiceImpl implements UserService {
                         .build());
             }
 
-            HttpClient client = HttpClient.newHttpClient();
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.factiliza.com/pe/v1/dni/info/" + dni))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NTkiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJjb25zdWx0b3IifQ.NaoAXramusCzks7mRCzWFWcMiBaSA0d8rNBgw-OVeYg")
-                    .GET()
-                    .build();
-
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() != 200) {
-                log.error("[UserService] Error API DNI: status {}", response.statusCode());
-                return ResponseEntity.status(response.statusCode()).body(DniResponseDto.builder()
-                        .success(false).dni(dni)
-                        .error("Error consultando DNI: status " + response.statusCode())
-                        .build());
-            }
-
-            JsonNode root = objectMapper.readTree(response.body());
-            if (!root.has("success") || !root.get("success").asBoolean()) {
-                String message = root.has("message") ? root.get("message").asText() : "Error en la consulta";
-                return ResponseEntity.ok(DniResponseDto.builder()
-                        .success(false).dni(dni).error(message).build());
-            }
-
-            JsonNode data = root.get("data");
-            if (data == null || data.isNull()) {
-                return ResponseEntity.ok(DniResponseDto.builder()
-                        .success(false).dni(dni).error("No se encontraron datos").build());
-            }
+            FactilizaDniClient.DniData data = factilizaDniClient.consultar(dni);
 
             return ResponseEntity.ok(DniResponseDto.builder()
                     .success(true)
-                    .nombres(data.has("nombres") ? data.get("nombres").asText() : "")
-                    .apellidoPaterno(data.has("apellido_paterno") ? data.get("apellido_paterno").asText() : "")
-                    .apellidoMaterno(data.has("apellido_materno") ? data.get("apellido_materno").asText() : "")
+                    .dni(dni)
+                    .nombres(data.nombres())
+                    .apellidoPaterno(data.apellidoPaterno())
+                    .apellidoMaterno(data.apellidoMaterno())
                     .build());
-
+        } catch (FactilizaException e) {
+            log.warn("[UserService] Consulta DNI no disponible");
+            return ResponseEntity.status(502).body(DniResponseDto.builder()
+                    .success(false).dni(dni).error("Servicio de consulta DNI no disponible").build());
         } catch (Exception e) {
-            log.error("[UserService] Error consultando DNI {}: {}", dni, e.getMessage());
+            log.error("[UserService] Fallo inesperado consultando DNI", e);
             return ResponseEntity.internalServerError().body(DniResponseDto.builder()
-                    .success(false).dni(dni).error("Error interno: " + e.getMessage()).build());
+                    .success(false).dni(dni).error("Error interno consultando DNI").build());
         }
     }
 

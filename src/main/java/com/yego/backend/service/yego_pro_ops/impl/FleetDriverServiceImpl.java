@@ -1,7 +1,9 @@
 package com.yego.backend.service.yego_pro_ops.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.config.yego_pro_ops.ProxyConfig;
+import com.yego.backend.integration.YangoCookiePool;
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverListRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.ContractorSuggestionsResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverListResponse;
@@ -65,8 +67,10 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             RestTemplate restTemplate,
             @Qualifier("yangoProxyRestTemplate") RestTemplate yangoProxyRestTemplate,
             ProxyConfig proxyConfig,
+            YangoCookiePool cookiePool,
+            ObjectMapper objectMapper,
             DriverOrdersService driverOrdersService) {
-        super(restTemplate, yangoProxyRestTemplate, proxyConfig);
+        super(restTemplate, yangoProxyRestTemplate, proxyConfig, cookiePool, objectMapper);
         this.driverOrdersService = driverOrdersService;
     }
 

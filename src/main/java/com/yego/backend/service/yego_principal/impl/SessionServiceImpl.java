@@ -237,7 +237,6 @@ public class SessionServiceImpl implements SessionService {
                 .id(session.getId())
                 .userId(session.getUserId())
                 .user(userDto)
-                .tokenHash(session.getTokenHash())
                 .ipAddress(session.getIpAddress())
                 .userAgent(session.getUserAgent())
                 .expiresAt(session.getExpiresAt())
@@ -297,4 +296,3 @@ public class SessionServiceImpl implements SessionService {
         return xfHeader.split(",")[0];
     }
 }
-

@@ -15,6 +15,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -69,5 +70,16 @@ class MarketingMensajeControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"))
                 .andExpect(jsonPath("$.message").value("Mensaje no encontrado"));
+    }
+
+    @Test
+    void rechazaTituloMayorQueLaColumnaAntesDelServicio() throws Exception {
+        mockMvc.perform(multipart("/api/marketing-mensajes")
+                        .param("titulo", "x".repeat(256))
+                        .param("mensaje", "Mensaje de prueba"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+
+        verify(service, never()).crearMensaje(any(), any());
     }
 }

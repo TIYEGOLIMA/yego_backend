@@ -2,8 +2,9 @@ package com.yego.backend.entity.yego_marketing_mensajes.entities;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -12,7 +13,8 @@ import java.time.ZoneId;
 
 @Entity
 @Table(name = "module_marketing_messages")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 public class MarketingMensaje {

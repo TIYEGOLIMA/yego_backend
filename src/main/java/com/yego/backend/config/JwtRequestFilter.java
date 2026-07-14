@@ -4,12 +4,10 @@ import com.yego.backend.entity.yego_ticketerera.entities.Dispositivo;
 import com.yego.backend.repository.yego_ticketerera.DispositivoRepository;
 import com.yego.backend.service.yego_principal.AuthService;
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
-import javax.crypto.SecretKey;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -38,12 +36,13 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     
     private final AuthService authService;
     private final DispositivoRepository dispositivoRepository;
-    
-    @Value("${jwt.secret}")
-    private String jwtSecret;
-    
-    private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(jwtSecret.getBytes());
+    private final JwtTokenProvider jwtTokenProvider;
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return "/api/auth/refresh".equals(uri)
+                || "/api/ticketera/auth/refresh".equals(uri);
     }
     
     @Override
@@ -72,12 +71,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                             jwtToken = param.substring(6); // "token=" tiene 6 caracteres
                             // Decodificar URL encoding
                             jwtToken = URLDecoder.decode(jwtToken, StandardCharsets.UTF_8);
-                            log.info("🔑 [JwtRequestFilter] Token JWT recibido desde URL query parameter para: {}", request.getRequestURI());
+                            log.debug("[JwtRequestFilter] Token JWT recibido por URL para {}", request.getRequestURI());
                             break;
                         }
                     }
                 } catch (Exception e) {
-                    log.warn("⚠️ [JwtRequestFilter] Error decodificando token de URL: {}", e.getMessage());
+                    log.debug("[JwtRequestFilter] Token URL no decodificable para {}", request.getRequestURI());
                 }
             }
         }
@@ -87,7 +86,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             final String requestTokenHeader = request.getHeader("Authorization");
             if (requestTokenHeader != null && requestTokenHeader.startsWith("Bearer ")) {
                 jwtToken = requestTokenHeader.substring(7);
-                log.info("🔑 [JwtRequestFilter] Token JWT recibido desde header para: {}", request.getRequestURI());
+                log.debug("[JwtRequestFilter] Token JWT recibido por header para {}", request.getRequestURI());
             }
         }
         
@@ -95,17 +94,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         if (jwtToken != null) {
             try {
                 // Usar API moderna de JWT (consistente con el resto del código)
-                SecretKey key = getSigningKey();
-                Claims claims = Jwts.parser()
-                        .verifyWith(key)
-                        .build()
-                        .parseSignedClaims(jwtToken)
-                        .getPayload();
+                Claims claims = jwtTokenProvider.parse(jwtToken);
                 
-                Integer dispositivoIdClaim = claims.get("dispositivoId", Integer.class);
+                Long dispositivoIdClaim = getLongClaim(claims, "dispositivoId");
                 if (dispositivoIdClaim != null) {
-                    Integer tokenVersionClaim = claims.get("tokenVersion", Integer.class);
-                    Dispositivo dispositivo = dispositivoRepository.findById(dispositivoIdClaim.longValue()).orElse(null);
+                    Integer tokenVersionClaim = getIntegerClaim(claims, "tokenVersion");
+                    Dispositivo dispositivo = dispositivoRepository.findById(dispositivoIdClaim).orElse(null);
                     if (dispositivo == null || Boolean.FALSE.equals(dispositivo.getActive())) {
                         log.debug("[JwtRequestFilter] Dispositivo inactivo o eliminado: {}", dispositivoIdClaim);
                         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -133,12 +127,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 String tokenType = claims.get("type", String.class);
                 String driverId = claims.get("driverId", String.class);
                 if (username != null) {
-                    log.info("✅ [JwtRequestFilter] Usuario autenticado: {} con rol: {}", username, role);
+                    log.debug("[JwtRequestFilter] Usuario autenticado: {} rol={}", username, role);
                 } else if ("mobile_driver".equals(tokenType) || "CONDUCTOR".equals(role)) {
-                    log.info("✅ [JwtRequestFilter] Conductor movil autenticado: driverId={} rol={} type={}",
+                    log.debug("[JwtRequestFilter] Conductor movil autenticado: driverId={} rol={} type={}",
                             firstNonBlank(driverId, claims.getSubject()), role, tokenType);
                 } else {
-                    log.info("✅ [JwtRequestFilter] Token JWT valido sin username: subject={} rol={} type={}",
+                    log.debug("[JwtRequestFilter] Token valido sin username: subject={} rol={} type={}",
                             claims.getSubject(), role, tokenType);
                 }
                 
@@ -160,20 +154,18 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(mobileAuthentication);
                 }
                 
+            } catch (ExpiredJwtException e) {
+                log.debug("[JwtRequestFilter] Token expirado para {}", request.getRequestURI());
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"error\":\"TOKEN_EXPIRED\",\"message\":\"El token ha expirado. Por favor, renueve su sesión.\"}");
+                return;
+            } catch (JwtException | IllegalArgumentException e) {
+                log.debug("[JwtRequestFilter] Token rechazado para {} ({})",
+                        request.getRequestURI(), e.getClass().getSimpleName());
             } catch (Exception e) {
-                // Si el token está expirado, responder con 401 y mensaje claro para el frontend
-                if (e.getMessage() != null && (e.getMessage().contains("expired") || e.getMessage().contains("expiration"))) {
-                    log.debug("🕐 [JwtRequestFilter] Token expirado para: {} - El frontend debe renovar el token", request.getRequestURI());
-                    
-                    // Responder con 401 y mensaje claro para que el frontend detecte y renueve el token
-                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"error\":\"TOKEN_EXPIRED\",\"message\":\"El token ha expirado. Por favor, renueve su sesión.\"}");
-                    return; // Detener el procesamiento - el frontend debe manejar esto
-                } else {
-                    // Para otros errores, loggear en WARN
-                    log.warn("❌ [JwtRequestFilter] Error procesando JWT para {}: {}", request.getRequestURI(), e.getMessage());
-                }
+                log.error("[JwtRequestFilter] Fallo inesperado procesando JWT para {}",
+                        request.getRequestURI(), e);
             }
         } else {
             // Para /ws, BLOQUEAR conexiones sin token (no solo loggear warning)
@@ -190,17 +182,24 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             } else if (esRutaAuthSinBearerEsperado(request.getRequestURI())) {
                 log.debug("[JwtRequestFilter] Sin Bearer en ruta anónima: {}", request.getRequestURI());
             } else {
-                log.warn("⚠️ [JwtRequestFilter] No se recibió token Bearer para: {}", request.getRequestURI());
+                log.debug("[JwtRequestFilter] Solicitud sin Bearer para {}", request.getRequestURI());
             }
         }
         
         // Una vez que obtenemos el token, validamos
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             
-            UserDetails userDetails = authService.loadUserByUsername(username);
+            UserDetails userDetails;
+            try {
+                userDetails = authService.loadUserByUsername(username);
+            } catch (org.springframework.security.core.userdetails.UsernameNotFoundException exception) {
+                log.debug("[JwtRequestFilter] Usuario del token ya no existe");
+                chain.doFilter(request, response);
+                return;
+            }
             
             // Si el token es válido, configurar Spring Security para establecer manualmente la autenticación
-            if (validateToken(jwtToken, userDetails)) {
+            if (userDetails.isEnabled()) {
                 
                 // Obtener userId del token (puede venir como Long o Integer en el JWT)
                 String userIdStr = null;
@@ -208,13 +207,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 try {
                     Claims tokenClaims = (Claims) request.getAttribute("jwtClaims");
                     if (tokenClaims != null) {
-                        Long uid = tokenClaims.get("userId", Long.class);
-                        if (uid == null) {
-                            Integer uidInt = tokenClaims.get("userId", Integer.class);
-                            if (uidInt != null) userIdLong = uidInt.longValue();
-                        } else {
-                            userIdLong = uid;
-                        }
+                        userIdLong = getLongClaim(tokenClaims, "userId");
                         if (userIdLong != null) userIdStr = userIdLong.toString();
                     }
                     if (userIdStr == null) userIdStr = username;
@@ -229,7 +222,7 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 usernamePasswordAuthenticationToken
                         .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 
-                log.info("🔐 [JwtRequestFilter] Authorities asignadas: {}", userDetails.getAuthorities());
+                log.debug("[JwtRequestFilter] Authorities asignadas: {}", userDetails.getAuthorities());
                 
                 SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
                 
@@ -266,16 +259,14 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                 || uri.startsWith("/api/yango-external/");
     }
 
-    private Boolean validateToken(String token, UserDetails userDetails) {
-        try {
-            // Ya validamos el token arriba, solo verificamos que el username coincida
-            // y que el usuario esté activo
-            return userDetails != null && userDetails.isEnabled();
-            
-        } catch (Exception e) {
-            log.warn("Error validando token: {}", e.getMessage());
-            return false;
-        }
+    private static Long getLongClaim(Claims claims, String name) {
+        Object value = claims.get(name);
+        return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private static Integer getIntegerClaim(Claims claims, String name) {
+        Object value = claims.get(name);
+        return value instanceof Number number ? number.intValue() : null;
     }
 
     private String firstNonBlank(String first, String second) {

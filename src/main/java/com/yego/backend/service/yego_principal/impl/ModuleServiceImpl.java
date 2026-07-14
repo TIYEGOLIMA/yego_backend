@@ -31,7 +31,7 @@ public class ModuleServiceImpl implements ModuleService {
     private final ModuleRepository moduleRepository;
     private final UserRepository userRepository;
     private final GrupoRepository grupoRepository;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     @Override
     @Transactional(readOnly = true)

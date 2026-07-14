@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 
@@ -20,6 +21,7 @@ import org.springframework.scheduling.annotation.Scheduled;
  * Nota: @EnableScheduling ya está habilitado en YegoBackendApplication
  */
 @Configuration
+@Profile("prod")
 @Slf4j
 @RequiredArgsConstructor
 public class SchedulerConfig {
@@ -134,4 +136,3 @@ public class SchedulerConfig {
         }
     }
 }
-

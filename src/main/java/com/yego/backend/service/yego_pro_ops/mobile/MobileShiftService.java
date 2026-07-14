@@ -55,7 +55,7 @@ public class MobileShiftService {
     private final DriverCloseRepository closeRepo;
     private final FleetVehicleRepository vehicleRepo;
     private final DriverOrdersService driverOrdersService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
 
     // ─── Abrir Turno ─────────────────────────────────────────────
 

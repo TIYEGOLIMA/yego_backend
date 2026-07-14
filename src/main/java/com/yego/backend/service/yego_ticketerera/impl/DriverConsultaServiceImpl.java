@@ -1,8 +1,7 @@
 package com.yego.backend.service.yego_ticketerera.impl;
 
 import com.yego.backend.service.yego_ticketerera.DriverConsultaService;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.yego.backend.integration.FactilizaDniClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -24,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 public class DriverConsultaServiceImpl implements DriverConsultaService {
 
     private final JdbcTemplate jdbcTemplate;
-    private final ObjectMapper objectMapper;
+    private final FactilizaDniClient factilizaDniClient;
 
     private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
     private static final long CACHE_TTL_MS = TimeUnit.MINUTES.toMillis(2);
@@ -75,42 +74,8 @@ public class DriverConsultaServiceImpl implements DriverConsultaService {
 
     private Map<String, Object> consultarYRegistrarPorDni(String dni, String phone) {
         try {
-            String apiUrl = "https://api.factiliza.com/pe/v1/dni/info/" + dni;
-            java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
-            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                    .uri(java.net.URI.create(apiUrl))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NTkiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJjb25zdWx0b3IifQ.NaoAXramusCzks7mRCzWFWcMiBaSA0d8rNBgw-OVeYg")
-                    .GET()
-                    .build();
-
-            java.net.http.HttpResponse<String> response = client.send(request,
-                    java.net.http.HttpResponse.BodyHandlers.ofString());
-
-            if (response.statusCode() != 200) {
-                throw new RuntimeException("Error consultando DNI: status " + response.statusCode());
-            }
-
-            JsonNode rootNode = objectMapper.readTree(response.body());
-            boolean success = rootNode.has("success") && rootNode.get("success").asBoolean();
-            if (!success) {
-                String message = rootNode.has("message") ? rootNode.get("message").asText() : "Error en la consulta";
-                throw new RuntimeException("Error consultando DNI: " + message);
-            }
-
-            JsonNode dataNode = rootNode.get("data");
-            if (dataNode == null || dataNode.isNull()) {
-                throw new RuntimeException("No se encontraron datos en la respuesta");
-            }
-
-            String nombres = dataNode.has("nombres") ? dataNode.get("nombres").asText() : "";
-            String apellidoPaterno = dataNode.has("apellido_paterno") ? dataNode.get("apellido_paterno").asText() : "";
-            String apellidoMaterno = dataNode.has("apellido_materno") ? dataNode.get("apellido_materno").asText() : "";
-
-            String lastName = apellidoPaterno
-                    + (apellidoMaterno != null && !apellidoMaterno.isEmpty() ? " " + apellidoMaterno : "");
-
-            return registrarNuevoConductor(nombres, lastName, phone);
+            FactilizaDniClient.DniData data = factilizaDniClient.consultar(dni);
+            return registrarNuevoConductor(data.nombres(), data.apellidos(), phone);
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {

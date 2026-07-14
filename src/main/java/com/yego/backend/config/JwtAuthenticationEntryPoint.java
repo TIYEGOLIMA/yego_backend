@@ -1,6 +1,7 @@
 package com.yego.backend.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
@@ -18,22 +19,22 @@ import java.util.Map;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
-    
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    private final ObjectMapper objectMapper;
     
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
                          AuthenticationException authException) throws IOException {
         
-        log.warn("Acceso no autorizado: {}", authException.getMessage());
+        log.debug("Acceso no autorizado a {}", request.getRequestURI());
         
         Map<String, String> errorResponse = new HashMap<>();
-        errorResponse.put("message", authException.getMessage() != null ? authException.getMessage() : "Token inválido o expirado");
+        errorResponse.put("message", "Autenticación requerida");
         
         response.setContentType("application/json;charset=UTF-8");
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.getWriter().write(objectMapper.writeValueAsString(errorResponse));
     }
 }
-

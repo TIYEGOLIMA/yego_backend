@@ -1,23 +1,20 @@
 package com.yego.backend.service.yego_pro_ops.mobile;
 
+import com.yego.backend.config.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import javax.crypto.SecretKey;
-
 @Service
+@RequiredArgsConstructor
 public class MobileDriverAuthService {
 
     private static final String TOKEN_TYPE = "mobile_driver";
 
-    @Value("${jwt.secret}")
-    private String jwtSecret;
+    private final JwtTokenProvider jwtTokenProvider;
 
     public String requireDriverId(HttpServletRequest request) {
         Claims claims = parseClaims(request);
@@ -38,11 +35,7 @@ public class MobileDriverAuthService {
         }
 
         try {
-            return Jwts.parser()
-                    .verifyWith(getSigningKey())
-                    .build()
-                    .parseSignedClaims(token)
-                    .getPayload();
+            return jwtTokenProvider.parse(token);
         } catch (Exception e) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token movil invalido");
         }
@@ -55,9 +48,5 @@ public class MobileDriverAuthService {
         }
         String token = header.substring(7).trim();
         return token.isBlank() ? null : token;
-    }
-
-    private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 }

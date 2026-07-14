@@ -9,6 +9,7 @@ import com.yego.backend.service.MinIOService;
 import com.yego.backend.service.yego_garantizado.FlotaService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -31,7 +32,7 @@ class MarketingMensajeServiceImplTest {
         assertThatThrownBy(() -> context.service.crearMensaje(request, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("al menos un canal");
-        verify(context.messageRepository, never()).save(any());
+        verify(context.messageRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -45,7 +46,7 @@ class MarketingMensajeServiceImplTest {
         assertThatThrownBy(() -> context.service.crearMensaje(request, null))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("JSON válido");
-        verify(context.messageRepository, never()).save(any());
+        verify(context.messageRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -55,7 +56,7 @@ class MarketingMensajeServiceImplTest {
         request.setWhatsapp(false);
         request.setGrupos(List.of(" grupo-1 ", "", "grupo-1", "grupo-2"));
         request.setHorasEspecificas("{\"10:00\":[\"Lun\"]}");
-        when(context.messageRepository.save(any(MarketingMensaje.class)))
+        when(context.messageRepository.saveAndFlush(any(MarketingMensaje.class)))
                 .thenAnswer(invocation -> {
                     MarketingMensaje value = invocation.getArgument(0);
                     value.setId(10L);
@@ -65,9 +66,24 @@ class MarketingMensajeServiceImplTest {
         context.service.crearMensaje(request, null);
 
         ArgumentCaptor<MarketingMensaje> captor = ArgumentCaptor.forClass(MarketingMensaje.class);
-        verify(context.messageRepository).save(captor.capture());
+        verify(context.messageRepository).saveAndFlush(captor.capture());
         assertThat(captor.getValue().getGrupos()).isEqualTo("[\"grupo-1\",\"grupo-2\"]");
         assertThat(captor.getValue().getWhatsapp()).isTrue();
+    }
+
+    @Test
+    void validaCampanaAntesDeSubirArchivo() {
+        TestContext context = context();
+        MarketingMensajeRequest request = requestBase();
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "campana.png", "image/png", new byte[]{1, 2, 3});
+
+        assertThatThrownBy(() -> context.service.crearMensaje(request, file))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("al menos un canal");
+
+        verify(context.minIOService, never()).subirArchivo(any());
+        verify(context.messageRepository, never()).saveAndFlush(any());
     }
 
     private MarketingMensajeRequest requestBase() {
@@ -92,11 +108,12 @@ class MarketingMensajeServiceImplTest {
                 flotaService,
                 minIOService,
                 new ObjectMapper());
-        return new TestContext(service, messageRepository);
+        return new TestContext(service, messageRepository, minIOService);
     }
 
     private record TestContext(
             MarketingMensajeServiceImpl service,
-            MarketingMensajeRepository messageRepository) {
+            MarketingMensajeRepository messageRepository,
+            MinIOService minIOService) {
     }
 }

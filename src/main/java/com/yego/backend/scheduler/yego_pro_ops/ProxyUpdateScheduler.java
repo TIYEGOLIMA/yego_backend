@@ -2,8 +2,8 @@ package com.yego.backend.scheduler.yego_pro_ops;
 
 import com.yego.backend.config.yego_pro_ops.ProxyConfig;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Component
+@Profile("prod")
 @Slf4j
 public class ProxyUpdateScheduler {
 
@@ -22,10 +23,9 @@ public class ProxyUpdateScheduler {
     @Value("${yego.pro-ops.proxy.webshare-url:}")
     private String webshareUrl;
 
-    public ProxyUpdateScheduler(ProxyConfig proxyConfig,
-                                @Autowired(required = false) RestTemplate restTemplate) {
+    public ProxyUpdateScheduler(ProxyConfig proxyConfig, RestTemplate restTemplate) {
         this.proxyConfig = proxyConfig;
-        this.restTemplate = restTemplate != null ? restTemplate : new RestTemplate();
+        this.restTemplate = restTemplate;
     }
 
     @Scheduled(
@@ -35,7 +35,7 @@ public class ProxyUpdateScheduler {
     public void refreshProxyList() {
         if (!proxyConfig.isEnabled()) return;
         if (webshareUrl == null || webshareUrl.isBlank()) {
-            log.warn("[ProxyUpdateScheduler] yego.pro-ops.proxy.webshare-url no configurada");
+            log.debug("[ProxyUpdateScheduler] Webshare no configurado; actualización omitida");
             return;
         }
         try {

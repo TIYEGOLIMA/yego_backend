@@ -1,5 +1,6 @@
 package com.yego.backend.service.yego_ticketerera.impl;
 
+import com.yego.backend.config.JwtTokenProvider;
 import com.yego.backend.entity.yego_ticketerera.api.request.CrearDispositivoRequest;
 import com.yego.backend.entity.yego_ticketerera.api.response.DispositivoResponse;
 import com.yego.backend.entity.yego_ticketerera.entities.Dispositivo;
@@ -10,20 +11,16 @@ import com.yego.backend.repository.yego_ticketerera.DispositivoRepository;
 import com.yego.backend.repository.yego_ticketerera.ModuloAtencionRepository;
 import com.yego.backend.repository.yego_ticketerera.SedeRepository;
 import com.yego.backend.service.yego_ticketerera.DispositivoService;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import javax.crypto.SecretKey;
 import java.security.SecureRandom;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,14 +34,11 @@ public class DispositivoServiceImpl implements DispositivoService {
     private final DispositivoRepository dispositivoRepository;
     private final SedeRepository sedeRepository;
     private final ModuloAtencionRepository moduloAtencionRepository;
-    private final BCryptPasswordEncoder passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    @Value("${jwt.secret}")
-    private String jwtSecret;
-
-    private SecretKey getSigningKey() {
-        return Keys.hmacShaKeyFor(jwtSecret.getBytes());
-    }
+    @Value("${jwt.device-expiration:2592000}")
+    private long deviceTokenExpirationSeconds;
 
     @Override
     @Transactional(readOnly = true)
@@ -260,14 +254,13 @@ public class DispositivoServiceImpl implements DispositivoService {
     }
 
     private String generarJwtDispositivo(Dispositivo dispositivo) {
-        return Jwts.builder()
-                .claim("dispositivoId", dispositivo.getId())
-                .claim("sedeId", dispositivo.getSedeId())
-                .claim("tipo", dispositivo.getType().name())
-                .claim("moduleId", dispositivo.getModuleId())
-                .claim("tokenVersion", dispositivo.getTokenVersion() != null ? dispositivo.getTokenVersion() : 0)
-                .issuedAt(new Date())
-                .signWith(getSigningKey())
-                .compact();
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("dispositivoId", dispositivo.getId());
+        claims.put("sedeId", dispositivo.getSedeId());
+        claims.put("tipo", dispositivo.getType().name());
+        claims.put("moduleId", dispositivo.getModuleId());
+        claims.put("tokenVersion", dispositivo.getTokenVersion() != null ? dispositivo.getTokenVersion() : 0);
+        return jwtTokenProvider.generate(
+                "device:" + dispositivo.getId(), claims, deviceTokenExpirationSeconds);
     }
 }

@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 public class ConfigurationServiceImpl implements ConfigurationService {
     
     private final ConfigurationRepository configurationRepository;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final Map<String, Object> cache = new ConcurrentHashMap<>();
     
     @Override
@@ -320,4 +320,3 @@ public class ConfigurationServiceImpl implements ConfigurationService {
         }
     }
 }
-

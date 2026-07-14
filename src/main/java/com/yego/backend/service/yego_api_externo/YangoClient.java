@@ -1,5 +1,6 @@
 package com.yego.backend.service.yego_api_externo;
 
+import com.yego.backend.integration.YangoCookiePool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -10,13 +11,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Random;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Cliente HTTP Yango para yego_api_externo: pool de cookies y retry propios (no comparte BaseYangoApiService).
@@ -33,42 +27,15 @@ public class YangoClient {
 
     private static final int RETRY_401_DELAY_MS = 75;
 
-    /** Soporte (1), luego cookies de respaldo; el cliente elige al azar entre las no marcadas inválidas. */
-    private static final List<String> COOKIES_POOL = Arrays.asList(
-            "yandexuid=3749697061773160569; yashr=4439789851773160569; receive-cookie-deprecation=1; _ym_uid=177316057294224056; _ym_d=1773160572; gdpr=0; Session_id=3:1774364989.5.0.1774364989907:WbD9Jg:2ba1.1.2:1|2221285626.0.2.0:3.3:1774364989|60:11796558.594160.n_Jmlkg1gEuCZt_1XvVWkN4dw8c; sessar=1.1719225.CiBVRVJOGbtkgeSto1PnCayxyvxUggJdZy4wgPsQQWcnsA.2wfis8ZmdUDtbnJ2950KmXXfVO-vBnzfZpSYDEBg9GI; sessionid2=3:1774364989.5.0.1774364989907:WbD9Jg:2ba1.1.2:1|2221285626.0.2.0:3.3:1774364989|60:11796558.594160.fakesign0000000000000000000; L=XDBnAWBleFpjWXRwR1dCdndTf2BGemB6JgIzVhRDLDAHKjk=.1774364989.1789215.35875.8178e2f5138ad768bc37ca50165d71c0; yandex_login=soporteyego; park_id=08e20910d81d42658d4334d3f6d10ac0; yuidss=3749697061773160569; _ym_isad=1; i=kplR60Mbv53VkwobjZR/PxHbH1JYt/UC9D43ZYp1bVYN/8ZCbb5OVX+bbJ0NTu9BTKvH22HDPyjwMegPXZIPMs1InGE=; yp=2089724989.udn.cDpzb3BvcnRleWVnbw%3D%3D#1778333796.yu.3749697061773160569; ymex=1780839396.oyu.3749697061773160569#2093466452.yrts.1778106452; _ym_visorc=b; _yasc=xgTG80qDPHCLlaz3fQZ/hX0uwhO3yDulSKpmPR0Er27f7A68vRd+Xr2FytzEoenmecQItnt6.MTc3ODI0OTk0NDgxNw==; bh=EkAiR29vZ2xlIENocm9tZSI7dj0iMTQ3IiwgIk5vdC5BL0JyYW5kIjt2PSI4IiwgIkNocm9taXVtIjt2PSIxNDciGgN4ODYiDjE0Ny4wLjc3MjcuMTM3KgI/MDoHIkxpbnV4IkoCNjRSWiJHb29nbGUgQ2hyb21lIjt2PSIxNDcuMC43NzI3LjEzNyIsIk5vdC5BL0JyYW5kIjt2PSI4LjAuMC4wIiwiQ2hyb21pdW0iO3Y9IjE0Ny4wLjc3MjcuMTM3ImCW6ffPBmoZ3MrpiA7yrLelC/v68OcN6//99g+bh8+HCA==",
-            "yashr=299832191758141387; receive-cookie-deprecation=1; gdpr=0; _ym_uid=175814138831171998; _ym_d=1758141396; yandexuid=9201743261758137514; yuidss=9201743261758137514; yandex_login=Jhajaira.ochoa; L=ZxtXZnxqBmR/SAVhdVZyXwJfaA9cBV1cLlAoE1ddHRAZOQxQLTM=.1759148388.1235855.353634.d47e5d7bafd679e1c83d4f42c6e23cd9; Session_id=3:1764107903.5.0.1758141420632:WbD9Jg:3a2a.1.2:1|2015824474.1006968.2.0:3.2:1006968.3:1759148388|60:11433100.181615.QwZv5z-R92wHzh4j43-daY0-K7g; sessar=1.1396519.CiDPtjUqckvAWEzdml3-Xvlj9hjrxSX6tJqOaxrdeZn5IA.jv1_Nvn5vO56j4mwzyFG1Wg8pHX_1BWCf-tAOHo6bQk; sessionid2=3:1764107903.5.0.1758141420632:WbD9Jg:3a2a.1.2:1|2015824474.1006968.2.0:3.2:1006968.3:1759148388|60:11433100.181615.fakesign0000000000000000000; i=XLXWMoCXAOgX6hzpx/AmT+HOGGwAwQhiTRKOzxl2tkMXu90DChcwoTT5z8qvZlmQyhkwZXurYZsuUa9AHb5foPXF2Rc=; _ym_isad=2; yp=2074508388.udn.cDpKaGFqYWlyYS5vY2hvYQ%3D%3D#1764940883.yu.9201743261758137514; ymex=1767446483.oyu.9201743261758137514#2073501389.yrts.1758141389; _ym_visorc=b; bh=Ej8iQ2hyb21pdW0iO3Y9IjE0MiIsIkdvb2dsZSBDaHJvbWUiO3Y9IjE0MiIsIk5vdF9BIEJyYW5kIjt2PSI5OSIaA3g4NiIOMTQyLjAuNzQ0NC4xNzYqAj8wOgdXaW5kb3dzQgYxMC4wLjBKAjY0UlsiQ2hyb21pdW0iO3Y9IjE0Mi4wLjc0NDQuMTc2IiwiR29vZ2xlIENocm9tZSI7dj0iMTQyLjAuNzQ0NC4xNzYiLCJOb3RfQSBCcmFuZCI7dj0iOTkuMC4wLjAiYPzux8kGah7cyuH/CJLYobEDn8/h6gP7+vDnDev//fYP+JzMhwg=; _yasc=fAS4rNTIoRKZq+JMg4Gaj9eUc5ZA62kxyJug7jaq8e08yG17i2jy7kvgtoikFrhpuyUc",
-            "i=UJLIEwSC6oKbdVhq5O7kwifboecYIauewX8lfuf+iWnOFsEuohMnnZQxTltyQTiTnx9UTcIdYZLNhYGdE9gikSiSxBw=; yandexuid=7615489531765348120; yashr=8990445271765348120; yuidss=7615489531765348120; ymex=2080708123.yrts.1765348123; _ym_uid=1765348122485351205; _ym_d=1765348124; gdpr=0; yandex_login=giomarortega; Session_id=3:1778965558.5.0.1778965558025:ymIZJg:9b00.1.2:1|2223153146.0.2.0:3.3:1778965558|60:11908555.623.UCX3hVYBx_3QdWRzKGYbYKVjfTI; sessar=1.1844558.CiDeDwn92ZY5Umg1fgw3OyU_qjaBG_VxzlrBtryMaEuV9w.3EK73c9n7y9BK0TWABVJOx9_4LsJTBWt-m9_88tReW4; sessionid2=3:1778965558.5.0.1778965558025:ymIZJg:9b00.1.2:1|2223153146.0.2.0:3.3:1778965558|60:11908555.623.fakesign0000000000000000000; yp=2094325558.udn.cDpnaW9tYXJvcnRlZ2E%3D; ys=udn.cDpnaW9tYXJvcnRlZ2E%3D; L=SRJJYER1Qkd3YHRCRkEKAm9HZVlRfkcCJFAIKSc5Wzk8BgEL.1778965558.1900056.366277.0e503dca0e3d95265da89538ab541081; park_id=08e20910d81d42658d4334d3f6d10ac0; _yasc=gKwWtJ3rebbvfVhB6dS4xeJhMLoNKtbU5BAH79KWtSxXLOZHsiXFjNN8B8pNqMX84HEWUeD2.MTc3OTU4NTI1Mzg5Mw==; _ym_isad=2; _ym_visorc=b; bh=EkIiQ2hyb21pdW0iO3Y9IjE0OCIsICJNaWNyb3NvZnQgRWRnZSI7dj0iMTQ4IiwgIk5vdC9BKUJyYW5kIjt2PSI5OSIaA2FybSINMTQ4LjAuMzk2Ny44MyoCPzE6CSJBbmRyb2lkIkIGMjYuMC4wSgI2NFJbIkNocm9taXVtIjt2PSIxNDguMC43Nzc4LjE4MCIsIk1pY3Jvc29mdCBFZGdlIjt2PSIxNDguMC4zOTY3LjgzIiwiTm90L0EpQnJhbmQiO3Y9Ijk5LjAuMC4wImCj9/LQBmol3Mql7AbPn4yfBaynvLsFoJ3s6wP8ua//B9/9z4IJ5bXNhwjyVA==",
-            "yandexuid=6009311931761677705; yashr=4567181961761677705; yuidss=6009311931761677705; receive-cookie-deprecation=1; gdpr=0; _ym_uid=1761677706290870939; _ym_d=1761677707; i=WPv45DbbiaiQTfOesurzPwPDcYTOSOoBsoiMqnCbM8UNdwnBPqcEVeWPbr+/nREEJsBHtNGb/FFdfO9HLKe33wC900U=; Session_id=3:1767916938.5.0.1761677775316:WbD9Jg:71df.1.2:1|1782860170.0.2.0:3.3:1761677775|2220343194.-1.0.0:3.2:2426755.3:1764104530|60:11590429.497800.3oxV2BfdArdTZgb0iJuNpsl7pTQ; sessar=1.1504434.CiBoQiEtUqB8Clq12Z20uRTAKOBx8rNaYp3ayAviftuOlQ.HmHoWlhWBAmESc7SsPOk0_fwoYScX1OCMb7N5WOch3w; sessionid2=3:1767916938.5.0.1761677775316:WbD9Jg:71df.1.2:1|1782860170.0.2.0:3.3:1761677775|2220343194.-1.0.0:3.2:2426755.3:1764104530|60:11590429.497800.fakesign0000000000000000000; L=cwNkZHx2bUdLfgZ1eX1WBUJKR0J7dVdUATclGQI2VgomGwMkLic=.1767916938.1586619.346423.d1431f8e0fe9a8126fdb675787bc79fb; yandex_login=gonzalofajardo; park_id=08e20910d81d42658d4334d3f6d10ac0; _ym_isad=2; yp=2079464530.multib.1#2083276938.udn.cDpHb256YWxvIEZhamFyZG8%3D#1768500383.yu.6009311931761677705; ymex=1771005983.oyu.6009311931761677705#2077037707.yrts.1761677707; _ym_visorc=w; _yasc=2mKcY8GygbjykCQel1V9urGg+aqTEZmAqVNXKfK1JjKMIohuQ3hRqw7ff6w9h+pemrcG; bh=EkEiR29vZ2xlIENocm9tZSI7dj0iMTQzIiwgIkNocm9taXVtIjt2PSIxNDMiLCAiTm90IEEoQnJhbmQiO3Y9IjI0IhoDeDg2Ig4xNDMuMC43NDk5LjE5MyoCPzA6CSJXaW5kb3dzIkIGMTkuMC4wSgI2NFJbIkdvb2dsZSBDaHJvbWUiO3Y9IjE0My4wLjc0OTkuMTkzIiwiQ2hyb21pdW0iO3Y9IjE0My4wLjc0OTkuMTkzIiwiTm90IEEoQnJhbmQiO3Y9IjI0LjAuMC4wImCjtp/LBmoe3Mrh/wiS2KGxA5/P4eoD+/rw5w3r//32D/vMzYcI"
-    );
-
-    private static final Random RANDOM = new Random();
-    private static final Set<Integer> COOKIE_INDICES_INVALIDOS = ConcurrentHashMap.newKeySet();
-
     private final RestTemplate restTemplate;
+    private final YangoCookiePool cookiePool;
 
-    public YangoClient(@Qualifier("yangoExternalRestTemplate") RestTemplate restTemplate) {
+    public YangoClient(
+            @Qualifier("yangoExternalRestTemplate") RestTemplate restTemplate,
+            YangoCookiePool cookiePool) {
         this.restTemplate = restTemplate;
-        log.info("[YangoClient] Inicializado cookies={} RestTemplate=pool(Yango external)", COOKIES_POOL.size());
-    }
-
-    private static void marcarCookieInvalida(int index) {
-        if (index >= 0 && index < COOKIES_POOL.size()) {
-            COOKIE_INDICES_INVALIDOS.add(index);
-            log.info("[YangoClient] Cookie #{} marcada inválida", index + 1);
-        }
-    }
-
-    private static int obtenerIndiceCookieValida() {
-        List<Integer> validos = new ArrayList<>();
-        for (int i = 0; i < COOKIES_POOL.size(); i++) {
-            if (!COOKIE_INDICES_INVALIDOS.contains(i)) {
-                validos.add(i);
-            }
-        }
-        if (validos.isEmpty()) {
-            return -1;
-        }
-        return validos.get(RANDOM.nextInt(validos.size()));
+        this.cookiePool = cookiePool;
+        log.debug("[YangoClient] Inicializado cookies={} RestTemplate=pool(Yango external)", cookiePool.size());
     }
 
     private static HttpHeaders headersSuggestions(String cookie, String parkId) {
@@ -136,10 +103,13 @@ public class YangoClient {
             String url, HttpMethod method, T requestBody,
             java.util.function.Function<String, HttpHeaders> headersFunc) throws Exception {
         Exception ultimoError = null;
-        for (int attempt = 0; attempt < COOKIES_POOL.size(); attempt++) {
-            int i = obtenerIndiceCookieValida();
-            if (i < 0) { COOKIE_INDICES_INVALIDOS.clear(); break; }
-            String cookie = COOKIES_POOL.get(i);
+        for (int attempt = 0; attempt < cookiePool.size(); attempt++) {
+            int i = cookiePool.randomValidIndex();
+            if (i < 0) {
+                cookiePool.resetInvalid();
+                break;
+            }
+            String cookie = cookiePool.cookieAt(i);
             HttpHeaders headers = headersFunc.apply(cookie);
             try {
                 HttpEntity<T> req = new HttpEntity<>(requestBody, headers);
@@ -151,7 +121,7 @@ public class YangoClient {
                 int code = e.getStatusCode().value();
                 // Solo 401 = sesión inválida. 403 (no_permissions) suele ser rol/recurso, no tirar la cookie del pool.
                 if (code == 401) {
-                    marcarCookieInvalida(i);
+                    cookiePool.markInvalid(i);
                 }
                 if (code == 401 || code == 403 || code == 429) {
                     delay(RETRY_401_DELAY_MS);
@@ -164,7 +134,7 @@ public class YangoClient {
                 continue;
             }
         }
-        COOKIE_INDICES_INVALIDOS.clear();
+        cookiePool.resetInvalid();
         if (ultimoError != null) throw ultimoError;
         throw new RuntimeException("YangoClient: todas las cookies fallaron");
     }

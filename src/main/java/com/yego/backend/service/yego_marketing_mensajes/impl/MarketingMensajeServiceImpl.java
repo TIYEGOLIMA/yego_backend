@@ -112,15 +112,13 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
 
         Long userId = obtenerUserIdActual();
 
-        String urlArchivo = subirArchivoSiPresente(archivo);
-
         MarketingMensaje mensaje = new MarketingMensaje();
         mensaje.setUserId(userId);
         mensaje.setTitulo(request.getTitulo());
         mensaje.setMensaje(request.getMensaje());
         mensaje.setModo(request.getModo());
         mensaje.setTipo(request.getTipo());
-        mensaje.setArchivo(urlArchivo != null ? urlArchivo : request.getArchivo());
+        mensaje.setArchivo(request.getArchivo());
         mensaje.setDiasActivos(convertirListaAJson(normalizarLista(request.getDiasActivos())));
         mensaje.setGrupos(convertirListaAJson(normalizarLista(request.getGrupos())));
         mensaje.setFlotas(convertirListaAJson(normalizarLista(request.getFlotas())));
@@ -131,7 +129,12 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         mensaje.setActivo(request.getActivo() != null ? request.getActivo() : true);
         validarCanales(mensaje);
 
-        MarketingMensaje mensajeGuardado = marketingMensajeRepository.save(mensaje);
+        String urlArchivo = subirArchivoSiPresente(archivo);
+        if (urlArchivo != null) {
+            mensaje.setArchivo(urlArchivo);
+        }
+
+        MarketingMensaje mensajeGuardado = marketingMensajeRepository.saveAndFlush(mensaje);
         log.info("Mensaje creado con ID: {}", mensajeGuardado.getId());
 
         return convertirAResponse(mensajeGuardado, "Mensaje creado exitosamente");
@@ -146,13 +149,10 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
                 .orElseThrow(() -> notFound(id));
 
         String tipoAnterior = mensaje.getTipo();
+        String archivoAnterior = mensaje.getArchivo();
+        boolean eliminarArchivoAnterior = false;
 
-        if (archivo != null && !archivo.isEmpty()) {
-            String nuevaUrlArchivo = subirArchivoSiPresente(archivo);
-            if (nuevaUrlArchivo != null) {
-                mensaje.setArchivo(nuevaUrlArchivo);
-            }
-        } else if (request.getArchivo() != null) {
+        if ((archivo == null || archivo.isEmpty()) && request.getArchivo() != null) {
             mensaje.setArchivo(request.getArchivo());
         }
 
@@ -164,7 +164,8 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
             String tipoNuevo = request.getTipo();
             if ("ninguna".equalsIgnoreCase(tipoNuevo.trim()) && 
                 (tipoAnterior == null || !"ninguna".equalsIgnoreCase(tipoAnterior.trim()))) {
-                eliminarArchivoAsociado(mensaje);
+                mensaje.setArchivo(null);
+                eliminarArchivoAnterior = true;
             }
             mensaje.setTipo(tipoNuevo);
         }
@@ -188,7 +189,17 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         if (request.getActivo() != null) mensaje.setActivo(request.getActivo());
         validarCanales(mensaje);
 
-        MarketingMensaje mensajeActualizado = marketingMensajeRepository.save(mensaje);
+        String nuevaUrlArchivo = subirArchivoSiPresente(archivo);
+        if (nuevaUrlArchivo != null) {
+            mensaje.setArchivo(nuevaUrlArchivo);
+            eliminarArchivoAnterior = archivoAnterior != null
+                    && !archivoAnterior.equals(nuevaUrlArchivo);
+        }
+
+        MarketingMensaje mensajeActualizado = marketingMensajeRepository.saveAndFlush(mensaje);
+        if (eliminarArchivoAnterior) {
+            eliminarArchivo(archivoAnterior);
+        }
         log.info("Mensaje actualizado con ID: {}", mensajeActualizado.getId());
 
         return convertirAResponse(mensajeActualizado, "Mensaje actualizado exitosamente");
@@ -227,7 +238,10 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
     public void eliminarMensaje(Long id) {
         MarketingMensaje mensaje = marketingMensajeRepository.findById(id)
                 .orElseThrow(() -> notFound(id));
+        String archivo = mensaje.getArchivo();
         marketingMensajeRepository.delete(mensaje);
+        marketingMensajeRepository.flush();
+        eliminarArchivo(archivo);
         log.info("Mensaje eliminado con ID: {}", id);
     }
 
@@ -386,24 +400,24 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         if (archivo == null || archivo.isEmpty()) return null;
         log.info("Subiendo archivo a MinIO: {}", archivo.getOriginalFilename());
         String url = minIOService.subirArchivo(archivo);
-        if (url != null) {
-            log.info("Archivo subido: {}", url);
-        } else {
-            log.warn("No se pudo subir el archivo a MinIO");
+        if (url == null || url.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY, "No se pudo almacenar el archivo adjunto");
         }
+        log.info("Archivo subido correctamente");
         return url;
     }
 
-    private void eliminarArchivoAsociado(MarketingMensaje mensaje) {
-        String archivoActual = mensaje.getArchivo();
-        if (archivoActual == null || archivoActual.isEmpty()) return;
-        log.info("Tipo cambió a 'ninguna', eliminando archivo: {}", archivoActual);
+    private void eliminarArchivo(String archivo) {
+        if (archivo == null || archivo.isBlank()) return;
         try {
-            minIOService.eliminarArchivo(archivoActual);
+            if (!minIOService.eliminarArchivo(archivo)) {
+                log.warn("No se pudo eliminar un archivo anterior de Marketing");
+            }
         } catch (Exception e) {
-            log.error("Error eliminando archivo de MinIO: {}", e.getMessage(), e);
+            log.warn("No se pudo eliminar un archivo anterior de Marketing ({})",
+                    e.getClass().getSimpleName());
         }
-        mensaje.setArchivo(null);
     }
 
     private void guardarHorasEspecificas(MarketingMensaje mensaje, String horasEspecificas) {

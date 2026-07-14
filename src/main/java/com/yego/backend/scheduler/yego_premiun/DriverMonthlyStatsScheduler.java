@@ -4,12 +4,14 @@ import com.yego.backend.handler.yego_premiun.DriverMonthlyStatsNotificationHandl
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.time.ZoneId;
 import java.time.YearMonth;
 
 @Component
+@Profile("prod")
 @Slf4j
 @RequiredArgsConstructor
 public class DriverMonthlyStatsScheduler {
@@ -30,4 +32,3 @@ public class DriverMonthlyStatsScheduler {
         notificationHandler.notifyProcessAvailable(periodo);
     }
 }
-
