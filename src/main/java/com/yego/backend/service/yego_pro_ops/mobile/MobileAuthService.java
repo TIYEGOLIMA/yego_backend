@@ -35,6 +35,8 @@ public class MobileAuthService {
     private final DriverApiRepository driverRepository;
     private final MobileOtpEvolutionGoService otpWhatsAppService;
     private final Map<String, OtpEntry> otpStore = new ConcurrentHashMap<>();
+    private final Map<String, RateLimitEntry> requestLimits = new ConcurrentHashMap<>();
+    private final Map<String, VerifyFailureEntry> verifyFailures = new ConcurrentHashMap<>();
 
     @Value("${mobile.otp.ttl-minutes:${MOBILE_OTP_TTL_MINUTES:1}}")
     private int otpTtlMinutes;
@@ -48,14 +50,37 @@ public class MobileAuthService {
     @Value("${mobile.otp.log-code-enabled:${MOBILE_OTP_LOG_CODE_ENABLED:false}}")
     private boolean otpLogCodeEnabled;
 
-    public MobileOtpResponse requestOtp(String licenseNumber) {
+    @Value("${mobile.otp.allow-log-only-without-provider:${MOBILE_OTP_ALLOW_LOG_ONLY_WITHOUT_PROVIDER:false}}")
+    private boolean allowLogOnlyWithoutProvider;
+
+    @Value("${mobile.app.min-version:${MOBILE_APP_MIN_VERSION:1.0.0}}")
+    private String minAppVersion;
+
+    @Value("${mobile.otp.request-limit:${MOBILE_OTP_REQUEST_LIMIT:5}}")
+    private int otpRequestLimit;
+
+    @Value("${mobile.otp.request-window-minutes:${MOBILE_OTP_REQUEST_WINDOW_MINUTES:10}}")
+    private int otpRequestWindowMinutes;
+
+    @Value("${mobile.otp.block-minutes:${MOBILE_OTP_BLOCK_MINUTES:15}}")
+    private int otpBlockMinutes;
+
+    @Value("${mobile.otp.verify-fail-limit:${MOBILE_OTP_VERIFY_FAIL_LIMIT:5}}")
+    private int otpVerifyFailLimit;
+
+    public MobileOtpResponse requestOtp(String licenseNumber, String appVersion, String clientIp) {
+        assertSupportedAppVersion(appVersion);
         String license = normalizeLicense(licenseNumber);
+        assertOtpRequestAllowed("ip:" + firstNonBlank(clientIp, "unknown"));
+        assertOtpRequestAllowed("license:" + license);
+
         DriverApi driver = findDriverByLicense(license);
         String phone = normalizePhone(driver.getPhone());
 
         if (phone == null || phone.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El conductor no tiene telefono registrado");
         }
+        assertOtpRequestAllowed("phone:" + phone);
 
         String code = generateCode();
         Instant expiresAt = Instant.now().plusSeconds(Math.max(1, otpTtlMinutes) * 60L);
@@ -72,6 +97,16 @@ public class MobileAuthService {
                 + "\n\nVence en " + otpTtlMinutes + " minutos. No compartas este codigo.";
         boolean sent = otpWhatsAppService.sendOtp(phone, message);
         if (!sent) {
+            if (allowLogOnlyWithoutProvider && otpLogCodeEnabled && !otpWhatsAppService.isProviderConfigured()) {
+                log.warn("OTP movil en modo desarrollo sin proveedor: driver={}, licencia={}, usar codigo impreso en logs",
+                        driver.getDriverId(), license);
+                return MobileOtpResponse.builder()
+                        .success(true)
+                        .message("Codigo generado en logs de desarrollo")
+                        .maskedPhone(maskPhone(phone))
+                        .expiresInMinutes(otpTtlMinutes)
+                        .build();
+            }
             otpStore.remove(license);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "No se pudo enviar el codigo al telefono registrado");
         }
@@ -87,7 +122,8 @@ public class MobileAuthService {
                 .build();
     }
 
-    public MobileAuthResponse verifyOtp(String licenseNumber, String code) {
+    public MobileAuthResponse verifyOtp(String licenseNumber, String code, String appVersion) {
+        assertSupportedAppVersion(appVersion);
         String license = normalizeLicense(licenseNumber);
         OtpEntry entry = otpStore.get(license);
 
@@ -97,10 +133,12 @@ public class MobileAuthService {
         }
 
         if (!entry.code().equals(code)) {
+            registerVerifyFailure(license);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Codigo incorrecto");
         }
 
         otpStore.remove(license);
+        verifyFailures.remove(license);
         DriverApi driver = entry.driver();
 
         return MobileAuthResponse.builder()
@@ -132,6 +170,86 @@ public class MobileAuthService {
 
     private SecretKey getSigningKey() {
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
+    }
+
+    private void assertSupportedAppVersion(String appVersion) {
+        String minimum = firstNonBlank(minAppVersion, "");
+        if (minimum.isBlank()) {
+            return;
+        }
+
+        if (appVersion == null || appVersion.isBlank() || compareVersions(appVersion, minimum) < 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.UPGRADE_REQUIRED,
+                    "Actualiza la app para continuar"
+            );
+        }
+    }
+
+    private int compareVersions(String current, String minimum) {
+        String[] currentParts = current.trim().split("\\.");
+        String[] minimumParts = minimum.trim().split("\\.");
+        int length = Math.max(currentParts.length, minimumParts.length);
+
+        for (int i = 0; i < length; i++) {
+            int currentValue = parseVersionPart(currentParts, i);
+            int minimumValue = parseVersionPart(minimumParts, i);
+            if (currentValue != minimumValue) {
+                return Integer.compare(currentValue, minimumValue);
+            }
+        }
+        return 0;
+    }
+
+    private int parseVersionPart(String[] parts, int index) {
+        if (index >= parts.length) {
+            return 0;
+        }
+        String digits = parts[index].replaceAll("\\D", "");
+        if (digits.isBlank()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(digits);
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    private void assertOtpRequestAllowed(String key) {
+        Instant now = Instant.now();
+        RateLimitEntry entry = requestLimits.get(key);
+
+        if (entry != null && entry.blockedUntil() != null && entry.blockedUntil().isAfter(now)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Demasiados intentos. Intenta nuevamente mas tarde");
+        }
+
+        Instant windowStart = entry == null || entry.windowStart().plusSeconds(Math.max(1, otpRequestWindowMinutes) * 60L).isBefore(now)
+                ? now
+                : entry.windowStart();
+        int attempts = entry == null || !entry.windowStart().equals(windowStart)
+                ? 1
+                : entry.attempts() + 1;
+        Instant blockedUntil = attempts > Math.max(1, otpRequestLimit)
+                ? now.plusSeconds(Math.max(1, otpBlockMinutes) * 60L)
+                : null;
+
+        requestLimits.put(key, new RateLimitEntry(attempts, windowStart, blockedUntil));
+        if (blockedUntil != null) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Demasiados intentos. Intenta nuevamente mas tarde");
+        }
+    }
+
+    private void registerVerifyFailure(String license) {
+        VerifyFailureEntry entry = verifyFailures.get(license);
+        int attempts = entry == null ? 1 : entry.attempts() + 1;
+        verifyFailures.put(license, new VerifyFailureEntry(attempts));
+
+        if (attempts >= Math.max(1, otpVerifyFailLimit)) {
+            otpStore.remove(license);
+            verifyFailures.remove(license);
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Demasiados intentos fallidos. Solicita un nuevo codigo");
+        }
     }
 
     private DriverApi findDriverByLicense(String license) {
@@ -199,4 +317,6 @@ public class MobileAuthService {
     }
 
     private record OtpEntry(String code, Instant expiresAt, DriverApi driver) {}
+    private record RateLimitEntry(int attempts, Instant windowStart, Instant blockedUntil) {}
+    private record VerifyFailureEntry(int attempts) {}
 }

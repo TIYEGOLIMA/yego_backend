@@ -5,6 +5,7 @@ import com.yego.backend.entity.yego_pro_ops.api.request.mobile.MobileOtpVerifyRe
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.MobileAuthResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.MobileOtpResponse;
 import com.yego.backend.service.yego_pro_ops.mobile.MobileAuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,13 +26,32 @@ public class MobileAuthController {
     private final MobileAuthService service;
 
     @PostMapping("/request-otp")
-    public ResponseEntity<MobileOtpResponse> requestOtp(@Valid @RequestBody MobileOtpRequest request) {
+    public ResponseEntity<MobileOtpResponse> requestOtp(
+            @Valid @RequestBody MobileOtpRequest request,
+            HttpServletRequest httpRequest
+    ) {
         log.info("Solicitud OTP movil: licencia={}", request.getLicenseNumber());
-        return ResponseEntity.ok(service.requestOtp(request.getLicenseNumber()));
+        return ResponseEntity.ok(service.requestOtp(
+                request.getLicenseNumber(),
+                request.getAppVersion(),
+                resolveClientIp(httpRequest)
+        ));
     }
 
     @PostMapping("/verify-otp")
     public ResponseEntity<MobileAuthResponse> verifyOtp(@Valid @RequestBody MobileOtpVerifyRequest request) {
-        return ResponseEntity.ok(service.verifyOtp(request.getLicenseNumber(), request.getCode()));
+        return ResponseEntity.ok(service.verifyOtp(
+                request.getLicenseNumber(),
+                request.getCode(),
+                request.getAppVersion()
+        ));
+    }
+
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwardedFor = request.getHeader("X-Forwarded-For");
+        if (forwardedFor != null && !forwardedFor.isBlank()) {
+            return forwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

@@ -124,7 +124,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/yego-premium/**").permitAll() // Driver active stats endpoints
                 .requestMatchers("/api/marketing-mensajes/**").permitAll() // Marketing mensajes endpoints
                 .requestMatchers("/api/vehicles/**").permitAll() // Flotas/Vehículos endpoints
-                .requestMatchers("/api/mobile/**").permitAll() // App móvil Pro Ops
+                .requestMatchers("/api/mobile/auth/**").permitAll() // OTP/login app móvil Pro Ops
+                .requestMatchers("/api/mobile/admin/**").hasAnyRole("SUPERADMIN", "ADMIN", "ADMINISTRADOR") // Admin móvil
+                .requestMatchers("/api/mobile/**").authenticated() // App móvil Pro Ops protegida por JWT
                 .requestMatchers("/api/pro-ops/**", "/pro-ops/**").permitAll() // Pro Ops endpoints (con o sin /api si context-path=/api)
                 .requestMatchers("/api/GoBot/**").permitAll() // GoBot API externa endpoints
                 .requestMatchers("/api/yango-external/**").permitAll() // Yango resumen externo (yego_api_externo)

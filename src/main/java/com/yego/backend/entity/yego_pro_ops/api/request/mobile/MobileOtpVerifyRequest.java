@@ -13,4 +13,6 @@ public class MobileOtpVerifyRequest {
     @NotBlank(message = "code es requerido")
     @Pattern(regexp = "\\d{6}", message = "code debe tener 6 digitos")
     private String code;
+
+    private String appVersion;
 }

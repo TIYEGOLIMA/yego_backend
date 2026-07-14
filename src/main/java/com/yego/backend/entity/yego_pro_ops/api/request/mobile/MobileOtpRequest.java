@@ -8,4 +8,6 @@ public class MobileOtpRequest {
 
     @NotBlank(message = "licenseNumber es requerido")
     private String licenseNumber;
+
+    private String appVersion;
 }

@@ -511,6 +511,9 @@ public class VehicleServiceImpl implements VehicleService {
                 .duration(formatDuration(shift.getStartedAt(), LocalDateTime.now()))
                 .kmInicial(shift.getKmInicial())
                 .status(shift.getStatus())
+                .totalViajes(shift.getTotalTrips() != null ? shift.getTotalTrips() : 0)
+                .producido(shift.getTotalAmount())
+                .efectivoYango(shift.getTotalCash())
                 .build();
     }
 

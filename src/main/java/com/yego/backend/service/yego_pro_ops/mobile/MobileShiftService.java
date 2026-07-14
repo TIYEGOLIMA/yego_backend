@@ -48,6 +48,8 @@ import java.util.stream.Collectors;
 public class MobileShiftService {
 
     private static final long YANGO_TIMEOUT_SECONDS = 8;
+    private static final ZoneId LIMA_ZONE = ZoneId.of("America/Lima");
+    private static final DateTimeFormatter YANGO_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     private final ShiftSessionRepository shiftRepo;
     private final DriverCloseRepository closeRepo;
@@ -247,8 +249,8 @@ public class MobileShiftService {
         LocalDateTime from = session.getStartedAt();
         LocalDateTime to = now();
         String driverId = session.getDriverId();
-        String dateFrom = from.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-        String dateTo = to.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        String dateFrom = toYangoDateTime(from);
+        String dateTo = toYangoDateTime(to);
 
         log.info("Consultando Yango para turno móvil: driver={}, desde={}, hasta={}",
                 driverId, dateFrom, dateTo);
@@ -376,6 +378,11 @@ public class MobileShiftService {
     // ─── Utilidades ──────────────────────────────────────────────
 
     private LocalDateTime now() { return LocalDateTime.now(); }
+
+    private String toYangoDateTime(LocalDateTime value) {
+        if (value == null) return null;
+        return value.atZone(LIMA_ZONE).format(YANGO_DATE_FORMATTER) + "-05:00";
+    }
 
     private BigDecimal nvl(BigDecimal value) { return value != null ? value : BigDecimal.ZERO; }
 

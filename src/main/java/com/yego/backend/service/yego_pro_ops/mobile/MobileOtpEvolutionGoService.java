@@ -89,6 +89,10 @@ public class MobileOtpEvolutionGoService {
         }
     }
 
+    public boolean isProviderConfigured() {
+        return normalizeToken(token) != null;
+    }
+
     private String normalizeBaseUrl(String value) {
         String clean = value == null || value.isBlank() ? "https://go.yego.pro" : value.trim();
         return clean.replaceAll("/+$", "");

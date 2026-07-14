@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -24,6 +25,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 /**
  * Filtro para validación de tokens JWT en requests HTTP
@@ -128,10 +130,35 @@ public class JwtRequestFilter extends OncePerRequestFilter {
 
                 username = claims.get("username", String.class);
                 String role = claims.get("role", String.class);
-                log.info("✅ [JwtRequestFilter] Usuario autenticado: {} con rol: {}", username, role);
+                String tokenType = claims.get("type", String.class);
+                String driverId = claims.get("driverId", String.class);
+                if (username != null) {
+                    log.info("✅ [JwtRequestFilter] Usuario autenticado: {} con rol: {}", username, role);
+                } else if ("mobile_driver".equals(tokenType) || "CONDUCTOR".equals(role)) {
+                    log.info("✅ [JwtRequestFilter] Conductor movil autenticado: driverId={} rol={} type={}",
+                            firstNonBlank(driverId, claims.getSubject()), role, tokenType);
+                } else {
+                    log.info("✅ [JwtRequestFilter] Token JWT valido sin username: subject={} rol={} type={}",
+                            claims.getSubject(), role, tokenType);
+                }
                 
                 // Almacenar claims en el request para uso posterior
                 request.setAttribute("jwtClaims", claims);
+
+                if (username == null
+                        && ("mobile_driver".equals(tokenType) || "CONDUCTOR".equals(role))
+                        && driverId != null
+                        && !driverId.isBlank()
+                        && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    UsernamePasswordAuthenticationToken mobileAuthentication =
+                            new UsernamePasswordAuthenticationToken(
+                                    driverId,
+                                    null,
+                                    List.of(new SimpleGrantedAuthority("ROLE_CONDUCTOR"))
+                            );
+                    mobileAuthentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(mobileAuthentication);
+                }
                 
             } catch (Exception e) {
                 // Si el token está expirado, responder con 401 y mensaje claro para el frontend
@@ -249,6 +276,13 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             log.warn("Error validando token: {}", e.getMessage());
             return false;
         }
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) {
+            return first;
+        }
+        return second;
     }
     
 }

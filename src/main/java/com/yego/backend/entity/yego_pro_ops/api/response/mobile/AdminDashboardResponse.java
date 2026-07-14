@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Data
@@ -38,5 +39,8 @@ public class AdminDashboardResponse {
         private String duration;
         private Integer kmInicial;
         private String status;
+        private Integer totalViajes;
+        private BigDecimal producido;
+        private BigDecimal efectivoYango;
     }
 }

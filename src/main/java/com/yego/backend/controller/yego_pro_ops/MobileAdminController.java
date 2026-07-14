@@ -1,10 +1,12 @@
 package com.yego.backend.controller.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.AdminDashboardResponse;
+import com.yego.backend.entity.yego_pro_ops.api.response.mobile.MobileShiftSummaryResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.ShiftLocationResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.ShiftRouteResponse;
 import com.yego.backend.service.yego_pro_ops.VehicleService;
 import com.yego.backend.service.yego_pro_ops.mobile.MobileShiftLocationService;
+import com.yego.backend.service.yego_pro_ops.mobile.MobileShiftService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +24,7 @@ public class MobileAdminController {
 
     private final VehicleService vehicleService;
     private final MobileShiftLocationService locationService;
+    private final MobileShiftService shiftService;
 
     @GetMapping("/dashboard")
     public AdminDashboardResponse dashboard() {
@@ -36,5 +39,10 @@ public class MobileAdminController {
     @GetMapping("/shifts/{sessionId}/route")
     public ShiftRouteResponse shiftRoute(@PathVariable String sessionId) {
         return locationService.getRoute(sessionId);
+    }
+
+    @GetMapping("/shifts/{sessionId}/summary")
+    public MobileShiftSummaryResponse shiftSummary(@PathVariable String sessionId) {
+        return shiftService.getSummary(sessionId);
     }
 }
