@@ -139,8 +139,20 @@ public class MobileShiftService {
     // ─── Cerrar Turno ────────────────────────────────────────────
 
     public MobileShiftResponse closeShift(String sessionId, CloseShiftMobileRequest req) {
+        lockService.acquireAll(List.of("close-shift:" + sessionId));
         ShiftSession session = findSession(sessionId);
+        if (!"active".equals(session.getStatus()) && session.getClosedAt() != null) {
+            log.info("Reintento de cierre ya confirmado: session={}, status={}", sessionId, session.getStatus());
+            return buildResponse(session, findClose(sessionId), null, null);
+        }
         validateActive(session);
+        DriverClose close = findClose(sessionId);
+        if (req.getKmFinal() < close.getOdometroInicial()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "El kilometraje final no puede ser menor al inicial"
+            );
+        }
 
         LocalDateTime closedAt = now();
 
@@ -165,7 +177,6 @@ public class MobileShiftService {
         shiftRepo.save(session);
 
         // 3. Actualizar cierre financiero
-        DriverClose close = findClose(sessionId);
         close.setOdometroFinal(req.getKmFinal());
         close.setDiferenciaOdometro(req.getKmFinal() - close.getOdometroInicial());
         close.setLiquidaEfectivo(req.getEfectivo());

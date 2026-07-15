@@ -2,7 +2,9 @@ package com.yego.backend.entity.yego_pro_ops.api.request.mobile;
 
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -43,7 +45,9 @@ public class CloseShiftMobileRequest {
 
     private List<String> fotosEvidencia;
 
-    private List<String> carPhotosCierre;
+    @NotNull(message = "Las fotos de cierre son requeridas")
+    @Size(min = 4, max = 4, message = "Debes enviar exactamente 4 fotos de cierre")
+    private List<@NotBlank(message = "La URL de la foto no puede estar vacía") String> carPhotosCierre;
 
     private String observaciones;
 
