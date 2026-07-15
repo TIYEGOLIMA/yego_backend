@@ -15,6 +15,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -32,16 +33,24 @@ class MobileDriverSessionServiceTest {
     private MobileDriverSessionService service;
 
     @Test
-    void rejectsLoginFromAnotherDeviceWhileSessionIsActive() {
+    void replacesActiveSessionAfterOtpVerificationOnAnotherDevice() {
         MobileDriverSession active = activeSession("driver-1", "device-a");
+        UUID previousSessionId = active.getSessionId();
         when(repository.findById("driver-1")).thenReturn(Optional.of(active));
+        when(repository.save(any(MobileDriverSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UUID currentSessionId = service.activateOrReplace("driver-1", "device-b", 600);
+
+        assertNotEquals(previousSessionId, currentSessionId);
+        assertEquals(currentSessionId, active.getSessionId());
+        assertEquals("device-b", active.getDeviceId());
+        assertNull(active.getRevokedAt());
 
         ResponseStatusException error = assertThrows(
                 ResponseStatusException.class,
-                () -> service.activate("driver-1", "device-b", 600)
+                () -> service.validate("driver-1", previousSessionId.toString())
         );
-
-        assertEquals(409, error.getStatusCode().value());
+        assertEquals(401, error.getStatusCode().value());
     }
 
     @Test
@@ -51,7 +60,7 @@ class MobileDriverSessionServiceTest {
         when(repository.findById("driver-1")).thenReturn(Optional.of(active));
         when(repository.save(any(MobileDriverSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        UUID currentSessionId = service.activate("driver-1", "device-a", 600);
+        UUID currentSessionId = service.activateOrReplace("driver-1", "device-a", 600);
 
         assertNotEquals(previousSessionId, currentSessionId);
     }

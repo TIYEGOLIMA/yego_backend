@@ -19,26 +19,13 @@ public class MobileDriverSessionService {
     private final MobileDriverSessionRepository repository;
     private final DatabaseLockService lockService;
 
-    @Transactional(readOnly = true)
-    public void assertLoginAllowed(String driverId, String deviceId) {
-        String normalizedDeviceId = normalizeDeviceId(deviceId);
-        MobileDriverSession session = repository.findById(driverId).orElse(null);
-        if (isActive(session, LocalDateTime.now()) && !session.getDeviceId().equals(normalizedDeviceId)) {
-            throw sessionAlreadyActive();
-        }
-    }
-
     @Transactional
-    public UUID activate(String driverId, String deviceId, long ttlSeconds) {
+    public UUID activateOrReplace(String driverId, String deviceId, long ttlSeconds) {
         String normalizedDeviceId = normalizeDeviceId(deviceId);
         lockService.acquireAll(List.of("mobile-session:" + driverId));
 
         LocalDateTime now = LocalDateTime.now();
         MobileDriverSession session = repository.findById(driverId).orElse(null);
-        if (isActive(session, now) && !session.getDeviceId().equals(normalizedDeviceId)) {
-            throw sessionAlreadyActive();
-        }
-
         if (session == null) {
             session = MobileDriverSession.builder().driverId(driverId).build();
         }
@@ -80,7 +67,7 @@ public class MobileDriverSessionService {
                 && session.getExpiresAt().isAfter(now);
     }
 
-    private String normalizeDeviceId(String deviceId) {
+    String normalizeDeviceId(String deviceId) {
         if (deviceId == null || deviceId.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "deviceId es requerido");
         }
@@ -103,10 +90,4 @@ public class MobileDriverSessionService {
         return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sesion movil invalida o vencida");
     }
 
-    private ResponseStatusException sessionAlreadyActive() {
-        return new ResponseStatusException(
-                HttpStatus.CONFLICT,
-                "Este conductor ya tiene una sesion iniciada en otro dispositivo"
-        );
-    }
 }

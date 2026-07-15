@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -68,11 +69,11 @@ public class MobileAuthService {
     public MobileOtpResponse requestOtp(String licenseNumber, String deviceId, String appVersion, String clientIp) {
         assertSupportedAppVersion(appVersion);
         String license = normalizeLicense(licenseNumber);
+        String otpDeviceId = mobileSessionService.normalizeDeviceId(deviceId);
         assertOtpRequestAllowed("ip:" + firstNonBlank(clientIp, "unknown"));
         assertOtpRequestAllowed("license:" + license);
 
         DriverApi driver = findDriverByLicense(license);
-        mobileSessionService.assertLoginAllowed(driver.getDriverId(), deviceId);
         String phone = normalizePhone(driver.getPhone());
 
         if (phone == null || phone.isBlank()) {
@@ -82,7 +83,12 @@ public class MobileAuthService {
 
         String code = generateCode();
         Instant expiresAt = Instant.now().plusSeconds(Math.max(1, otpTtlMinutes) * 60L);
-        otpStore.put(license, new OtpEntry(code, expiresAt, driver));
+        OtpEntry otpEntry = new OtpEntry(code, expiresAt, driver, otpDeviceId);
+        OtpEntry previousEntry = otpStore.put(license, otpEntry);
+        verifyFailures.remove(license);
+        if (previousEntry != null) {
+            log.info("Solicitud OTP anterior reemplazada: driver={}, licencia={}", driver.getDriverId(), license);
+        }
         if (otpLogCodeEnabled) {
             log.info("OTP movil generado: driver={}, licencia={}, codigo={}, venceEnMinutos={}",
                     driver.getDriverId(), license, code, otpTtlMinutes);
@@ -105,7 +111,7 @@ public class MobileAuthService {
                         .expiresInMinutes(otpTtlMinutes)
                         .build();
             }
-            otpStore.remove(license);
+            otpStore.remove(license, otpEntry);
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "No se pudo enviar el codigo al telefono registrado");
         }
 
@@ -124,24 +130,35 @@ public class MobileAuthService {
     public MobileAuthResponse verifyOtp(String licenseNumber, String code, String deviceId, String appVersion) {
         assertSupportedAppVersion(appVersion);
         String license = normalizeLicense(licenseNumber);
+        String otpDeviceId = mobileSessionService.normalizeDeviceId(deviceId);
         OtpEntry entry = otpStore.get(license);
 
         if (entry == null || entry.expiresAt().isBefore(Instant.now())) {
-            otpStore.remove(license);
+            if (entry != null) {
+                otpStore.remove(license, entry);
+            }
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Codigo vencido o no solicitado");
         }
 
+        if (!entry.deviceId().equals(otpDeviceId)) {
+            throw otpReplacedOrDifferentDevice();
+        }
         if (!entry.code().equals(code)) {
-            registerVerifyFailure(license);
+            if (otpStore.get(license) != entry) {
+                throw otpReplacedOrDifferentDevice();
+            }
+            registerVerifyFailure(license, entry);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Codigo incorrecto");
         }
+        if (!otpStore.remove(license, entry)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Codigo ya utilizado o reemplazado");
+        }
 
-        otpStore.remove(license);
         verifyFailures.remove(license);
         DriverApi driver = entry.driver();
         long tokenTtlSeconds = Math.max(60, jwtExpirationSeconds);
         String mobileSessionId = mobileSessionService
-                .activate(driver.getDriverId(), deviceId, tokenTtlSeconds)
+                .activateOrReplace(driver.getDriverId(), deviceId, tokenTtlSeconds)
                 .toString();
 
         return MobileAuthResponse.builder()
@@ -241,16 +258,47 @@ public class MobileAuthService {
         }
     }
 
-    private void registerVerifyFailure(String license) {
-        VerifyFailureEntry entry = verifyFailures.get(license);
-        int attempts = entry == null ? 1 : entry.attempts() + 1;
-        verifyFailures.put(license, new VerifyFailureEntry(attempts));
+    private void registerVerifyFailure(String license, OtpEntry otpEntry) {
+        VerifyFailureEntry failures = verifyFailures.compute(
+                license,
+                (key, current) -> new VerifyFailureEntry(current == null ? 1 : current.attempts() + 1)
+        );
 
-        if (attempts >= Math.max(1, otpVerifyFailLimit)) {
-            otpStore.remove(license);
-            verifyFailures.remove(license);
+        if (failures.attempts() >= Math.max(1, otpVerifyFailLimit)) {
+            otpStore.remove(license, otpEntry);
+            verifyFailures.remove(license, failures);
             throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Demasiados intentos fallidos. Solicita un nuevo codigo");
         }
+    }
+
+    private ResponseStatusException otpReplacedOrDifferentDevice() {
+        return new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED,
+                "El codigo fue solicitado desde otro dispositivo o reemplazado por una solicitud mas reciente"
+        );
+    }
+
+    @Scheduled(fixedDelayString = "${mobile.otp.cleanup-interval-ms:60000}")
+    void cleanupExpiredState() {
+        Instant now = Instant.now();
+        otpStore.forEach((license, entry) -> {
+            if (!entry.expiresAt().isAfter(now) && otpStore.remove(license, entry)) {
+                verifyFailures.remove(license);
+            }
+        });
+        verifyFailures.forEach((license, failures) -> {
+            if (!otpStore.containsKey(license)) {
+                verifyFailures.remove(license, failures);
+            }
+        });
+        requestLimits.forEach((key, entry) -> {
+            Instant retentionUntil = entry.blockedUntil() != null
+                    ? entry.blockedUntil()
+                    : entry.windowStart().plusSeconds(Math.max(1, otpRequestWindowMinutes) * 60L);
+            if (!retentionUntil.isAfter(now)) {
+                requestLimits.remove(key, entry);
+            }
+        });
     }
 
     private DriverApi findDriverByLicense(String license) {
@@ -317,7 +365,7 @@ public class MobileAuthService {
         return "";
     }
 
-    private record OtpEntry(String code, Instant expiresAt, DriverApi driver) {}
+    private record OtpEntry(String code, Instant expiresAt, DriverApi driver, String deviceId) {}
     private record RateLimitEntry(int attempts, Instant windowStart, Instant blockedUntil) {}
     private record VerifyFailureEntry(int attempts) {}
 }
