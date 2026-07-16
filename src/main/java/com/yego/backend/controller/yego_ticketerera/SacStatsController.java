@@ -27,15 +27,17 @@ public class SacStatsController {
     @GetMapping("/export/excel")
     public ResponseEntity<byte[]> exportarAExcel(
             @RequestParam(required = false) String fechaInicio,
-            @RequestParam(required = false) String fechaFin) {
-        return sacStatsExportService.exportarAExcel(fechaInicio, fechaFin);
+            @RequestParam(required = false) String fechaFin,
+            @RequestParam(required = false) Long sedeId) {
+        return sacStatsExportService.exportarAExcel(fechaInicio, fechaFin, sedeId);
     }
 
     @GetMapping("/export/image/{formato}")
     public ResponseEntity<byte[]> exportarAImagen(
             @PathVariable String formato,
             @RequestParam(required = false) String fechaInicio,
-            @RequestParam(required = false) String fechaFin) {
-        return sacStatsExportService.exportarAImagen(formato, fechaInicio, fechaFin);
+            @RequestParam(required = false) String fechaFin,
+            @RequestParam(required = false) Long sedeId) {
+        return sacStatsExportService.exportarAImagen(formato, fechaInicio, fechaFin, sedeId);
     }
 }

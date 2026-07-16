@@ -3,9 +3,12 @@ package com.yego.backend.config;
 import com.yego.backend.entity.yego_principal.api.response.ModuleResponse;
 import com.yego.backend.entity.yego_ticketerera.entities.Dispositivo;
 import com.yego.backend.repository.yego_ticketerera.DispositivoRepository;
+import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.service.yego_principal.ModuleService;
+import com.yego.backend.service.yego_principal.WebSocketAccessTicketService;
 import com.yego.backend.service.yego_principal.WebSocketModuleMappingService;
 import com.yego.backend.service.yego_principal.WebSocketSessionService;
+import com.yego.backend.service.yego_principal.WebSocketSessionService.SessionContext;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,7 +39,9 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     private final WebSocketSessionService webSocketSessionService;
     private final WebSocketModuleMappingService webSocketModuleMappingService;
     private final DispositivoRepository dispositivoRepository;
+    private final UserRepository userRepository;
     private final JwtTokenProvider jwtTokenProvider;
+    private final WebSocketAccessTicketService accessTicketService;
     
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -48,6 +53,12 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         
         StompCommand command = accessor.getCommand();
         String sessionId = accessor.getSessionId();
+
+        if (sessionId != null && !StompCommand.CONNECT.equals(command)
+                && webSocketSessionService.isSessionExpired(sessionId)) {
+            webSocketSessionService.removeSession(sessionId);
+            throw new org.springframework.messaging.MessageDeliveryException("Sesión WebSocket expirada");
+        }
         
         // Actualizar última actividad para cualquier comando (excepto CONNECT que ya lo hace)
         if (sessionId != null && !StompCommand.CONNECT.equals(command)) {
@@ -63,6 +74,14 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         if (StompCommand.SUBSCRIBE.equals(command)) {
             return handleSubscribe(accessor, message);
         }
+
+        // Ticketera es command/query: las mutaciones viajan por HTTP y STOMP solo notifica.
+        if (StompCommand.SEND.equals(command)
+                && accessor.getDestination() != null
+                && accessor.getDestination().startsWith("/app/ticketera")) {
+            throw new org.springframework.messaging.MessageDeliveryException(
+                    "Las acciones de Ticketera deben realizarse por HTTP");
+        }
         
         // Manejar desconexión (DISCONNECT)
         if (StompCommand.DISCONNECT.equals(command)) {
@@ -73,6 +92,12 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     }
     
     private Message<?> handleConnect(StompHeaderAccessor accessor, Message<?> message) {
+            String accessTicket = accessor.getFirstNativeHeader("X-WS-Ticket");
+            if (accessTicket != null && !accessTicket.isBlank()) {
+                authenticateWithAccessTicket(accessor, accessTicket);
+                return message;
+            }
+
             String authHeader = accessor.getFirstNativeHeader("Authorization");
             
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -115,6 +140,13 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                             String sessionId = accessor.getSessionId();
                             if (sessionId != null) {
                                 webSocketSessionService.markAsDevice(sessionId, deviceId);
+                                webSocketSessionService.saveSessionContext(sessionId, new SessionContext(
+                                        true,
+                                        "DEVICE",
+                                        tipo,
+                                        getLongClaim(claims, "sedeId"),
+                                        getLongClaim(claims, "moduleId"),
+                                        claims.getExpiration() != null ? claims.getExpiration().toInstant() : null));
                                 log.debug("[WebSocket] Dispositivo conectado: {} (tipo={}, sede={}, módulo={})",
                                     deviceId, tipo,
                                     getLongClaim(claims, "sedeId"),
@@ -167,6 +199,14 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
                         String sessionId = accessor.getSessionId();
                         if (sessionId != null && userIdLong != null) {
                             webSocketSessionService.saveUserModules(sessionId, userModules, userId);
+                            Long sedeId = userRepository.findById(userIdLong).map(user -> user.getSedeId()).orElse(null);
+                            webSocketSessionService.saveSessionContext(sessionId, new SessionContext(
+                                    false,
+                                    role.toUpperCase(Locale.ROOT),
+                                    null,
+                                    sedeId,
+                                    null,
+                                    claims.getExpiration() != null ? claims.getExpiration().toInstant() : null));
                             log.debug("[WebSocket] Usuario autenticado: id={} rol={} módulos={}",
                                     userId, role, userModules.size());
                         }
@@ -179,6 +219,58 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         }
         
         return message;
+    }
+
+    private void authenticateWithAccessTicket(StompHeaderAccessor accessor, String ticket) {
+        var principal = accessTicketService.consume(ticket);
+        String sessionId = accessor.getSessionId();
+
+        if (principal.isDevice()) {
+            Dispositivo dispositivo = dispositivoRepository.findById(principal.dispositivoId()).orElse(null);
+            if (dispositivo == null || Boolean.FALSE.equals(dispositivo.getActive())) {
+                throw new org.springframework.messaging.MessageDeliveryException("Dispositivo inactivo");
+            }
+            int currentVersion = dispositivo.getTokenVersion() != null ? dispositivo.getTokenVersion() : 0;
+            int ticketVersion = principal.tokenVersion() != null ? principal.tokenVersion() : 0;
+            if (currentVersion != ticketVersion) {
+                throw new org.springframework.messaging.MessageDeliveryException("Token de dispositivo revocado");
+            }
+
+            String deviceId = "device-" + dispositivo.getId();
+            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                    deviceId, null, List.of(new SimpleGrantedAuthority("ROLE_DEVICE")));
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            accessor.setUser(authentication);
+            if (sessionId != null) {
+                webSocketSessionService.markAsDevice(sessionId, deviceId);
+                webSocketSessionService.saveSessionContext(sessionId, new SessionContext(
+                        true,
+                        "DEVICE",
+                        dispositivo.getType().name(),
+                        dispositivo.getSedeId(),
+                        dispositivo.getModuleId(),
+                        principal.tokenExpiresAt()));
+            }
+            return;
+        }
+
+        if (principal.userId() == null || principal.username() == null || principal.role() == null) {
+            throw new org.springframework.messaging.MessageDeliveryException("Usuario WebSocket inválido");
+        }
+        var user = userRepository.findByIdWithRole(principal.userId())
+                .filter(item -> Boolean.TRUE.equals(item.getActive()))
+                .orElseThrow(() -> new org.springframework.messaging.MessageDeliveryException("Usuario inactivo"));
+        String role = user.getRole().getName().toUpperCase(Locale.ROOT);
+        List<ModuleResponse> modules = moduleService.obtenerModulosPorUsuario(user.getId());
+        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                user.getId().toString(), null, List.of(new SimpleGrantedAuthority("ROLE_" + role)));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        accessor.setUser(authentication);
+        if (sessionId != null) {
+            webSocketSessionService.saveUserModules(sessionId, modules, user.getId().toString());
+            webSocketSessionService.saveSessionContext(sessionId, new SessionContext(
+                    false, role, null, user.getSedeId(), null, principal.tokenExpiresAt()));
+        }
     }
     
     private Message<?> handleSubscribe(StompHeaderAccessor accessor, Message<?> message) {
@@ -195,6 +287,15 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             : destination.startsWith("topic/") 
                 ? destination.substring(6) 
                 : destination;
+
+        if (normalizedTopic.startsWith("ticketera/sedes/")) {
+            if (isScopedTicketeraSubscriptionAllowed(sessionId, normalizedTopic)) {
+                webSocketSessionService.addSubscription(sessionId, destination);
+                return message;
+            }
+            log.debug("[WebSocket] Suscripción Ticketera fuera de alcance: sesión {} → {}", sessionId, destination);
+            return null;
+        }
         
         // Topics del sistema siempre permitidos
         if (normalizedTopic.startsWith("system") || normalizedTopic.startsWith("user/")) {
@@ -230,6 +331,48 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         webSocketSessionService.addSubscription(sessionId, destination);
         log.debug("[WebSocket] Suscripción permitida: sesión {} (usuario {}) → {}", sessionId, userId, destination);
         return message;
+    }
+
+    private boolean isScopedTicketeraSubscriptionAllowed(String sessionId, String topic) {
+        SessionContext context = webSocketSessionService.getSessionContext(sessionId);
+        if (context == null) return false;
+
+        String[] parts = topic.split("/");
+        if (parts.length < 4 || !"ticketera".equals(parts[0]) || !"sedes".equals(parts[1])) return false;
+        Long topicSedeId = parseLong(parts[2]);
+        if (topicSedeId == null) return false;
+
+        boolean ticketsTopic = parts.length == 4 && "tickets".equals(parts[3]);
+        boolean modulesTopic = parts.length == 4 && "modules".equals(parts[3]);
+        boolean ratingTopic = parts.length == 6
+                && "modules".equals(parts[3])
+                && "rating".equals(parts[5]);
+        if (!ticketsTopic && !modulesTopic && !ratingTopic) return false;
+
+        if (context.device()) {
+            if (!topicSedeId.equals(context.sedeId())) return false;
+            if ("TABLET".equals(context.deviceType())) {
+                Long topicModuleId = ratingTopic ? parseLong(parts[4]) : null;
+                return topicModuleId != null && topicModuleId.equals(context.moduleId());
+            }
+            return !ratingTopic && ("TV".equals(context.deviceType())
+                    || "TABLET_PRINCIPAL".equals(context.deviceType()));
+        }
+
+        String role = context.role() != null ? context.role().toUpperCase(Locale.ROOT) : "";
+        if (ratingTopic) return false;
+        if ("SAC".equals(role)) return topicSedeId.equals(context.sedeId());
+        return List.of("ADMIN", "ADMINISTRADOR", "SUPERVISOR", "SUPERADMIN").contains(role)
+                && webSocketModuleMappingService.hasAccessToTopic("/topic/ticketera",
+                        webSocketSessionService.getUserModules(sessionId));
+    }
+
+    private static Long parseLong(String value) {
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
     }
     
     private Message<?> handleDisconnect(StompHeaderAccessor accessor, Message<?> message) {

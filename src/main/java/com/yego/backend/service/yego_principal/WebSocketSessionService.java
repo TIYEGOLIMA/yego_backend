@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +36,7 @@ public class WebSocketSessionService {
     private final Map<String, Set<String>> sessionSubscriptions = new ConcurrentHashMap<>();
     private final Map<String, LocalDateTime> sessionLastActivity = new ConcurrentHashMap<>();
     private final Set<String> deviceSessions = ConcurrentHashMap.newKeySet();
+    private final Map<String, SessionContext> sessionContexts = new ConcurrentHashMap<>();
 
     public void markAsDevice(String sessionId, String deviceId) {
         if (sessionId == null) return;
@@ -47,6 +49,32 @@ public class WebSocketSessionService {
 
     public boolean isDeviceSession(String sessionId) {
         return sessionId != null && deviceSessions.contains(sessionId);
+    }
+
+    public void saveSessionContext(String sessionId, SessionContext context) {
+        if (sessionId == null || context == null) return;
+        sessionContexts.put(sessionId, context);
+        if (context.device()) deviceSessions.add(sessionId);
+        updateLastActivity(sessionId);
+    }
+
+    public SessionContext getSessionContext(String sessionId) {
+        return sessionId != null ? sessionContexts.get(sessionId) : null;
+    }
+
+    public boolean isSessionExpired(String sessionId) {
+        SessionContext context = getSessionContext(sessionId);
+        return context != null && context.tokenExpiresAt() != null
+                && !context.tokenExpiresAt().isAfter(Instant.now());
+    }
+
+    public Set<String> getExpiredSessionIds() {
+        Instant now = Instant.now();
+        return sessionContexts.entrySet().stream()
+                .filter(entry -> entry.getValue().tokenExpiresAt() != null
+                        && !entry.getValue().tokenExpiresAt().isAfter(now))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toSet());
     }
     
     public void saveUserModules(String sessionId, List<ModuleResponse> modules, String userId) {
@@ -152,6 +180,7 @@ public class WebSocketSessionService {
             sessionSubscriptions.remove(sessionId);
             sessionLastActivity.remove(sessionId);
             deviceSessions.remove(sessionId);
+            sessionContexts.remove(sessionId);
             log.debug("🔌 [WebSocket] Sesión {} removida (Total: {})", sessionId, sessionModules.size());
         }
     }
@@ -228,6 +257,13 @@ public class WebSocketSessionService {
             "maxConnections", MAX_CONNECTIONS
         );
     }
+
+    public record SessionContext(
+            boolean device,
+            String role,
+            String deviceType,
+            Long sedeId,
+            Long moduleId,
+            Instant tokenExpiresAt) {}
     
 }
-

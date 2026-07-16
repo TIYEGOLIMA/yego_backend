@@ -12,6 +12,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.UUID;
+import java.time.Instant;
 
 /**
  * Handler para notificaciones WebSocket relacionadas con tickets
@@ -36,6 +38,7 @@ public class TicketNotificationHandler {
         
         filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
         filteredWebSocketService.convertAndSend("/topic/new-ticket", ticketCompleto);
+        publicarEventoTicket("TICKET_CREATED", ticket.getSedeId(), ticket.getModuleId(), ticketCompleto);
     }
     
     /**
@@ -45,6 +48,7 @@ public class TicketNotificationHandler {
         log.info("[TicketNotificationHandler] Enviando ticket llamado por WebSocket: {}", ticketCompleto.getTicketNumber());
         filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
         filteredWebSocketService.convertAndSend("/topic/ticket-called", ticketCompleto);
+        publicarEventoTicket("TICKET_CALLED", ticketCompleto.getSedeId(), ticketCompleto.getModuleId(), ticketCompleto);
     }
     
     /**
@@ -54,6 +58,7 @@ public class TicketNotificationHandler {
         log.info("[TicketNotificationHandler] Enviando ticket iniciado por WebSocket: {}", ticketCompleto.getTicketNumber());
         filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
         filteredWebSocketService.convertAndSend("/topic/ticket-started", ticketCompleto);
+        publicarEventoTicket("TICKET_STARTED", ticketCompleto.getSedeId(), ticketCompleto.getModuleId(), ticketCompleto);
     }
     
     /**
@@ -63,10 +68,19 @@ public class TicketNotificationHandler {
         log.info("[TicketNotificationHandler] Enviando ticket completado por WebSocket: {}", ticketCompleto.getTicketNumber());
         filteredWebSocketService.convertAndSend("/topic/tickets", ticketCompleto);
         filteredWebSocketService.convertAndSend("/topic/ticket-completed", ticketCompleto);
+        publicarEventoTicket("TICKET_COMPLETED", ticketCompleto.getSedeId(), ticketCompleto.getModuleId(), ticketCompleto);
         if (ticketCompleto.getSedeId() != null) {
             String sedeTopic = "/topic/ticketera/sede/" + ticketCompleto.getSedeId() + "/rating";
             filteredWebSocketService.convertAndSend(sedeTopic, ticketCompleto);
             log.info("[TicketNotificationHandler] Enviando rating a tablet sede {}: {}", ticketCompleto.getSedeId(), sedeTopic);
+        }
+        if (ticketCompleto.getSedeId() != null && ticketCompleto.getModuleId() != null) {
+            String ratingTopic = "/topic/ticketera/sedes/" + ticketCompleto.getSedeId()
+                    + "/modules/" + ticketCompleto.getModuleId() + "/rating";
+            filteredWebSocketService.convertAndSend(
+                    ratingTopic,
+                    crearEvento("TICKET_COMPLETED", ticketCompleto.getSedeId(),
+                            ticketCompleto.getModuleId(), ticketCompleto));
         }
     }
     
@@ -77,20 +91,7 @@ public class TicketNotificationHandler {
         log.info("[TicketNotificationHandler] Enviando ticket cancelado por WebSocket: {}", ticket.getTicketNumber());
         filteredWebSocketService.convertAndSend("/topic/tickets", ticket);
         filteredWebSocketService.convertAndSend("/topic/ticket-cancelled", ticket);
-    }
-    
-    /**
-     * Enviar evento genérico de ticketera
-     */
-    public void sendTicketeraEvent(String event, Object data) {
-        Map<String, Object> notification = Map.of(
-            "type", event,
-            "data", data,
-            "timestamp", java.time.LocalDateTime.now().toString()
-        );
-        
-        filteredWebSocketService.convertAndSend("/topic/ticketera", notification);
-        log.info("[TicketNotificationHandler] Ticketera: {} - Enviado a /topic/ticketera", event);
+        publicarEventoTicket("TICKET_CANCELLED", ticket.getSedeId(), ticket.getModuleId(), ticket);
     }
     
     /**
@@ -114,11 +115,34 @@ public class TicketNotificationHandler {
             
             // Enviar a /topic/modulos-atencion - esto afecta a TODOS los usuarios en sesión con acceso a "tickets"
             filteredWebSocketService.convertAndSend("/topic/modulos-atencion", notification);
+            if (modulosEstado.getSedeId() != null) {
+                filteredWebSocketService.convertAndSend(
+                        "/topic/ticketera/sedes/" + modulosEstado.getSedeId() + "/modules",
+                        crearEvento("MODULES_UPDATED", modulosEstado.getSedeId(), null, modulosEstado));
+            }
             
             log.info("[TicketNotificationHandler] Notificación WebSocket enviada correctamente a /topic/modulos-atencion");
         } catch (Exception e) {
             log.error("[TicketNotificationHandler] Error enviando módulos actualizados por WebSocket: {}", e.getMessage(), e);
         }
+    }
+
+    private void publicarEventoTicket(String type, Long sedeId, Long moduleId, Object data) {
+        if (sedeId == null) return;
+        filteredWebSocketService.convertAndSend(
+                "/topic/ticketera/sedes/" + sedeId + "/tickets",
+                crearEvento(type, sedeId, moduleId, data));
+    }
+
+    private Map<String, Object> crearEvento(String type, Long sedeId, Long moduleId, Object data) {
+        java.util.Map<String, Object> event = new java.util.HashMap<>();
+        event.put("eventId", UUID.randomUUID().toString());
+        event.put("type", type);
+        event.put("occurredAt", Instant.now().toString());
+        event.put("sedeId", sedeId);
+        event.put("moduleId", moduleId);
+        event.put("data", data);
+        return event;
     }
     
     /**
@@ -226,4 +250,3 @@ public class TicketNotificationHandler {
         }
     }
 }
-

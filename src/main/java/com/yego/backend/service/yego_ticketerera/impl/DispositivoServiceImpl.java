@@ -25,6 +25,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
+import java.time.Instant;
 
 @Service
 @RequiredArgsConstructor
@@ -37,7 +40,7 @@ public class DispositivoServiceImpl implements DispositivoService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
 
-    @Value("${jwt.device-expiration:2592000}")
+    @Value("${jwt.device-expiration:604800}")
     private long deviceTokenExpirationSeconds;
 
     @Override
@@ -161,16 +164,61 @@ public class DispositivoServiceImpl implements DispositivoService {
 
         String sedeNombre = sedeRepository.findById(dispositivo.getSedeId()).map(Sede::getName).orElse(null);
 
+        return crearRespuestaSesion(dispositivo, sedeNombre);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<String, Object> refrescarSesionDispositivo(String jwt) {
+        final Claims claims;
+        try {
+            claims = jwtTokenProvider.parse(jwt);
+        } catch (JwtException | IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token de dispositivo inválido o expirado");
+        }
+
+        Long dispositivoId = claimLong(claims, "dispositivoId");
+        if (dispositivoId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "El token no corresponde a un dispositivo");
+        }
+
+        Dispositivo dispositivo = dispositivoRepository.findById(dispositivoId)
+                .filter(item -> Boolean.TRUE.equals(item.getActive()))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Dispositivo inactivo"));
+
+        int tokenVersion = claimInteger(claims, "tokenVersion", 0);
+        int currentVersion = dispositivo.getTokenVersion() != null ? dispositivo.getTokenVersion() : 0;
+        if (tokenVersion != currentVersion) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Sesión del dispositivo revocada");
+        }
+
+        String sedeNombre = sedeRepository.findById(dispositivo.getSedeId()).map(Sede::getName).orElse(null);
+        return crearRespuestaSesion(dispositivo, sedeNombre);
+    }
+
+    private Map<String, Object> crearRespuestaSesion(Dispositivo dispositivo, String sedeNombre) {
+        String accessToken = generarJwtDispositivo(dispositivo);
         Map<String, Object> result = new HashMap<>();
-        result.put("accessToken", generarJwtDispositivo(dispositivo));
+        result.put("accessToken", accessToken);
         result.put("dispositivoId", dispositivo.getId());
         result.put("nombre", dispositivo.getName());
         result.put("tipo", dispositivo.getType());
         result.put("sedeId", dispositivo.getSedeId());
         result.put("sedeNombre", sedeNombre);
         result.put("moduleId", dispositivo.getModuleId());
+        result.put("expiresAt", Instant.now().plusSeconds(deviceTokenExpirationSeconds).toString());
         log.info("[Dispositivo] Auth exitosa: {} (id={})", dispositivo.getName(), dispositivo.getId());
         return result;
+    }
+
+    private static Long claimLong(Claims claims, String name) {
+        Object value = claims.get(name);
+        return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private static int claimInteger(Claims claims, String name, int fallback) {
+        Object value = claims.get(name);
+        return value instanceof Number number ? number.intValue() : fallback;
     }
 
     private static final char[] TOKEN_ALPHABET =

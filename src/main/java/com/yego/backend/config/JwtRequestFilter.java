@@ -54,6 +54,12 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
+
+        // El JWT no viaja en la URL. Un ticket efímero se valida y consume en STOMP CONNECT.
+        if (request.getRequestURI().equals("/ws") && hasQueryParameter(request, "ticket")) {
+            chain.doFilter(request, response);
+            return;
+        }
         
         String username = null;
         String jwtToken = null;
@@ -118,6 +124,17 @@ public class JwtRequestFilter extends OncePerRequestFilter {
                         return;
                     }
                     request.setAttribute("jwtClaims", claims);
+                    if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                        UsernamePasswordAuthenticationToken deviceAuthentication =
+                                new UsernamePasswordAuthenticationToken(
+                                        "device-" + dispositivoIdClaim,
+                                        null,
+                                        List.of(new SimpleGrantedAuthority("ROLE_DEVICE"))
+                                );
+                        deviceAuthentication.setDetails(
+                                new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(deviceAuthentication);
+                    }
                     chain.doFilter(request, response);
                     return;
                 }
@@ -262,6 +279,16 @@ public class JwtRequestFilter extends OncePerRequestFilter {
     private static Long getLongClaim(Claims claims, String name) {
         Object value = claims.get(name);
         return value instanceof Number number ? number.longValue() : null;
+    }
+
+    private static boolean hasQueryParameter(HttpServletRequest request, String name) {
+        String query = request.getQueryString();
+        if (query == null || query.isBlank()) return false;
+        String prefix = name + "=";
+        for (String parameter : query.split("&")) {
+            if (parameter.startsWith(prefix) && parameter.length() > prefix.length()) return true;
+        }
+        return false;
     }
 
     private static Integer getIntegerClaim(Claims claims, String name) {

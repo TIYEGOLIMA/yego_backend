@@ -123,15 +123,15 @@ public class SacStatsServiceImpl implements SacStatsService {
         
         // 5. Obtener todos los tickets de usuarios SAC (con o sin filtro de fecha y sede)
         List<Ticket> allSacTickets;
-        if (tieneFiltroFecha) {
+        if (tieneFiltroFecha && sedeId != null) {
+            allSacTickets = ticketRepository.findByUserIdInAndSedeIdAndCreatedAtBetween(
+                    userIds, sedeId, fechaInicioDT, fechaFinDT);
+        } else if (tieneFiltroFecha) {
             allSacTickets = ticketRepository.findByUserIdInAndCreatedAtBetween(userIds, fechaInicioDT, fechaFinDT);
+        } else if (sedeId != null) {
+            allSacTickets = ticketRepository.findByUserIdInAndSedeId(userIds, sedeId);
         } else {
             allSacTickets = ticketRepository.findByUserIdIn(userIds);
-        }
-        if (sedeId != null) {
-            allSacTickets = allSacTickets.stream()
-                    .filter(t -> sedeId.equals(t.getSedeId()))
-                    .collect(Collectors.toList());
         }
         Map<Long, List<Ticket>> ticketsByUserId = allSacTickets.stream()
                 .collect(Collectors.groupingBy(Ticket::getUserId));
@@ -158,15 +158,10 @@ public class SacStatsServiceImpl implements SacStatsService {
             ratingsByTicketId = new HashMap<>();
         }
         
-        // 8. Calcular rendimiento de cada SAC (sin queries adicionales)
-        List<SacPerformanceResponse> sacPerformance = sacUsers.stream()
-                .map(user -> calcularRendimientoSacOptimizado(
-                    user, 
-                    ticketsByUserId.getOrDefault(user.getId(), Collections.emptyList()),
-                    ratingsByTicketId,
-                    sedeMap
-                ))
-                .collect(Collectors.toList());
+        // 8. Calcular rendimiento por SAC y por sede real del ticket.
+        // Un operador puede tener historial en más de una sede si fue reasignado.
+        List<SacPerformanceResponse> sacPerformance = calcularRendimientoPorSede(
+                sacUsers, ticketsByUserId, ratingsByTicketId, sedeMap, sedeId);
         
         // 9. Obtener top performers
         List<SacPerformanceResponse> topPerformers = sacPerformance.stream()
@@ -178,7 +173,12 @@ public class SacStatsServiceImpl implements SacStatsService {
         // 10. Obtener calificaciones recientes (solo las últimas 10, con o sin filtro de fecha)
         Pageable pageable = PageRequest.of(0, 10);
         List<QueueRating> recentRatings;
-        if (tieneFiltroFecha) {
+        if (sedeId != null && tieneFiltroFecha) {
+            recentRatings = queueRatingRepository.findRecentRatingsBySedeIdAndDateRange(
+                    pageable, sedeId, fechaInicioDT, fechaFinDT);
+        } else if (sedeId != null) {
+            recentRatings = queueRatingRepository.findRecentRatingsBySedeId(pageable, sedeId);
+        } else if (tieneFiltroFecha) {
             recentRatings = queueRatingRepository.findRecentRatingsByDateRange(pageable, fechaInicioDT, fechaFinDT);
         } else {
             recentRatings = queueRatingRepository.findRecentRatings(pageable);
@@ -248,11 +248,12 @@ public class SacStatsServiceImpl implements SacStatsService {
             User sacUser,
             List<Ticket> sacTickets,
             Map<Long, List<QueueRating>> ratingsByTicketId,
-            Map<Long, String> sedeMap) {
+            Map<Long, String> sedeMap,
+            Long performanceSedeId) {
         
         Long userId = sacUser.getId();
         
-        Long sedeId = sacUser.getSedeId();
+        Long sedeId = performanceSedeId;
         String sedeName = (sedeId != null && sedeMap.containsKey(sedeId))
                 ? sedeMap.get(sedeId)
                 : "Sin sede";
@@ -309,6 +310,44 @@ public class SacStatsServiceImpl implements SacStatsService {
                 .averageResponseTime(averageResponseTime)
                 .ratings(ratings)
                 .build();
+    }
+
+    private List<SacPerformanceResponse> calcularRendimientoPorSede(
+            List<User> sacUsers,
+            Map<Long, List<Ticket>> ticketsByUserId,
+            Map<Long, List<QueueRating>> ratingsByTicketId,
+            Map<Long, String> sedeMap,
+            Long sedeIdFiltro) {
+        List<SacPerformanceResponse> performance = new ArrayList<>();
+
+        for (User user : sacUsers) {
+            List<Ticket> userTickets = ticketsByUserId.getOrDefault(user.getId(), Collections.emptyList());
+
+            if (sedeIdFiltro != null) {
+                if (!userTickets.isEmpty() || sedeIdFiltro.equals(user.getSedeId())) {
+                    performance.add(calcularRendimientoSacOptimizado(
+                            user, userTickets, ratingsByTicketId, sedeMap, sedeIdFiltro));
+                }
+                continue;
+            }
+
+            Map<Long, List<Ticket>> ticketsBySede = userTickets.stream()
+                    .filter(ticket -> ticket.getSedeId() != null)
+                    .collect(Collectors.groupingBy(Ticket::getSedeId));
+
+            if (ticketsBySede.isEmpty()) {
+                performance.add(calcularRendimientoSacOptimizado(
+                        user, Collections.emptyList(), ratingsByTicketId, sedeMap, user.getSedeId()));
+                continue;
+            }
+
+            ticketsBySede.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> performance.add(calcularRendimientoSacOptimizado(
+                            user, entry.getValue(), ratingsByTicketId, sedeMap, entry.getKey())));
+        }
+
+        return performance;
     }
     
     private String calcularTiempoPromedioRespuesta(List<Ticket> tickets) {

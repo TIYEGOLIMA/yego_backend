@@ -26,5 +26,7 @@ public interface DispositivoService {
 
     Map<String, Object> autenticarDispositivo(String accessToken);
 
+    Map<String, Object> refrescarSesionDispositivo(String jwt);
+
     String generarTokenAcceso();
 }

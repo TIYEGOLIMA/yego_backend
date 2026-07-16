@@ -38,22 +38,4 @@ public class WebSocketController {
         return message;
     }
     
-    /**
-     * Endpoint para eventos de Ticketera
-     */
-    @MessageMapping("/ticketera")
-    @SendTo("/topic/ticketera")
-    public Map<String, Object> handleTicketeraEvent(@Payload Map<String, Object> event, 
-                                                    SimpMessageHeaderAccessor headerAccessor) {
-        Authentication auth = (Authentication) headerAccessor.getUser();
-        String username = auth != null ? auth.getName() : "anonymous";
-        
-        log.info("[WebSocket] Ticketera desde {}: {}", username, event);
-        
-        event.put("timestamp", LocalDateTime.now().toString());
-        event.put("from", username);
-        
-        return event;
-    }
-    
 }

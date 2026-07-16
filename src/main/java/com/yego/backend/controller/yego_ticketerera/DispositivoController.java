@@ -7,6 +7,9 @@ import com.yego.backend.service.yego_ticketerera.DispositivoService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -56,5 +59,14 @@ public class DispositivoController {
     @PostMapping("/auth")
     public ResponseEntity<Map<String, Object>> autenticar(@Valid @RequestBody DispositivoAuthRequest request) {
         return ResponseEntity.ok(dispositivoService.autenticarDispositivo(request.getAccessToken()));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<Map<String, Object>> refrescarSesion(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token de dispositivo requerido");
+        }
+        return ResponseEntity.ok(dispositivoService.refrescarSesionDispositivo(authorization.substring(7).trim()));
     }
 }

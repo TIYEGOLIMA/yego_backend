@@ -10,6 +10,8 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
+import com.yego.backend.service.yego_principal.WebSocketConnectionRegistry;
 
 import java.util.Arrays;
 import java.util.List;
@@ -32,6 +34,7 @@ import java.util.List;
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     
     private final WebSocketAuthInterceptor webSocketAuthInterceptor;
+    private final WebSocketConnectionRegistry connectionRegistry;
     
     @Autowired(required = false)
     private TaskScheduler taskScheduler;
@@ -96,6 +99,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     }
 
     @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
+        registration.addDecoratorFactory(connectionRegistry::decorate);
+    }
+
+    @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         String[] allowedOrigins = ALLOWED_ORIGINS.toArray(new String[0]);
         
@@ -109,4 +117,3 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         log.info("✅ [WebSocket] Endpoint /ws configurado (WebSocket nativo) - Orígenes permitidos: {}", String.join(", ", ALLOWED_ORIGINS));
     }
 }
-

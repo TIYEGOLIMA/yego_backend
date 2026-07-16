@@ -39,6 +39,18 @@ public interface QueueRatingRepository extends JpaRepository<QueueRating, Long> 
                                                    @Param("fechaInicio") LocalDateTime fechaInicio,
                                                    @Param("fechaFin") LocalDateTime fechaFin);
 
+    @Query("SELECT qr FROM QueueRating qr JOIN qr.ticket t WHERE t.sedeId = :sedeId ORDER BY qr.createdAt DESC")
+    List<QueueRating> findRecentRatingsBySedeId(org.springframework.data.domain.Pageable pageable,
+                                                @Param("sedeId") Long sedeId);
+
+    @Query("SELECT qr FROM QueueRating qr JOIN qr.ticket t WHERE t.sedeId = :sedeId " +
+           "AND qr.createdAt >= :fechaInicio AND qr.createdAt <= :fechaFin ORDER BY qr.createdAt DESC")
+    List<QueueRating> findRecentRatingsBySedeIdAndDateRange(
+            org.springframework.data.domain.Pageable pageable,
+            @Param("sedeId") Long sedeId,
+            @Param("fechaInicio") LocalDateTime fechaInicio,
+            @Param("fechaFin") LocalDateTime fechaFin);
+
     @Query("SELECT COUNT(qr) FROM QueueRating qr JOIN qr.ticket t WHERE t.sedeId = :sedeId")
     long countBySedeId(@Param("sedeId") Long sedeId);
 

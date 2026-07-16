@@ -1,10 +1,12 @@
 package com.yego.backend.scheduler;
 
 import com.yego.backend.service.yego_principal.WebSocketSessionService;
+import com.yego.backend.service.yego_principal.WebSocketConnectionRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.web.socket.CloseStatus;
 
 /**
  * Scheduler para limpiar conexiones WebSocket inactivas
@@ -17,6 +19,15 @@ import org.springframework.stereotype.Component;
 public class WebSocketCleanupScheduler {
     
     private final WebSocketSessionService webSocketSessionService;
+    private final WebSocketConnectionRegistry connectionRegistry;
+
+    @Scheduled(fixedRate = 60000)
+    public void closeExpiredTokenConnections() {
+        for (String sessionId : webSocketSessionService.getExpiredSessionIds()) {
+            connectionRegistry.close(sessionId, new CloseStatus(4001, "JWT expired"));
+            webSocketSessionService.removeSession(sessionId);
+        }
+    }
     
     /**
      * Limpia conexiones WebSocket inactivas cada 30 minutos
@@ -54,4 +65,3 @@ public class WebSocketCleanupScheduler {
         }
     }
 }
-

@@ -41,6 +41,18 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
                                                    @Param("fechaInicio") java.time.LocalDateTime fechaInicio,
                                                    @Param("fechaFin") java.time.LocalDateTime fechaFin);
 
+    @Query("SELECT t FROM Ticket t WHERE t.userId IN :userIds AND t.sedeId = :sedeId")
+    List<Ticket> findByUserIdInAndSedeId(@Param("userIds") List<Long> userIds,
+                                         @Param("sedeId") Long sedeId);
+
+    @Query("SELECT t FROM Ticket t WHERE t.userId IN :userIds AND t.sedeId = :sedeId " +
+           "AND t.createdAt >= :fechaInicio AND t.createdAt <= :fechaFin")
+    List<Ticket> findByUserIdInAndSedeIdAndCreatedAtBetween(
+            @Param("userIds") List<Long> userIds,
+            @Param("sedeId") Long sedeId,
+            @Param("fechaInicio") java.time.LocalDateTime fechaInicio,
+            @Param("fechaFin") java.time.LocalDateTime fechaFin);
+
     List<Ticket> findBySedeIdAndStatusOrderByCreatedAtAsc(Long sedeId, TicketStatus status);
 
     @Query("SELECT COUNT(t) FROM Ticket t WHERE t.sedeId = :sedeId AND t.status = :status")
