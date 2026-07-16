@@ -163,8 +163,9 @@ public class DispositivoServiceImpl implements DispositivoService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Token de acceso inválido"));
 
         String sedeNombre = sedeRepository.findById(dispositivo.getSedeId()).map(Sede::getName).orElse(null);
-
-        return crearRespuestaSesion(dispositivo, sedeNombre);
+        Map<String, Object> response = crearRespuestaSesion(dispositivo, sedeNombre);
+        log.info("[Dispositivo] Activación exitosa: {} (id={})", dispositivo.getName(), dispositivo.getId());
+        return response;
     }
 
     @Override
@@ -193,7 +194,9 @@ public class DispositivoServiceImpl implements DispositivoService {
         }
 
         String sedeNombre = sedeRepository.findById(dispositivo.getSedeId()).map(Sede::getName).orElse(null);
-        return crearRespuestaSesion(dispositivo, sedeNombre);
+        Map<String, Object> response = crearRespuestaSesion(dispositivo, sedeNombre);
+        log.debug("[Dispositivo] Sesión renovada: {} (id={})", dispositivo.getName(), dispositivo.getId());
+        return response;
     }
 
     private Map<String, Object> crearRespuestaSesion(Dispositivo dispositivo, String sedeNombre) {
@@ -207,7 +210,6 @@ public class DispositivoServiceImpl implements DispositivoService {
         result.put("sedeNombre", sedeNombre);
         result.put("moduleId", dispositivo.getModuleId());
         result.put("expiresAt", Instant.now().plusSeconds(deviceTokenExpirationSeconds).toString());
-        log.info("[Dispositivo] Auth exitosa: {} (id={})", dispositivo.getName(), dispositivo.getId());
         return result;
     }
 
