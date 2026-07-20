@@ -48,7 +48,8 @@ class MobileShiftServiceTest {
                 vehicleRepository,
                 driverOrdersService,
                 new ObjectMapper(),
-                lockService
+                lockService,
+                new MobileShiftResponseMapper(new ObjectMapper())
         );
     }
 

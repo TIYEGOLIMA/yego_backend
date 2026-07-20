@@ -1,6 +1,8 @@
 package com.yego.backend.repository.yego_pro_ops;
 
 import com.yego.backend.entity.yego_pro_ops.entities.ShiftSession;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -25,6 +27,8 @@ public interface ShiftSessionRepository extends JpaRepository<ShiftSession, UUID
 
     @Query("SELECT s FROM ShiftSession s WHERE s.driverId = :driverId AND s.deleted = false ORDER BY s.startedAt DESC")
     List<ShiftSession> findByDriverIdOrderByStartedAtDesc(@Param("driverId") String driverId);
+
+    Page<ShiftSession> findByDriverIdAndDeletedFalseOrderByStartedAtDescIdDesc(String driverId, Pageable pageable);
 
     @Query("SELECT s FROM ShiftSession s WHERE s.driverId = :driverId AND s.deleted = false AND s.startedAt BETWEEN :desde AND :hasta ORDER BY s.startedAt ASC")
     List<ShiftSession> findByDriverIdAndStartedAtBetweenOrderByStartedAtAsc(@Param("driverId") String driverId, @Param("desde") LocalDateTime desde, @Param("hasta") LocalDateTime hasta);

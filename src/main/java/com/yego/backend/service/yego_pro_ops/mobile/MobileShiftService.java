@@ -28,7 +28,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -57,6 +56,7 @@ public class MobileShiftService {
     private final DriverOrdersService driverOrdersService;
     private final ObjectMapper objectMapper;
     private final DatabaseLockService lockService;
+    private final MobileShiftResponseMapper responseMapper;
 
     // ─── Abrir Turno ─────────────────────────────────────────────
 
@@ -100,7 +100,7 @@ public class MobileShiftService {
 
         log.info("Turno abierto: session={}, driver={}, placa={}", session.getId(), driverId, req.getPlaca());
 
-        return buildResponse(session, close, vehicle, null);
+        return responseMapper.toResponse(session, close, vehicle);
     }
 
     // ─── Resumen Yango (ANTES de cerrar) ─────────────────────────
@@ -143,7 +143,7 @@ public class MobileShiftService {
         ShiftSession session = findSession(sessionId);
         if (!"active".equals(session.getStatus()) && session.getClosedAt() != null) {
             log.info("Reintento de cierre ya confirmado: session={}, status={}", sessionId, session.getStatus());
-            return buildResponse(session, findClose(sessionId), null, null);
+            return responseMapper.toResponse(session, findClose(sessionId), null);
         }
         validateActive(session);
         DriverClose close = findClose(sessionId);
@@ -200,7 +200,7 @@ public class MobileShiftService {
         log.info("Turno cerrado: session={}, driver={}, kmRecorridos={}",
                 sessionId, session.getDriverId(), req.getKmFinal() - close.getOdometroInicial());
 
-        return buildResponse(session, close, null, trips);
+        return responseMapper.toResponse(session, close, null);
     }
 
     // ─── Consultas ────────────────────────────────────────────────
@@ -210,7 +210,7 @@ public class MobileShiftService {
         return shiftRepo.findByDriverIdAndStatusAndDeletedFalse(driverId, "active")
                 .map(session -> {
                     DriverClose close = findCloseBySessionId(session.getId());
-                    return buildResponse(session, close, null, null);
+                    return responseMapper.toResponse(session, close, null);
                 });
     }
 
@@ -221,7 +221,7 @@ public class MobileShiftService {
                 .filter(s -> !"active".equals(s.getStatus()))
                 .map(session -> {
                     DriverClose close = findCloseBySessionId(session.getId());
-                    return buildResponse(session, close, null, null);
+                    return responseMapper.toResponse(session, close, null);
                 })
                 .collect(Collectors.toList());
     }
@@ -379,65 +379,6 @@ public class MobileShiftService {
         }
     }
 
-    private MobileShiftResponse buildResponse(
-            ShiftSession session, DriverClose close,
-            FleetVehicle vehicle, YangoTripResult trips
-    ) {
-        Integer kmRecorridos = close != null && close.getOdometroFinal() != null
-                ? close.getOdometroFinal() - close.getOdometroInicial() : null;
-
-        BigDecimal totalGastos = BigDecimal.ZERO
-                .add(nvl(close.getGasolinaSoles()))
-                .add(nvl(close.getGnvSoles()))
-                .add(nvl(close.getOtrosGastos()));
-
-        BigDecimal totalIngresos = nvl(close.getLiquidaEfectivo())
-                .add(nvl(close.getLiquidaYape()));
-
-        BigDecimal balance = totalIngresos.subtract(totalGastos);
-
-        return MobileShiftResponse.builder()
-                .sessionId(session.getId().toString())
-                .driverId(session.getDriverId())
-                .placa(close != null ? close.getPlaca() : null)
-                .marca(vehicle != null ? vehicle.getBrand() : null)
-                .modelo(vehicle != null ? vehicle.getModel() : null)
-                .startedAt(toInstant(session.getStartedAt()))
-                .closedAt(toInstant(session.getClosedAt()))
-                .duracion(session.getClosedAt() != null
-                        ? formatDuration(session.getStartedAt(), session.getClosedAt()) : null)
-                .kmInicial(close != null ? close.getOdometroInicial() : null)
-                .kmFinal(close != null ? close.getOdometroFinal() : null)
-                .kmRecorridos(kmRecorridos)
-                .status(session.getStatus())
-                .totalViajes(trips != null ? trips.viajes : session.getTotalTrips())
-                .producido(trips != null ? trips.producido : session.getTotalAmount())
-                .efectivoYango(trips != null ? trips.efectivo : session.getTotalCash())
-                .yapeYango(trips != null ? trips.yape : BigDecimal.ZERO)
-                .efectivo(close != null ? close.getLiquidaEfectivo() : null)
-                .yape(close != null ? close.getLiquidaYape() : null)
-                .numeroOperacion(close != null ? close.getOperacionYape() : null)
-                .gasolinaMonto(close != null ? close.getGasolinaSoles() : null)
-                .gasolinaGalones(close != null && close.getGasolinaGalones() != null
-                        ? new BigDecimal(close.getGasolinaGalones()) : null)
-                .gnvMonto(close != null ? close.getGnvSoles() : null)
-                .gnvM3(close != null && close.getGnvM3() != null
-                        ? new BigDecimal(close.getGnvM3()) : null)
-                .otrosGastos(close != null ? close.getOtrosGastos() : null)
-                .totalGastos(totalGastos)
-                .totalIngresos(totalIngresos)
-                .balance(balance)
-                .carPhotos(close != null ? fromJson(close.getCarPhotos()) : Collections.emptyList())
-                .selfieUri(close != null ? close.getSelfieUri() : null)
-                .carPhotosCierre(close != null ? fromJson(close.getCarPhotosCierre()) : Collections.emptyList())
-                .fotosEvidencia(close != null ? fromJson(close.getFotosEvidencia()) : Collections.emptyList())
-                .observaciones(close != null ? close.getObservacionesCierre() : null)
-                .mantenimientoRequerido(close != null && close.getMantenimientoRequerido() != null
-                        ? close.getMantenimientoRequerido() : false)
-                .mantenimientoDescripcion(close != null ? close.getMantenimientoDescripcion() : null)
-                .build();
-    }
-
     // ─── Utilidades ──────────────────────────────────────────────
 
     private LocalDateTime now() { return LocalDateTime.now(); }
@@ -477,17 +418,6 @@ public class MobileShiftService {
         } catch (Exception e) {
             log.warn("Error serializando JSON: {}", e.getMessage());
             return null;
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<String> fromJson(String json) {
-        if (json == null || json.isBlank()) return Collections.emptyList();
-        try {
-            return objectMapper.readValue(json, List.class);
-        } catch (Exception e) {
-            log.warn("Error deserializando JSON: {}", e.getMessage());
-            return Collections.emptyList();
         }
     }
 

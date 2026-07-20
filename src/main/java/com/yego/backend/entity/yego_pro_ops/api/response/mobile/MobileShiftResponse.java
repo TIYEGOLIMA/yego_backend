@@ -17,6 +17,7 @@ public class MobileShiftResponse {
 
     private String sessionId;
     private String driverId;
+    private String vehicleId;
     private String placa;
     private String marca;
     private String modelo;
