@@ -143,4 +143,37 @@ class MobileShiftServiceTest {
         assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
         verifyNoInteractions(driverOrdersService);
     }
+
+    @Test
+    void closeRejectsIncompleteYapePaymentBeforeCallingYango() {
+        UUID sessionId = UUID.randomUUID();
+        ShiftSession session = ShiftSession.builder()
+                .id(sessionId)
+                .driverId("driver-1")
+                .status("active")
+                .startedAt(LocalDateTime.of(2026, 7, 20, 8, 0))
+                .build();
+        DriverClose close = DriverClose.builder()
+                .shiftSessionId(sessionId)
+                .odometroInicial(15000)
+                .build();
+        CloseShiftMobileRequest request = new CloseShiftMobileRequest();
+        request.setKmFinal(15050);
+        request.setYape(new BigDecimal("25.00"));
+        request.setNumeroOperacion("123456");
+        when(shiftRepository.findById(sessionId)).thenReturn(Optional.of(session));
+        when(closeRepository.findFirstByShiftSessionIdOrderByIdDesc(sessionId)).thenReturn(Optional.of(close));
+
+        ResponseStatusException error = assertThrows(
+                ResponseStatusException.class,
+                () -> service.closeShift(sessionId.toString(), request)
+        );
+
+        assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+        assertEquals(
+                "Yape/Plin requiere monto, numero de operacion y comprobante",
+                error.getReason()
+        );
+        verifyNoInteractions(driverOrdersService);
+    }
 }

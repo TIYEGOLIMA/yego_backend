@@ -37,6 +37,7 @@ public class MobileShiftResponse {
     private BigDecimal efectivo;
     private BigDecimal yape;
     private String numeroOperacion;
+    private String yapeComprobanteUri;
 
     private BigDecimal gasolinaMonto;
     private BigDecimal gasolinaGalones;

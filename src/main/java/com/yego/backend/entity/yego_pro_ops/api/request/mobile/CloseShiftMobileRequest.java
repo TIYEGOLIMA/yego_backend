@@ -31,6 +31,8 @@ public class CloseShiftMobileRequest {
 
     private String numeroOperacion;
 
+    private String yapeComprobanteUri;
+
     private BigDecimal gasolinaMonto;
 
     private BigDecimal gasolinaGalones;

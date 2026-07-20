@@ -153,6 +153,7 @@ public class MobileShiftService {
                     "El kilometraje final no puede ser menor al inicial"
             );
         }
+        validateYapePayment(req);
 
         LocalDateTime closedAt = now();
 
@@ -181,7 +182,8 @@ public class MobileShiftService {
         close.setDiferenciaOdometro(req.getKmFinal() - close.getOdometroInicial());
         close.setLiquidaEfectivo(req.getEfectivo());
         close.setLiquidaYape(req.getYape());
-        close.setOperacionYape(req.getNumeroOperacion());
+        close.setOperacionYape(trimToNull(req.getNumeroOperacion()));
+        close.setYapeComprobanteUri(trimToNull(req.getYapeComprobanteUri()));
         close.setGasolinaSoles(req.getGasolinaMonto());
         close.setGasolinaGalones(req.getGasolinaGalones() != null
                 ? req.getGasolinaGalones().toString() : null);
@@ -201,6 +203,29 @@ public class MobileShiftService {
                 sessionId, session.getDriverId(), req.getKmFinal() - close.getOdometroInicial());
 
         return responseMapper.toResponse(session, close, null);
+    }
+
+    private void validateYapePayment(CloseShiftMobileRequest request) {
+        boolean hasAmount = request.getYape() != null
+                && request.getYape().compareTo(BigDecimal.ZERO) > 0;
+        boolean hasOperation = hasText(request.getNumeroOperacion());
+        boolean hasReceipt = hasText(request.getYapeComprobanteUri());
+        boolean hasYapeData = hasAmount || hasOperation || hasReceipt;
+
+        if (hasYapeData && !(hasAmount && hasOperation && hasReceipt)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Yape/Plin requiere monto, numero de operacion y comprobante"
+            );
+        }
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private String trimToNull(String value) {
+        return hasText(value) ? value.trim() : null;
     }
 
     // ─── Consultas ────────────────────────────────────────────────

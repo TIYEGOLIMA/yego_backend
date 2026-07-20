@@ -63,6 +63,9 @@ public class DriverClose {
     @Column(name = "operacion_yape", length = 50)
     private String operacionYape;
 
+    @Column(name = "yape_comprobante_uri", columnDefinition = "TEXT")
+    private String yapeComprobanteUri;
+
     @Column(name = "adelanto", precision = 10, scale = 2)
     private BigDecimal adelanto;
 
@@ -139,4 +142,3 @@ public class DriverClose {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 }
-

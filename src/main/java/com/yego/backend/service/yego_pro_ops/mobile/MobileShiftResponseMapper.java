@@ -54,6 +54,7 @@ public class MobileShiftResponseMapper {
                 .efectivo(close != null ? close.getLiquidaEfectivo() : null)
                 .yape(close != null ? close.getLiquidaYape() : null)
                 .numeroOperacion(close != null ? close.getOperacionYape() : null)
+                .yapeComprobanteUri(close != null ? close.getYapeComprobanteUri() : null)
                 .gasolinaMonto(close != null ? close.getGasolinaSoles() : null)
                 .gasolinaGalones(close != null ? decimalOrNull(close.getGasolinaGalones()) : null)
                 .gnvMonto(close != null ? close.getGnvSoles() : null)

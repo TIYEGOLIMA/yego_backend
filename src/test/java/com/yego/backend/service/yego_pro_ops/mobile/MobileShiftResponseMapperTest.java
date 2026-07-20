@@ -40,6 +40,8 @@ class MobileShiftResponseMapperTest {
                 .odometroFinal(1085)
                 .liquidaEfectivo(new BigDecimal("110.00"))
                 .liquidaYape(new BigDecimal("20.00"))
+                .operacionYape("987654")
+                .yapeComprobanteUri("https://files/yape.jpg")
                 .gasolinaSoles(new BigDecimal("25.00"))
                 .gnvSoles(new BigDecimal("10.00"))
                 .otrosGastos(new BigDecimal("5.00"))
@@ -54,6 +56,7 @@ class MobileShiftResponseMapperTest {
         assertEquals(new BigDecimal("40.00"), response.getTotalGastos());
         assertEquals(new BigDecimal("130.00"), response.getTotalIngresos());
         assertEquals(new BigDecimal("90.00"), response.getBalance());
+        assertEquals("https://files/yape.jpg", response.getYapeComprobanteUri());
         assertEquals(1, response.getFotosEvidencia().size());
     }
 }
