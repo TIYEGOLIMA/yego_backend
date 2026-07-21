@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.math.BigDecimal;
 import java.net.URI;
@@ -85,8 +86,22 @@ public class VehicleServiceImpl implements VehicleService {
 
     @Override
     public Map<String, Object> listarVehiculosYango(String parkId, String cursor) {
+        return consultarVehiculosYango(parkId, cursor, false);
+    }
+
+    private Map<String, Object> consultarVehiculosYango(String parkId, String cursor, boolean omitirCache) {
         try {
             HttpHeaders headers = crearHeaders(parkId);
+            URI endpoint = URI.create(YANGO_VEHICLES_URL);
+            if (omitirCache) {
+                headers.setCacheControl("no-cache, no-store, max-age=0");
+                headers.setPragma("no-cache");
+                headers.set("X-Request-ID", UUID.randomUUID().toString());
+                endpoint = UriComponentsBuilder.fromUriString(YANGO_VEHICLES_URL)
+                        .queryParam("_ts", System.currentTimeMillis())
+                        .build(true)
+                        .toUri();
+            }
             Map<String, Object> body = new HashMap<>();
             body.put("limit", 30);
             body.put("query", Map.of("car", Map.of(
@@ -98,10 +113,10 @@ public class VehicleServiceImpl implements VehicleService {
                 body.put("cursor", cursor);
             }
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-            ResponseEntity<Map> response = restTemplate.exchange(YANGO_VEHICLES_URL, HttpMethod.POST, request, Map.class);
+            ResponseEntity<Map> response = restTemplate.exchange(endpoint, HttpMethod.POST, request, Map.class);
             return response.getBody() != null ? response.getBody() : Map.of("total", 0, "cars", List.of());
         } catch (Exception e) {
-            log.error("Error listando vehículos Yango: {}", e.getMessage());
+            log.error("Error listando vehículos Yango (omitirCache={}): {}", omitirCache, e.getMessage());
             return Map.of("total", 0, "cars", List.of());
         }
     }
@@ -255,7 +270,7 @@ public class VehicleServiceImpl implements VehicleService {
         String cursor = null;
         try {
             do {
-                Map<String, Object> page = listarVehiculosYango(segment.getParkId(), cursor);
+                Map<String, Object> page = consultarVehiculosYango(segment.getParkId(), cursor, true);
                 Object carsObj = page.get("cars");
                 if (carsObj instanceof List) {
                     @SuppressWarnings("unchecked")

@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -63,9 +65,11 @@ public class VehicleController {
     // ── Flota cacheada (segmentación) ──
 
     @GetMapping("/fleet")
-    public Map<String, Object> listarFlotaGuardada(@RequestParam(required = false) UUID segmentId) {
+    public ResponseEntity<Map<String, Object>> listarFlotaGuardada(@RequestParam(required = false) UUID segmentId) {
         List<FleetVehicleResponse> cars = vehicleService.listarVehiculosGuardados(segmentId);
-        return Map.of("total", cars.size(), "cars", cars);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(Map.of("total", cars.size(), "cars", cars));
     }
 
     @PostMapping("/fleet/sync")
