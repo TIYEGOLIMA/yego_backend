@@ -55,6 +55,8 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     List<Ticket> findBySedeIdAndStatusOrderByCreatedAtAsc(Long sedeId, TicketStatus status);
 
+    List<Ticket> findBySedeId(Long sedeId);
+
     @Query("SELECT COUNT(t) FROM Ticket t WHERE t.sedeId = :sedeId AND t.status = :status")
     long countBySedeIdAndStatus(@Param("sedeId") Long sedeId, @Param("status") TicketStatus status);
 

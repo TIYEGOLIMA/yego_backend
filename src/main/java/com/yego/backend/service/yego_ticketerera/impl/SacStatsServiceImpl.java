@@ -6,14 +6,22 @@ import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.Re
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.SacPerformanceResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.SacPerformanceResponse.RatingResponse;
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.HourlyDistribution;
+import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.TicketTraceEventResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse.TicketTraceabilityResponse;
+import com.yego.backend.entity.yego_ticketerera.entities.ModuloAtencion;
+import com.yego.backend.entity.yego_ticketerera.entities.Option;
 import com.yego.backend.entity.yego_ticketerera.entities.QueueRating;
+import com.yego.backend.entity.yego_ticketerera.entities.QueueTicketHistory;
 import com.yego.backend.entity.yego_ticketerera.entities.Sede;
 import com.yego.backend.entity.yego_ticketerera.entities.Ticket;
 import com.yego.backend.repository.yego_principal.UserRepository;
 import com.yego.backend.repository.yego_ticketerera.QueueAgentRepository;
 import com.yego.backend.repository.yego_ticketerera.QueueRatingRepository;
+import com.yego.backend.repository.yego_ticketerera.QueueTicketHistoryRepository;
 import com.yego.backend.repository.yego_ticketerera.SedeRepository;
 import com.yego.backend.repository.yego_ticketerera.TicketRepository;
+import com.yego.backend.repository.yego_ticketerera.ModuloAtencionRepository;
+import com.yego.backend.repository.yego_ticketerera.OptionRepository;
 import com.yego.backend.service.yego_ticketerera.SacStatsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +50,9 @@ public class SacStatsServiceImpl implements SacStatsService {
     private final QueueRatingRepository queueRatingRepository;
     private final QueueAgentRepository queueAgentRepository;
     private final SedeRepository sedeRepository;
+    private final OptionRepository optionRepository;
+    private final ModuloAtencionRepository moduloAtencionRepository;
+    private final QueueTicketHistoryRepository queueTicketHistoryRepository;
     
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter ISO_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -80,10 +91,6 @@ public class SacStatsServiceImpl implements SacStatsService {
         }
         log.debug("Usuarios SAC: {}", sacUsers.size());
         
-        if (sacUsers.isEmpty()) {
-            return construirRespuestaVacia();
-        }
-        
         // 2. Obtener estadísticas agregadas (consultas optimizadas)
         long totalTickets;
         long totalRatings;
@@ -121,23 +128,27 @@ public class SacStatsServiceImpl implements SacStatsService {
         // 4. Obtener IDs de usuarios para consultas batch
         List<Long> userIds = sacUsers.stream().map(User::getId).collect(Collectors.toList());
         
-        // 5. Obtener todos los tickets de usuarios SAC (con o sin filtro de fecha y sede)
-        List<Ticket> allSacTickets;
+        // 5. Obtener todos los tickets del alcance. La trazabilidad también debe
+        // incluir tickets aún no asignados a un operador.
+        List<Ticket> reportTickets;
         if (tieneFiltroFecha && sedeId != null) {
-            allSacTickets = ticketRepository.findByUserIdInAndSedeIdAndCreatedAtBetween(
-                    userIds, sedeId, fechaInicioDT, fechaFinDT);
+            reportTickets = ticketRepository.findBySedeIdAndCreatedAtBetween(sedeId, fechaInicioDT, fechaFinDT);
         } else if (tieneFiltroFecha) {
-            allSacTickets = ticketRepository.findByUserIdInAndCreatedAtBetween(userIds, fechaInicioDT, fechaFinDT);
+            reportTickets = ticketRepository.findByCreatedAtBetween(fechaInicioDT, fechaFinDT);
         } else if (sedeId != null) {
-            allSacTickets = ticketRepository.findByUserIdInAndSedeId(userIds, sedeId);
+            reportTickets = ticketRepository.findBySedeId(sedeId);
         } else {
-            allSacTickets = ticketRepository.findByUserIdIn(userIds);
+            reportTickets = ticketRepository.findAll();
         }
+        Set<Long> sacUserIds = new HashSet<>(userIds);
+        List<Ticket> allSacTickets = reportTickets.stream()
+                .filter(ticket -> ticket.getUserId() != null && sacUserIds.contains(ticket.getUserId()))
+                .collect(Collectors.toList());
         Map<Long, List<Ticket>> ticketsByUserId = allSacTickets.stream()
                 .collect(Collectors.groupingBy(Ticket::getUserId));
         
         // 6. Obtener todos los ticket IDs para buscar calificaciones
-        Set<Long> allTicketIds = allSacTickets.stream()
+        Set<Long> allTicketIds = reportTickets.stream()
                 .filter(t -> t.getStatus() == Ticket.TicketStatus.COMPLETED)
                 .map(Ticket::getId)
                 .collect(Collectors.toSet());
@@ -189,10 +200,10 @@ public class SacStatsServiceImpl implements SacStatsService {
         log.debug("Estadísticas SAC calculadas en {} ms", (endTime - startTime));
 
         // Distribución horaria de tickets
-        List<HourlyDistribution> hourlyDistribution = calcularDistribucionHoraria(allSacTickets);
+        List<HourlyDistribution> hourlyDistribution = calcularDistribucionHoraria(reportTickets);
 
         // Distribución horaria por sede
-        Map<Long, List<Ticket>> ticketsBySede = allSacTickets.stream()
+        Map<Long, List<Ticket>> ticketsBySede = reportTickets.stream()
                 .filter(t -> t.getSedeId() != null)
                 .collect(Collectors.groupingBy(Ticket::getSedeId));
         List<SacStatsResponse.HourlyBySede> hourlyBySede = ticketsBySede.entrySet().stream()
@@ -208,16 +219,35 @@ public class SacStatsServiceImpl implements SacStatsService {
                 ? (int) sacPerformance.stream().filter(sac -> sac.getTotalTickets() > 0).count()
                 : sacUsers.size();
 
+        int openTickets = (int) reportTickets.stream()
+                .filter(ticket -> ticket.getStatus() == Ticket.TicketStatus.WAITING
+                        || ticket.getStatus() == Ticket.TicketStatus.CALLED
+                        || ticket.getStatus() == Ticket.TicketStatus.IN_PROGRESS)
+                .count();
+        int completedTickets = (int) reportTickets.stream()
+                .filter(ticket -> ticket.getStatus() == Ticket.TicketStatus.COMPLETED)
+                .count();
+        int cancelledTickets = (int) reportTickets.stream()
+                .filter(ticket -> ticket.getStatus() == Ticket.TicketStatus.CANCELLED)
+                .count();
+        List<TicketTraceabilityResponse> ticketTraceability = construirTrazabilidad(
+                reportTickets, sedeMap, ratingsByTicketId);
+
         return SacStatsResponse.builder()
                 .totalSACs(totalSacsReportados)
                 .totalTickets((int) totalTickets)
                 .averageRating(Math.round(averageRating * 10.0) / 10.0)
                 .totalRatings((int) totalRatings)
+                .openTickets(openTickets)
+                .completedTickets(completedTickets)
+                .cancelledTickets(cancelledTickets)
+                .traceabilityTotal(reportTickets.size())
                 .sacPerformance(sacPerformance)
                 .topPerformers(topPerformers)
                 .recentRatings(recentRatingsResponse)
                 .hourlyDistribution(hourlyDistribution)
                 .hourlyBySede(hourlyBySede)
+                .ticketTraceability(ticketTraceability)
                 .build();
     }
     
@@ -230,18 +260,6 @@ public class SacStatsServiceImpl implements SacStatsService {
             sacUsers = userRepository.findByRoleName("Sac");
         }
         return sacUsers;
-    }
-    
-    private SacStatsResponse construirRespuestaVacia() {
-        return SacStatsResponse.builder()
-                .totalSACs(0)
-                .totalTickets(0)
-                .averageRating(0.0)
-                .totalRatings(0)
-                .sacPerformance(Collections.emptyList())
-                .topPerformers(Collections.emptyList())
-                .recentRatings(Collections.emptyList())
-                .build();
     }
     
     private SacPerformanceResponse calcularRendimientoSacOptimizado(
@@ -427,6 +445,126 @@ public class SacStatsServiceImpl implements SacStatsService {
                             .build();
                 })
                 .collect(Collectors.toList());
+    }
+
+    private List<TicketTraceabilityResponse> construirTrazabilidad(
+            List<Ticket> reportTickets,
+            Map<Long, String> sedeMap,
+            Map<Long, List<QueueRating>> ratingsByTicketId) {
+        if (reportTickets.isEmpty()) return Collections.emptyList();
+
+        List<Ticket> visibleTickets = reportTickets.stream()
+                .sorted(Comparator.comparing(Ticket::getCreatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(200)
+                .collect(Collectors.toList());
+        Set<Long> ticketIds = visibleTickets.stream().map(Ticket::getId).collect(Collectors.toSet());
+
+        Set<Long> optionIds = visibleTickets.stream()
+                .map(Ticket::getOptionId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Option> options = optionRepository.findAllById(optionIds).stream()
+                .collect(Collectors.toMap(Option::getId, option -> option));
+        Set<Long> parentOptionIds = options.values().stream()
+                .map(Option::getParentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        optionRepository.findAllById(parentOptionIds)
+                .forEach(option -> options.putIfAbsent(option.getId(), option));
+
+        Set<Long> moduleIds = visibleTickets.stream()
+                .map(Ticket::getModuleId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> modules = moduloAtencionRepository.findAllById(moduleIds).stream()
+                .collect(Collectors.toMap(ModuloAtencion::getId, ModuloAtencion::getName));
+
+        Set<Long> operatorIds = visibleTickets.stream()
+                .map(Ticket::getUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> operators = userRepository.findAllById(operatorIds).stream()
+                .collect(Collectors.toMap(User::getId, User::getName));
+
+        Map<Long, List<QueueTicketHistory>> historyByTicket = ticketIds.isEmpty()
+                ? Collections.emptyMap()
+                : queueTicketHistoryRepository.findByTicketIdInOrderByCreatedAtAsc(ticketIds).stream()
+                        .collect(Collectors.groupingBy(QueueTicketHistory::getTicketId));
+
+        return visibleTickets.stream()
+                .map(ticket -> {
+                    Option selectedOption = options.get(ticket.getOptionId());
+                    Option parentOption = selectedOption != null && selectedOption.getParentId() != null
+                            ? options.get(selectedOption.getParentId())
+                            : null;
+                    List<QueueRating> ticketRatings = ratingsByTicketId.getOrDefault(
+                            ticket.getId(), Collections.emptyList());
+                    QueueRating latestRating = ticketRatings.stream()
+                            .max(Comparator.comparing(QueueRating::getCreatedAt))
+                            .orElse(null);
+
+                    List<TicketTraceEventResponse> events = new ArrayList<>();
+                    events.add(TicketTraceEventResponse.builder()
+                            .status("GENERATED")
+                            .label("Ticket generado")
+                            .occurredAt(ticket.getCreatedAt())
+                            .build());
+                    historyByTicket.getOrDefault(ticket.getId(), Collections.emptyList()).stream()
+                            .map(history -> TicketTraceEventResponse.builder()
+                                    .status(history.getNewStatus())
+                                    .label(etiquetaEstado(history.getNewStatus()))
+                                    .occurredAt(history.getCreatedAt())
+                                    .notes(history.getNotes())
+                                    .build())
+                            .forEach(events::add);
+                    if (latestRating != null) {
+                        events.add(TicketTraceEventResponse.builder()
+                                .status("RATED")
+                                .label("Calificación " + latestRating.getScore() + "/5")
+                                .occurredAt(latestRating.getCreatedAt())
+                                .notes(latestRating.getComment())
+                                .build());
+                    }
+                    events.sort(Comparator.comparing(TicketTraceEventResponse::getOccurredAt,
+                            Comparator.nullsLast(Comparator.naturalOrder())));
+
+                    return TicketTraceabilityResponse.builder()
+                            .id(ticket.getId())
+                            .ticketNumber(ticket.getTicketNumber())
+                            .status(ticket.getStatus().name())
+                            .sedeId(ticket.getSedeId())
+                            .sedeName(sedeMap.getOrDefault(ticket.getSedeId(), "Sin sede"))
+                            .optionId(ticket.getOptionId())
+                            .categoryName(parentOption != null ? parentOption.getName() : null)
+                            .optionName(selectedOption != null
+                                    ? selectedOption.getName()
+                                    : "Opción #" + ticket.getOptionId())
+                            .licenseNumber(ticket.getLicenseNumber())
+                            .moduleId(ticket.getModuleId())
+                            .moduleName(modules.get(ticket.getModuleId()))
+                            .operatorId(ticket.getUserId())
+                            .operatorName(operators.get(ticket.getUserId()))
+                            .createdAt(ticket.getCreatedAt())
+                            .calledAt(ticket.getCalledAt())
+                            .completedAt(ticket.getCompletedAt())
+                            .rating(latestRating != null ? latestRating.getScore() : null)
+                            .events(events)
+                            .build();
+                })
+                .collect(Collectors.toList());
+    }
+
+    private String etiquetaEstado(String status) {
+        if (status == null) return "Estado actualizado";
+        return switch (status.toUpperCase(Locale.ROOT)) {
+            case "WAITING" -> "En espera";
+            case "CALLED" -> "Ticket llamado";
+            case "IN_PROGRESS" -> "Atención iniciada";
+            case "COMPLETED" -> "Atención completada";
+            case "CANCELLED" -> "Ticket cancelado";
+            default -> "Estado actualizado";
+        };
     }
 
     private List<HourlyDistribution> calcularDistribucionHoraria(List<Ticket> tickets) {

@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Collection;
 
 /**
  * Repositorio para QueueTicketHistory del sistema YEGO Ticketerera
@@ -16,4 +17,6 @@ public interface QueueTicketHistoryRepository extends JpaRepository<QueueTicketH
      * Buscar historial por ticket ID
      */
     List<QueueTicketHistory> findByTicketIdOrderByCreatedAtDesc(Long ticketId);
+
+    List<QueueTicketHistory> findByTicketIdInOrderByCreatedAtAsc(Collection<Long> ticketIds);
 }

@@ -133,7 +133,9 @@ public class MarketingMensajeServiceImpl implements MarketingMensajeService {
         if (urlArchivo != null) {
             mensaje.setArchivo(urlArchivo);
         }
-
+        else {
+            log.info("No se subió archivo");
+        }
         MarketingMensaje mensajeGuardado = marketingMensajeRepository.saveAndFlush(mensaje);
         log.info("Mensaje creado con ID: {}", mensajeGuardado.getId());
 

@@ -18,12 +18,17 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class SacStatsExportServiceImpl implements SacStatsExportService {
+
+    private static final DateTimeFormatter TRACE_DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
     
     private final SacStatsService sacStatsService;
     
@@ -94,7 +99,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         
         try (Workbook workbook = new XSSFWorkbook()) {
             // Crear hoja principal
-            Sheet sheet = workbook.createSheet("Estadísticas SAC");
+            Sheet sheet = workbook.createSheet("Monitoreo Ticketera");
             
             // Crear estilos
             CellStyle headerStyle = crearEstiloEncabezado(workbook);
@@ -106,7 +111,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             // Título principal
             Row titleRow = sheet.createRow(rowNum++);
             Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("REPORTE DE ESTADÍSTICAS SAC - YEGO");
+            titleCell.setCellValue("MONITOREO Y TRAZABILIDAD DE TICKETERA - YEGO");
             titleCell.setCellStyle(headerStyle);
             
             // Fecha de generación y rango de fechas (si se proporcionaron)
@@ -123,21 +128,15 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             
             // Estadísticas generales
             crearSeccionEstadisticasGenerales(sheet, stats, rowNum, headerStyle, dataStyle, numberStyle);
-            rowNum += 8;
-            
-            // Top Performers
-            crearSeccionTopPerformers(sheet, stats.getTopPerformers(), rowNum, headerStyle, dataStyle, numberStyle);
-            rowNum += stats.getTopPerformers().size() + 3;
+            rowNum += 10;
             
             // Rendimiento por SAC
             crearSeccionRendimientoSac(sheet, stats.getSacPerformance(), rowNum, headerStyle, dataStyle, numberStyle);
-            rowNum += stats.getSacPerformance().size() + 3;
-            
-            // Calificaciones recientes
-            crearSeccionCalificacionesRecientes(sheet, stats.getRecentRatings(), rowNum, headerStyle, dataStyle);
             
             // Ajustar ancho de columnas
             ajustarAnchoColumnas(sheet);
+
+            crearHojaTrazabilidad(workbook, stats.getTicketTraceability(), headerStyle, dataStyle, numberStyle);
             
             // Convertir a ByteArrayOutputStream
             ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -242,8 +241,10 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         headerRow.getCell(0).setCellStyle(headerStyle);
         
         String[][] generalData = {
-            {"Total SACs", stats.getTotalSACs().toString()},
-            {"Total Tickets", stats.getTotalTickets().toString()},
+            {"Tickets generados", stats.getTotalTickets().toString()},
+            {"Abiertos", stats.getOpenTickets().toString()},
+            {"Completados", stats.getCompletedTickets().toString()},
+            {"Cancelados", stats.getCancelledTickets().toString()},
             {"Calificación Promedio", String.format("%.1f", stats.getAverageRating())},
             {"Total Calificaciones", stats.getTotalRatings().toString()}
         };
@@ -257,35 +258,6 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         }
     }
     
-    private void crearSeccionTopPerformers(Sheet sheet, List<SacStatsResponse.SacPerformanceResponse> topPerformers, 
-                                          int startRow, CellStyle headerStyle, CellStyle dataStyle, CellStyle numberStyle) {
-        Row headerRow = sheet.createRow(startRow);
-        headerRow.createCell(0).setCellValue("TOP PERFORMERS");
-        headerRow.getCell(0).setCellStyle(headerStyle);
-        
-        Row subHeaderRow = sheet.createRow(startRow + 2);
-        String[] headers = {"Nombre", "Usuario", "Tickets Completados", "Calificación Promedio", "% Satisfacción"};
-        for (int i = 0; i < headers.length; i++) {
-            subHeaderRow.createCell(i).setCellValue(headers[i]);
-            subHeaderRow.getCell(i).setCellStyle(headerStyle);
-        }
-        
-        for (int i = 0; i < topPerformers.size(); i++) {
-            SacStatsResponse.SacPerformanceResponse performer = topPerformers.get(i);
-            Row row = sheet.createRow(startRow + 3 + i);
-            row.createCell(0).setCellValue(performer.getName());
-            row.getCell(0).setCellStyle(dataStyle);
-            row.createCell(1).setCellValue(performer.getUsername());
-            row.getCell(1).setCellStyle(dataStyle);
-            row.createCell(2).setCellValue(performer.getCompletedTickets());
-            row.getCell(2).setCellStyle(numberStyle);
-            row.createCell(3).setCellValue(performer.getAverageRating());
-            row.getCell(3).setCellStyle(numberStyle);
-            row.createCell(4).setCellValue(String.format("%.1f%%", performer.getSatisfactionPercentage()));
-            row.getCell(4).setCellStyle(numberStyle);
-        }
-    }
-    
     private void crearSeccionRendimientoSac(Sheet sheet, List<SacStatsResponse.SacPerformanceResponse> sacPerformance, 
                                            int startRow, CellStyle headerStyle, CellStyle dataStyle, CellStyle numberStyle) {
         Row headerRow = sheet.createRow(startRow);
@@ -293,7 +265,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         headerRow.getCell(0).setCellStyle(headerStyle);
         
         Row subHeaderRow = sheet.createRow(startRow + 2);
-        String[] headers = {"Nombre", "Usuario", "Total Tickets", "Completados", "Calificación", "Calificaciones", "% Satisfacción", "Tiempo Respuesta"};
+        String[] headers = {"Nombre", "Usuario", "Total Tickets", "Completados", "Calificación", "Calificaciones", "% Resolución", "Tiempo Respuesta"};
         for (int i = 0; i < headers.length; i++) {
             subHeaderRow.createCell(i).setCellValue(headers[i]);
             subHeaderRow.getCell(i).setCellStyle(headerStyle);
@@ -320,34 +292,63 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             row.getCell(7).setCellStyle(dataStyle);
         }
     }
-    
-    private void crearSeccionCalificacionesRecientes(Sheet sheet, List<SacStatsResponse.RecentRatingResponse> recentRatings, 
-                                                    int startRow, CellStyle headerStyle, CellStyle dataStyle) {
-        Row headerRow = sheet.createRow(startRow);
-        headerRow.createCell(0).setCellValue("CALIFICACIONES RECIENTES");
-        headerRow.getCell(0).setCellStyle(headerStyle);
-        
-        Row subHeaderRow = sheet.createRow(startRow + 2);
-        String[] headers = {"SAC", "Ticket", "Calificación", "Comentario", "Fecha"};
+
+    private void crearHojaTrazabilidad(
+            Workbook workbook,
+            List<SacStatsResponse.TicketTraceabilityResponse> traceability,
+            CellStyle headerStyle,
+            CellStyle dataStyle,
+            CellStyle numberStyle) {
+        Sheet sheet = workbook.createSheet("Trazabilidad");
+        String[] headers = {
+                "Ticket", "Estado", "Sede", "Categoría", "Opción marcada", "ID opción",
+                "Conductor", "Operador", "Módulo", "Generado", "Llamado", "Finalizado",
+                "Calificación", "Recorrido"
+        };
+        Row header = sheet.createRow(0);
         for (int i = 0; i < headers.length; i++) {
-            subHeaderRow.createCell(i).setCellValue(headers[i]);
-            subHeaderRow.getCell(i).setCellStyle(headerStyle);
+            header.createCell(i).setCellValue(headers[i]);
+            header.getCell(i).setCellStyle(headerStyle);
         }
-        
-        for (int i = 0; i < recentRatings.size(); i++) {
-            SacStatsResponse.RecentRatingResponse rating = recentRatings.get(i);
-            Row row = sheet.createRow(startRow + 3 + i);
-            row.createCell(0).setCellValue(rating.getSacName());
-            row.getCell(0).setCellStyle(dataStyle);
-            row.createCell(1).setCellValue(rating.getTicketNumber());
-            row.getCell(1).setCellStyle(dataStyle);
-            row.createCell(2).setCellValue(rating.getScore());
-            row.getCell(2).setCellStyle(dataStyle);
-            row.createCell(3).setCellValue(rating.getComment() != null ? rating.getComment() : "");
-            row.getCell(3).setCellStyle(dataStyle);
-            row.createCell(4).setCellValue(rating.getDate());
-            row.getCell(4).setCellStyle(dataStyle);
+
+        List<SacStatsResponse.TicketTraceabilityResponse> tickets = traceability != null
+                ? traceability
+                : Collections.emptyList();
+        for (int i = 0; i < tickets.size(); i++) {
+            SacStatsResponse.TicketTraceabilityResponse ticket = tickets.get(i);
+            Row row = sheet.createRow(i + 1);
+            String recorrido = ticket.getEvents() == null ? "" : ticket.getEvents().stream()
+                    .map(event -> formatearFecha(event.getOccurredAt()) + " - " + event.getLabel())
+                    .collect(Collectors.joining(" | "));
+            String[] values = {
+                    valor(ticket.getTicketNumber()), valor(ticket.getStatus()), valor(ticket.getSedeName()),
+                    valor(ticket.getCategoryName()), valor(ticket.getOptionName()),
+                    ticket.getOptionId() != null ? ticket.getOptionId().toString() : "",
+                    valor(ticket.getLicenseNumber()), valor(ticket.getOperatorName()), valor(ticket.getModuleName()),
+                    formatearFecha(ticket.getCreatedAt()), formatearFecha(ticket.getCalledAt()),
+                    formatearFecha(ticket.getCompletedAt()),
+                    ticket.getRating() != null ? ticket.getRating().toString() : "", recorrido
+            };
+            for (int column = 0; column < values.length; column++) {
+                row.createCell(column).setCellValue(values[column]);
+                row.getCell(column).setCellStyle(column == 5 || column == 12 ? numberStyle : dataStyle);
+            }
         }
+
+        sheet.createFreezePane(0, 1);
+        sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(0, Math.max(0, tickets.size()), 0, headers.length - 1));
+        for (int i = 0; i < headers.length; i++) {
+            sheet.autoSizeColumn(i);
+            sheet.setColumnWidth(i, Math.min(sheet.getColumnWidth(i), i == 13 ? 12000 : 6000));
+        }
+    }
+
+    private String formatearFecha(LocalDateTime value) {
+        return value != null ? value.format(TRACE_DATE_FORMATTER) : "";
+    }
+
+    private String valor(String value) {
+        return value != null ? value : "";
     }
     
     private void ajustarAnchoColumnas(Sheet sheet) {
@@ -365,7 +366,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         // Calcular altura dinámica basada en el contenido (mostrar todos los SACs)
         int maxRows = stats.getSacPerformance().size();
         int tablaHeight = (50 + (maxRows * 55) + 60) * scale;
-        int height = (500 + tablaHeight / scale) * scale; // Espacio para header + tarjetas + top performers + tabla
+        int height = (350 + tablaHeight / scale) * scale;
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = image.createGraphics();
         
@@ -394,15 +395,10 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         int cardStartX = (originalWidth - cardAreaWidth) / 2;
         dibujarTarjetasEstadisticas(g2d, stats, cardStartX, 120);
         
-        // Sección Top Performers (centrada)
-        int topPerformersWidth = 1000;
-        int topPerformersStartX = (originalWidth - topPerformersWidth) / 2;
-        dibujarTopPerformers(g2d, stats, topPerformersStartX, 280);
-        
         // Tabla de rendimiento detallado (centrada)
         int tablaWidth = 1100;
         int tablaStartX = (originalWidth - tablaWidth) / 2;
-        dibujarTablaRendimiento(g2d, stats, tablaStartX, 500);
+        dibujarTablaRendimiento(g2d, stats, tablaStartX, 300);
         
         g2d.dispose();
         return image;
@@ -441,7 +437,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         
         g2d.setColor(new java.awt.Color(107, 114, 128));
         g2d.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 16));
-        g2d.drawString("Reportes", 85, 55);
+        g2d.drawString("Monitoreo Ticketera", 85, 55);
         
         // Fecha en la esquina derecha
         g2d.setColor(new java.awt.Color(75, 85, 99));
@@ -469,12 +465,12 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             new java.awt.Color(147, 51, 234)  // Púrpura
         };
         
-        String[] titulos = {"Total SAC", "Total Tickets", "Calificación Promedio", "Total Valoraciones"};
+        String[] titulos = {"Tickets generados", "Abiertos ahora", "Completados", "Calificación"};
         String[] valores = {
-            stats.getTotalSACs().toString(),
             stats.getTotalTickets().toString(),
-            String.format("%.1f/5", stats.getAverageRating()),
-            stats.getTotalRatings().toString()
+            stats.getOpenTickets().toString(),
+            stats.getCompletedTickets().toString(),
+            String.format("%.1f/5", stats.getAverageRating())
         };
         
         for (int i = 0; i < 4; i++) {
@@ -503,72 +499,6 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         }
     }
     
-    private void dibujarTopPerformers(Graphics2D g2d, SacStatsResponse stats, int x, int y) {
-        // Título de la sección
-        g2d.setColor(java.awt.Color.BLACK);
-        g2d.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 20));
-        g2d.drawString("Top 3 Mejores SAC", x, y);
-        
-        // Fondo de la sección
-        g2d.setColor(new java.awt.Color(243, 244, 246));
-        g2d.fillRoundRect(x, y + 25, 1000, 160, 15, 15);
-        
-        // Borde
-        g2d.setColor(new java.awt.Color(229, 231, 235));
-        g2d.drawRoundRect(x, y + 25, 1000, 160, 15, 15);
-        
-        int cardWidth = 300;
-        int cardSpacing = 20;
-        int totalCardsWidth = 3 * cardWidth + 2 * cardSpacing;
-        int startX = x + (1000 - totalCardsWidth) / 2; // Centrar las tarjetas
-        
-        for (int i = 0; i < Math.min(3, stats.getTopPerformers().size()); i++) {
-            SacStatsResponse.SacPerformanceResponse performer = stats.getTopPerformers().get(i);
-            int cardX = startX + i * (cardWidth + cardSpacing);
-            int cardY = y + 40;
-            
-            // Tarjeta del performer
-            g2d.setColor(java.awt.Color.WHITE);
-            g2d.fillRoundRect(cardX, cardY, cardWidth, 100, 8, 8);
-            
-            // Sombra
-            g2d.setColor(new java.awt.Color(0, 0, 0, 10));
-            g2d.fillRoundRect(cardX + 2, cardY + 2, cardWidth, 100, 8, 8);
-            
-            // Badge de posición
-            java.awt.Color badgeColor = i == 0 ? new java.awt.Color(251, 191, 36) : new java.awt.Color(249, 115, 22);
-            g2d.setColor(badgeColor);
-            g2d.fillRoundRect(cardX + 10, cardY + 10, 30, 20, 4, 4);
-            
-            g2d.setColor(java.awt.Color.WHITE);
-            g2d.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 12));
-            g2d.drawString("#" + (i + 1), cardX + 15, cardY + 23);
-            
-            // Nombre
-            g2d.setColor(java.awt.Color.BLACK);
-            g2d.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 16));
-            g2d.drawString(performer.getName(), cardX + 50, cardY + 25);
-            
-            // Username
-            g2d.setColor(new java.awt.Color(107, 114, 128));
-            g2d.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 12));
-            g2d.drawString("@" + performer.getUsername(), cardX + 50, cardY + 40);
-            
-            // Estadísticas
-            g2d.setColor(java.awt.Color.BLACK);
-            g2d.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 11));
-            g2d.drawString("Tickets: " + performer.getCompletedTickets(), cardX + 10, cardY + 60);
-            g2d.drawString("Calificación: ★" + performer.getAverageRating(), cardX + 10, cardY + 75);
-            
-            // Satisfacción con color
-            java.awt.Color satisfactionColor = performer.getSatisfactionPercentage() > 50 ? 
-                new java.awt.Color(34, 197, 94) : new java.awt.Color(239, 68, 68);
-            g2d.setColor(satisfactionColor);
-            g2d.drawString("Satisfacción: " + String.format("%.1f%%", performer.getSatisfactionPercentage()), 
-                          cardX + 150, cardY + 60);
-        }
-    }
-    
     private void dibujarTablaRendimiento(Graphics2D g2d, SacStatsResponse stats, int x, int y) {
         // Título de la sección
         g2d.setColor(java.awt.Color.BLACK);
@@ -588,7 +518,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         g2d.drawRoundRect(x, y + 25, 1100, tablaHeight, 15, 15);
         
         // Encabezados de la tabla
-        String[] headers = {"SAC", "Total Tickets", "Completados", "Calificación", "Satisfacción", "Tiempo Respuesta"};
+        String[] headers = {"SAC", "Total Tickets", "Completados", "Calificación", "Resolución", "Tiempo Respuesta"};
         int[] columnWidths = {220, 130, 130, 130, 130, 130};
         int currentX = x + 20;
         
@@ -658,10 +588,10 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             g2d.drawString("★" + sac.getAverageRating(), currentX + 15, rowY - 5);
             currentX += columnWidths[3];
             
-            // Satisfacción con color
-            java.awt.Color satisfactionColor = sac.getSatisfactionPercentage() > 50 ? 
+            // Resolución con color
+            java.awt.Color resolutionColor = sac.getSatisfactionPercentage() > 50 ?
                 new java.awt.Color(34, 197, 94) : new java.awt.Color(239, 68, 68);
-            g2d.setColor(satisfactionColor);
+            g2d.setColor(resolutionColor);
             g2d.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 12));
             g2d.drawString(String.format("%.1f%%", sac.getSatisfactionPercentage()), currentX + 15, rowY - 5);
             currentX += columnWidths[4];
