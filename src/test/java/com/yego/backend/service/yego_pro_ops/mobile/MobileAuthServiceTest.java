@@ -1,6 +1,7 @@
 package com.yego.backend.service.yego_pro_ops.mobile;
 
 import com.yego.backend.config.JwtTokenProvider;
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.yego.backend.entity.yego_api_externo.entities.DriverApi;
 import com.yego.backend.repository.yego_api_externo.DriverApiRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,6 +35,7 @@ class MobileAuthServiceTest {
 
     private static final String LICENSE = "Z40159900";
     private static final String DRIVER_ID = "driver-1";
+    private static final String PRO_OPS_PARK_ID = "64085dd85e124e2c808806f70d527ea8";
 
     @Mock
     private DriverApiRepository driverRepository;
@@ -50,6 +52,9 @@ class MobileAuthServiceTest {
     @Mock
     private MobileShiftService shiftService;
 
+    @Mock
+    private YegoProOpsProperties proOpsProperties;
+
     @InjectMocks
     private MobileAuthService service;
 
@@ -64,10 +69,11 @@ class MobileAuthServiceTest {
         ReflectionTestUtils.setField(service, "otpRequestWindowMinutes", 10);
         ReflectionTestUtils.setField(service, "otpBlockMinutes", 15);
         ReflectionTestUtils.setField(service, "otpVerifyFailLimit", 5);
+        when(proOpsProperties.getParkId()).thenReturn(PRO_OPS_PARK_ID);
 
         DriverApi driver = new DriverApi();
         driver.setDriverId(DRIVER_ID);
-        driver.setParkId("64085dd85e124e2c808806f70d527ea8");
+        driver.setParkId(PRO_OPS_PARK_ID);
         driver.setLicenseNumber(LICENSE);
         driver.setFullName("Conductor Prueba");
         driver.setPhone("999999999");
