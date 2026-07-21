@@ -9,6 +9,7 @@ import com.yego.backend.entity.yego_pro_ops.api.response.mobile.AdminDashboardRe
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.VehiclePhotoContent;
 import com.yego.backend.entity.yego_pro_ops.entities.*;
 import com.yego.backend.entity.yego_principal.entities.User;
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.yego.backend.integration.YangoCookiePool;
 import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.MobileVehicleCard;
@@ -26,8 +27,10 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.net.URI;
@@ -35,18 +38,13 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class VehicleServiceImpl implements VehicleService {
-
-    private static final String YANGO_VEHICLES_URL = "https://fleet.yango.com/api/fleet/vehicles-manager/v1/vehicles/list";
-    private static final String YANGO_DETAILS_URL = "https://fleet.yango.com/api/api/v1/cards/car/details";
-    private static final String YANGO_QC_HISTORY_URL = "https://fleet.yango.com/api/fleet/fleet-quality-control/v2/rqc/history";
-
-
 
     private final VehicleDocumentRepository documentRepository;
     private final VehicleMaintenanceRepository maintenanceRepository;
@@ -65,23 +63,57 @@ public class VehicleServiceImpl implements VehicleService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final YangoCookiePool yangoCookiePool;
+    private final YegoProOpsProperties proOpsProperties;
 
     private static final String BUCKET_DOCUMENTACION = "documentacion-flota";
     private static final String STATUS_INACTIVO = "not_working";
-    private static final String PARK_ID_YEGO_PRO = "64085dd85e124e2c808806f70d527ea8";
     private static final String EVT_DOC_CARGADO = "DOC_CARGADO";
     private static final String EVT_DOC_ELIMINADO = "DOC_ELIMINADO";
 
-    private HttpHeaders crearHeaders(String parkId) {
-        String configuredCookie = yangoCookiePool.randomCookie();
+    private HttpHeaders crearHeaders(String parkId, int cookieIndex) {
+        String configuredCookie = yangoCookiePool.cookieAt(cookieIndex);
         String cookie = configuredCookie.contains("park_id=")
                 ? configuredCookie.replaceFirst("park_id=[^;]+", "park_id=" + parkId)
                 : configuredCookie + "; park_id=" + parkId;
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        headers.set(HttpHeaders.ACCEPT_LANGUAGE, "es-419,es;q=0.9");
         headers.set("Cookie", cookie);
         headers.set("x-park-id", parkId);
         return headers;
+    }
+
+    private <T> ResponseEntity<T> ejecutarYango(
+            URI endpoint,
+            HttpMethod method,
+            String parkId,
+            Object body,
+            Class<T> responseType,
+            Consumer<HttpHeaders> configurarHeaders
+    ) {
+        HttpStatusCodeException ultimaFallaAutorizacion = null;
+        List<Integer> candidatos = yangoCookiePool.validIndicesForPark(parkId);
+
+        for (int cookieIndex : candidatos) {
+            HttpHeaders headers = crearHeaders(parkId, cookieIndex);
+            configurarHeaders.accept(headers);
+            try {
+                return restTemplate.exchange(endpoint, method, new HttpEntity<>(body, headers), responseType);
+            } catch (HttpStatusCodeException exception) {
+                if (exception.getStatusCode().value() != 401 && exception.getStatusCode().value() != 403) {
+                    throw exception;
+                }
+                yangoCookiePool.markUnauthorizedForPark(cookieIndex, parkId);
+                ultimaFallaAutorizacion = exception;
+                log.warn("Cookie Yango rechazada para parkId={} cookieIndex={}; probando otra", parkId, cookieIndex);
+            }
+        }
+
+        if (ultimaFallaAutorizacion != null) {
+            throw ultimaFallaAutorizacion;
+        }
+        throw new IllegalStateException("No hay cookies Yango disponibles para la flota " + parkId);
     }
 
     @Override
@@ -91,16 +123,19 @@ public class VehicleServiceImpl implements VehicleService {
 
     private Map<String, Object> consultarVehiculosYango(String parkId, String cursor, boolean omitirCache) {
         try {
-            HttpHeaders headers = crearHeaders(parkId);
-            URI endpoint = URI.create(YANGO_VEHICLES_URL);
+            String vehiclesUrl = proOpsProperties.getYango().getVehiclesUrl();
+            URI endpoint = URI.create(vehiclesUrl);
+            Consumer<HttpHeaders> configurarHeaders = headers -> { };
             if (omitirCache) {
-                headers.setCacheControl("no-cache, no-store, max-age=0");
-                headers.setPragma("no-cache");
-                headers.set("X-Request-ID", UUID.randomUUID().toString());
-                endpoint = UriComponentsBuilder.fromUriString(YANGO_VEHICLES_URL)
+                endpoint = UriComponentsBuilder.fromUriString(vehiclesUrl)
                         .queryParam("_ts", System.currentTimeMillis())
                         .build(true)
                         .toUri();
+                configurarHeaders = headers -> {
+                    headers.setCacheControl("no-cache, no-store, max-age=0");
+                    headers.setPragma("no-cache");
+                    headers.set("X-Request-ID", UUID.randomUUID().toString());
+                };
             }
             Map<String, Object> body = new HashMap<>();
             body.put("limit", 30);
@@ -112,11 +147,14 @@ public class VehicleServiceImpl implements VehicleService {
             if (cursor != null && !cursor.isBlank()) {
                 body.put("cursor", cursor);
             }
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-            ResponseEntity<Map> response = restTemplate.exchange(endpoint, HttpMethod.POST, request, Map.class);
+            ResponseEntity<Map> response = ejecutarYango(
+                    endpoint, HttpMethod.POST, parkId, body, Map.class, configurarHeaders);
             return response.getBody() != null ? response.getBody() : Map.of("total", 0, "cars", List.of());
         } catch (Exception e) {
             log.error("Error listando vehículos Yango (omitirCache={}): {}", omitirCache, e.getMessage());
+            if (omitirCache) {
+                throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "No se pudieron actualizar los datos desde Yango", e);
+            }
             return Map.of("total", 0, "cars", List.of());
         }
     }
@@ -125,16 +163,16 @@ public class VehicleServiceImpl implements VehicleService {
     @SuppressWarnings("unchecked")
     public VehicleResponse obtenerDetalleVehiculo(String carId, String parkId) {
         try {
-            HttpHeaders headers = crearHeaders(parkId);
             Map<String, Object> body = Map.of("car_id", carId);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-            ResponseEntity<Map> response = restTemplate.exchange(YANGO_DETAILS_URL, HttpMethod.POST, request, Map.class);
+            ResponseEntity<Map> response = ejecutarYango(
+                    URI.create(proOpsProperties.getYango().getVehicleDetailsUrl()),
+                    HttpMethod.POST, parkId, body, Map.class, headers -> { });
 
             Map<String, Object> respBody = response.getBody();
-            if (respBody == null) return null;
+            if (respBody == null) return obtenerDetalleLocal(carId, parkId);
 
             Map<String, Object> car = (Map<String, Object>) respBody.get("car");
-            if (car == null) return null;
+            if (car == null) return obtenerDetalleLocal(carId, parkId);
 
             VehicleResponse.YangoStatus yangoStatus = null;
             Object statusObj = car.get("status");
@@ -171,31 +209,68 @@ public class VehicleServiceImpl implements VehicleService {
                     .modifiedDate((String) car.get("modified_date"))
                     .build();
 
-            resp.setDocuments(obtenerDocumentos(carId));
-            resp.setMaintenance(obtenerMantenimientos(carId));
-            resp.setMileageHistory(obtenerKilometraje(carId));
-            resp.setIncidents(obtenerSiniestros(carId));
+            fleetVehicleRepository.findById(carId).ifPresent(vehicle ->
+                    resp.setSegmentId(vehicle.getSegment() != null ? vehicle.getSegment().getId() : null));
 
             // Foto frontal desde el QC history más reciente
             resp.setFotoUrl(obtenerFotoFrontal(carId, parkId));
-
-            return resp;
+            return completarDetalleLocal(resp, carId);
         } catch (Exception e) {
-            log.error("Error obteniendo detalle vehículo {}: {}", carId, e.getMessage());
-            return null;
+            log.warn("Yango no devolvió el detalle del vehículo {}; usando datos locales: {}", carId, e.getMessage());
+            return obtenerDetalleLocal(carId, parkId);
         }
+    }
+
+    private VehicleResponse obtenerDetalleLocal(String carId, String parkIdSolicitado) {
+        FleetVehicle vehicle = fleetVehicleRepository.findById(carId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_GATEWAY,
+                        "Yango no respondió y el vehículo no existe en la base local"));
+        String parkId = vehicle.getSegment() != null ? vehicle.getSegment().getParkId() : parkIdSolicitado;
+        VehicleResponse.YangoStatus status = (vehicle.getStatusId() != null || vehicle.getStatusName() != null)
+                ? VehicleResponse.YangoStatus.builder().id(vehicle.getStatusId()).name(vehicle.getStatusName()).build()
+                : null;
+        VehicleResponse response = VehicleResponse.builder()
+                .id(vehicle.getYangoCarId())
+                .parkId(parkId)
+                .segmentId(vehicle.getSegment() != null ? vehicle.getSegment().getId() : null)
+                .brand(vehicle.getBrand())
+                .model(vehicle.getModel())
+                .year(vehicle.getYear())
+                .color(vehicle.getColor())
+                .colorName(vehicle.getColorName())
+                .number(vehicle.getNumber())
+                .callsign(vehicle.getCallsign())
+                .vin(vehicle.getVin())
+                .status(status)
+                .categories(fromJson(vehicle.getCategories()))
+                .amenities(fromJson(vehicle.getAmenities()))
+                .mileage(vehicle.getMileage())
+                .rental(vehicle.getRental())
+                .modifiedDate(vehicle.getModifiedDate())
+                .fotoUrl(vehicle.getFotoUrl())
+                .build();
+        return completarDetalleLocal(response, carId);
+    }
+
+    private VehicleResponse completarDetalleLocal(VehicleResponse response, String carId) {
+        response.setDocuments(obtenerDocumentos(carId));
+        response.setMaintenance(obtenerMantenimientos(carId));
+        response.setMileageHistory(obtenerKilometraje(carId));
+        response.setIncidents(obtenerSiniestros(carId));
+        return response;
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public Map<String, Object> obtenerHistorialQc(String carId, String parkId) {
         try {
-            HttpHeaders headers = crearHeaders(parkId);
             Map<String, Object> body = new HashMap<>();
             body.put("car_id", carId);
             body.put("limit", 10);
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
-            ResponseEntity<Map> response = restTemplate.exchange(YANGO_QC_HISTORY_URL, HttpMethod.POST, request, Map.class);
+            ResponseEntity<Map> response = ejecutarYango(
+                    URI.create(proOpsProperties.getYango().getQcHistoryUrl()),
+                    HttpMethod.POST, parkId, body, Map.class, headers -> { });
             return response.getBody() != null ? response.getBody() : Map.of("items", List.of());
         } catch (Exception e) {
             log.error("Error obteniendo QC history {}: {}", carId, e.getMessage());
@@ -237,8 +312,8 @@ public class VehicleServiceImpl implements VehicleService {
 
     private List<FleetVehicle> listarVehiculosYegoPro(UUID segmentId) {
         return (segmentId != null)
-                ? fleetVehicleRepository.findBySegment_IdAndSegment_ParkIdAndSegment_ActivoTrueAndActivoTrueAndStatusIdNotOrderByNumberAsc(segmentId, PARK_ID_YEGO_PRO, STATUS_INACTIVO)
-                : fleetVehicleRepository.findBySegment_ParkIdAndSegment_ActivoTrueAndActivoTrueAndStatusIdNotOrderByNumberAsc(PARK_ID_YEGO_PRO, STATUS_INACTIVO);
+                ? fleetVehicleRepository.findBySegment_IdAndSegment_ParkIdAndSegment_ActivoTrueAndActivoTrueAndStatusIdNotOrderByNumberAsc(segmentId, proOpsProperties.getParkId(), STATUS_INACTIVO)
+                : fleetVehicleRepository.findBySegment_ParkIdAndSegment_ActivoTrueAndActivoTrueAndStatusIdNotOrderByNumberAsc(proOpsProperties.getParkId(), STATUS_INACTIVO);
     }
 
     private List<FleetVehicleResponse> construirFleetVehicleResponses(List<FleetVehicle> vehiculos, Map<String, ShiftSession> turnosActivosPorVehiculo) {
@@ -283,8 +358,14 @@ public class VehicleServiceImpl implements VehicleService {
                 cursor = (String) page.get("cursor");
             } while (cursor != null && !cursor.isBlank());
             log.info("✅ Flota {} sincronizada: {} vehículos", segment.getParkId(), procesados);
+        } catch (ResponseStatusException e) {
+            throw e;
         } catch (Exception e) {
             log.error("❌ Error sincronizando flota {}: {}", segment.getParkId(), e.getMessage());
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "No se pudieron actualizar los datos de la flota desde Yango",
+                    e);
         }
         return procesados;
     }
@@ -618,7 +699,7 @@ public class VehicleServiceImpl implements VehicleService {
         if (placa == null || placa.isBlank()) return List.of();
         Map<String, String> nombresPorPark = resolverNombresParkLocal();
         return fleetVehicleRepository.findTop20BySegment_ParkIdAndSegment_ActivoTrueAndNumberContainingIgnoreCaseAndActivoTrueAndStatusIdNotOrderByNumberAsc(
-                        PARK_ID_YEGO_PRO,
+                        proOpsProperties.getParkId(),
                         placa.trim(),
                         STATUS_INACTIVO
                 ).stream()
@@ -686,17 +767,21 @@ public class VehicleServiceImpl implements VehicleService {
     @Transactional(readOnly = true)
     public VehiclePhotoContent obtenerFotoVehiculoMobile(String yangoCarId) {
         FleetVehicle vehicle = fleetVehicleRepository.findById(yangoCarId)
-                .filter(v -> v.getSegment() != null && PARK_ID_YEGO_PRO.equals(v.getSegment().getParkId()))
+                .filter(v -> v.getSegment() != null && proOpsProperties.getParkId().equals(v.getSegment().getParkId()))
                 .orElseThrow(() -> new IllegalArgumentException("Vehículo Yego Pro no encontrado"));
         URI uri = parseYangoPhotoUri(vehicle.getFotoUrl());
 
-        HttpHeaders headers = crearHeaders(vehicle.getSegment().getParkId());
-        headers.remove(HttpHeaders.CONTENT_TYPE);
-        headers.setAccept(List.of(MediaType.IMAGE_JPEG, MediaType.IMAGE_PNG, MediaType.ALL));
-
         try {
-            ResponseEntity<byte[]> response = restTemplate.exchange(
-                    uri, HttpMethod.GET, new HttpEntity<>(headers), byte[].class);
+            ResponseEntity<byte[]> response = ejecutarYango(
+                    uri,
+                    HttpMethod.GET,
+                    vehicle.getSegment().getParkId(),
+                    null,
+                    byte[].class,
+                    headers -> {
+                        headers.remove(HttpHeaders.CONTENT_TYPE);
+                        headers.setAccept(List.of(MediaType.IMAGE_JPEG, MediaType.IMAGE_PNG, MediaType.ALL));
+                    });
             byte[] content = response.getBody();
             if (!response.getStatusCode().is2xxSuccessful() || content == null || content.length == 0) {
                 throw new IllegalArgumentException("No se pudo obtener la foto del vehículo");

@@ -3,6 +3,7 @@ package com.yego.backend.service.yego_pro_ops.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.config.yego_pro_ops.ProxyConfig;
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.yego.backend.integration.YangoCookiePool;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverTripsSimplifiedResponse;
@@ -57,8 +58,9 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
             ProxyConfig proxyConfig,
             YangoCookiePool cookiePool,
             ObjectMapper objectMapper,
+            YegoProOpsProperties proOpsProperties,
             DriverCloseService driverCloseService) {
-        super(restTemplate, yangoProxyRestTemplate, proxyConfig, cookiePool, objectMapper);
+        super(restTemplate, yangoProxyRestTemplate, proxyConfig, cookiePool, objectMapper, proOpsProperties);
         this.driverCloseService = driverCloseService;
     }
 
@@ -173,7 +175,7 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
                 String bodyJson = objectMapper.writeValueAsString(body);
 
                 ResponseEntity<String> response = ejecutarConRetryCookies(
-                    YANGO_ORDERS_API_URL, HttpMethod.POST, bodyJson, this::crearHeadersConCookie);
+                    proOpsProperties.getYango().getOrdersUrl(), HttpMethod.POST, bodyJson, this::crearHeadersConCookie);
 
                 if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                     JsonNode jsonResponse = objectMapper.readTree(response.getBody());
@@ -252,7 +254,7 @@ public class DriverOrdersServiceImpl extends BaseYangoApiService implements Driv
             String bodyJson = objectMapper.writeValueAsString(body);
 
             ResponseEntity<String> response = ejecutarConRetryCookies(
-                YANGO_ORDERS_API_URL, HttpMethod.POST, bodyJson, this::crearHeadersConCookie);
+                proOpsProperties.getYango().getOrdersUrl(), HttpMethod.POST, bodyJson, this::crearHeadersConCookie);
 
             if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
                 return crearRespuestaVaciaViajesSimplificados();

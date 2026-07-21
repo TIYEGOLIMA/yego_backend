@@ -2,6 +2,7 @@ package com.yego.backend.service.yego_pro_ops.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.config.yego_pro_ops.ProxyConfig;
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.yego.backend.integration.YangoCookiePool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -27,16 +28,7 @@ public abstract class BaseYangoApiService {
     protected final RestTemplate yangoProxyRestTemplate;
     protected final ProxyConfig proxyConfig;
     protected final ObjectMapper objectMapper;
-
-    protected static final String PARK_ID = "64085dd85e124e2c808806f70d527ea8";
-
-    protected static final String YANGO_API_URL = "https://fleet.yango.com/api/fleet/map/v2/drivers/points";
-    protected static final String YANGO_DRIVERS_LIST_API_URL = "https://fleet.yango.com/api/fleet/map/v1/drivers/list";
-    protected static final String YANGO_CONTRACTORS_API_URL = "https://fleet.yango.com/api/fleet/contractor-profiles-manager/v2/contractors/list";
-    protected static final String YANGO_GPS_API_URL = "https://fleet.yango.com/api/fleet/map/v1/driver/gps";
-    protected static final String YANGO_DRIVER_INCOME_API_URL = "https://fleet.yango.com/api/v1/cards/driver/income";
-    protected static final String YANGO_ORDERS_API_URL = "https://fleet.yango.com/api/reports-api/v1/orders/list";
-    protected static final String YANGO_SUGGESTIONS_LIST_URL = "https://fleet.yango.com/api/fleet/contractor-profiles-manager/v1/suggestions/list";
+    protected final YegoProOpsProperties proOpsProperties;
 
     private static final int RETRY_401_DELAY_MS = 150;
     private static final int RETRY_PROXY_DELAY_MS = 800;
@@ -48,12 +40,14 @@ public abstract class BaseYangoApiService {
             @Qualifier("yangoProxyRestTemplate") RestTemplate yangoProxyRestTemplate,
             ProxyConfig proxyConfig,
             YangoCookiePool cookiePool,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            YegoProOpsProperties proOpsProperties) {
         this.restTemplate = restTemplate;
         this.yangoProxyRestTemplate = yangoProxyRestTemplate;
         this.proxyConfig = proxyConfig;
         this.cookiePool = cookiePool;
         this.objectMapper = objectMapper;
+        this.proOpsProperties = proOpsProperties;
         log.debug("[BaseYangoApi] {} listo (cookies={} proxy={})",
             getClass().getSimpleName(), cookiePool.size(),
             proxyConfig != null && proxyConfig.isEnabled());
@@ -169,7 +163,7 @@ public abstract class BaseYangoApiService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Cookie", cookie);
-        headers.set("x-park-id", PARK_ID);
+        headers.set("x-park-id", proOpsProperties.getParkId());
         headers.set("language", "es-419");
         headers.set("x-client-version", "fleet/19321");
         headers.set("origin", "https://fleet.yango.com");
@@ -181,7 +175,7 @@ public abstract class BaseYangoApiService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Cookie", cookie);
-        headers.set("x-park-id", PARK_ID);
+        headers.set("x-park-id", proOpsProperties.getParkId());
         headers.set("origin", "https://fleet.yango.com");
         return headers;
     }
@@ -193,7 +187,7 @@ public abstract class BaseYangoApiService {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Cookie", cookieFinal != null ? cookieFinal : cookie);
-        headers.set("x-park-id", parkId != null ? parkId : PARK_ID);
+        headers.set("x-park-id", parkId != null ? parkId : proOpsProperties.getParkId());
         headers.set("language", "es-419");
         headers.set("x-client-version", "fleet/19321");
         headers.set("origin", "https://fleet.yango.com");
@@ -204,10 +198,10 @@ public abstract class BaseYangoApiService {
     public void warmupCookiePool() {
         try {
             Map<String, Object> body = new HashMap<>();
-            body.put("park_id", PARK_ID);
+            body.put("park_id", proOpsProperties.getParkId());
             body.put("car", Collections.emptyMap());
             body.put("statuses", Arrays.asList("in_order", "free"));
-            ejecutarConRetryCookies(YANGO_API_URL, HttpMethod.POST, body, this::crearHeadersDriversPointsConCookie);
+            ejecutarConRetryCookies(proOpsProperties.getYango().getDriverPointsUrl(), HttpMethod.POST, body, this::crearHeadersDriversPointsConCookie);
         } catch (Exception e) {
             log.warn("[BaseYangoApi] warmup cookies falló: {}", e.getMessage());
         }

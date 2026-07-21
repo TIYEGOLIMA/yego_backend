@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,6 +18,7 @@ public class YangoCookiePool {
 
     private final List<String> cookies;
     private final Set<Integer> invalidIndices = ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap<String, Set<Integer>> unauthorizedIndicesByPark = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, AtomicLong> lastUseByIndex = new ConcurrentHashMap<>();
 
     public YangoCookiePool(@Value("${yego.yango.cookies:}") String configuredCookies) {
@@ -30,15 +32,6 @@ public class YangoCookiePool {
 
     public int size() {
         return cookies.size();
-    }
-
-    public String randomCookie() {
-        int index = randomValidIndex();
-        if (index < 0) {
-            resetInvalid();
-            index = randomValidIndex();
-        }
-        return cookieAt(index);
     }
 
     public int randomValidIndex() {
@@ -86,6 +79,22 @@ public class YangoCookiePool {
         return cookies.get(index);
     }
 
+    public List<Integer> validIndicesForPark(String parkId) {
+        requireConfigured();
+        Set<Integer> unauthorized = unauthorizedIndicesByPark.getOrDefault(parkId, Set.of());
+        return java.util.stream.IntStream.range(0, cookies.size())
+                .filter(index -> !invalidIndices.contains(index) && !unauthorized.contains(index))
+                .boxed()
+                .sorted(Comparator.comparing((Integer index) -> !containsParkId(cookies.get(index), parkId)))
+                .toList();
+    }
+
+    public void markUnauthorizedForPark(int index, String parkId) {
+        if (index >= 0 && index < cookies.size() && parkId != null && !parkId.isBlank()) {
+            unauthorizedIndicesByPark.computeIfAbsent(parkId, ignored -> ConcurrentHashMap.newKeySet()).add(index);
+        }
+    }
+
     public void markInvalid(int index) {
         if (index >= 0 && index < cookies.size()) {
             invalidIndices.add(index);
@@ -94,6 +103,11 @@ public class YangoCookiePool {
 
     public void resetInvalid() {
         invalidIndices.clear();
+        unauthorizedIndicesByPark.clear();
+    }
+
+    private boolean containsParkId(String cookie, String parkId) {
+        return parkId != null && !parkId.isBlank() && cookie.contains("park_id=" + parkId);
     }
 
     private void requireConfigured() {

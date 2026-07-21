@@ -1,5 +1,6 @@
 package com.yego.backend.service.yego_api_externo;
 
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.yego.backend.integration.YangoCookiePool;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
@@ -19,27 +20,24 @@ import org.springframework.web.client.RestTemplate;
 @Component
 public class YangoClient {
 
-    static final String DEFAULT_PARK_ID = "64085dd85e124e2c808806f70d527ea8";
-    static final String SUGGESTIONS_LIST_URL =
-            "https://fleet.yango.com/api/fleet/contractor-profiles-manager/v1/suggestions/list";
-    static final String GOALS_URL_TEMPLATE =
-            "https://fleet.yango.com/api/fleet/v1/subvention-view/v1/goals?driver_profile_id=%s";
-
     private static final int RETRY_401_DELAY_MS = 75;
 
     private final RestTemplate restTemplate;
     private final YangoCookiePool cookiePool;
+    private final YegoProOpsProperties proOpsProperties;
 
     public YangoClient(
             @Qualifier("yangoExternalRestTemplate") RestTemplate restTemplate,
-            YangoCookiePool cookiePool) {
+            YangoCookiePool cookiePool,
+            YegoProOpsProperties proOpsProperties) {
         this.restTemplate = restTemplate;
         this.cookiePool = cookiePool;
+        this.proOpsProperties = proOpsProperties;
         log.debug("[YangoClient] Inicializado cookies={} RestTemplate=pool(Yango external)", cookiePool.size());
     }
 
-    private static HttpHeaders headersSuggestions(String cookie, String parkId) {
-        String pid = parkId != null && !parkId.isBlank() ? parkId : DEFAULT_PARK_ID;
+    private HttpHeaders headersSuggestions(String cookie, String parkId) {
+        String pid = resolveParkId(parkId);
         String cookieConParkId = ajustarCookieParkId(cookie, pid);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -52,8 +50,8 @@ public class YangoClient {
         return headers;
     }
 
-    private static HttpHeaders headersFleetJson(String cookie, String parkId) {
-        String pid = parkId != null && !parkId.isBlank() ? parkId : DEFAULT_PARK_ID;
+    private HttpHeaders headersFleetJson(String cookie, String parkId) {
+        String pid = resolveParkId(parkId);
         String cookieAjustado = ajustarCookieParkId(cookie, pid);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -78,11 +76,15 @@ public class YangoClient {
         return trimmed.endsWith(";") ? trimmed + " park_id=" + pid : trimmed + "; park_id=" + pid;
     }
 
+    private String resolveParkId(String parkId) {
+        return parkId != null && !parkId.isBlank() ? parkId : proOpsProperties.getParkId();
+    }
+
     /**
      * POST suggestions/list — conexión directa (sin proxy) para menor latencia.
      */
     public ResponseEntity<String> postSuggestions(String bodyJson, String parkId) throws Exception {
-        return exchangeDirect(SUGGESTIONS_LIST_URL, HttpMethod.POST, bodyJson, cookie -> headersSuggestions(cookie, parkId));
+        return exchangeDirect(proOpsProperties.getYango().getSuggestionsUrl(), HttpMethod.POST, bodyJson, cookie -> headersSuggestions(cookie, parkId));
     }
 
     /**

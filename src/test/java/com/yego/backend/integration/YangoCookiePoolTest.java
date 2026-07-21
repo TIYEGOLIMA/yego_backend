@@ -11,7 +11,7 @@ class YangoCookiePoolTest {
     void rejectsUseWhenCookiesAreNotConfigured() {
         YangoCookiePool pool = new YangoCookiePool("");
 
-        assertThatThrownBy(pool::randomCookie)
+        assertThatThrownBy(pool::randomValidIndex)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("YEGO_YANGO_COOKIES");
     }
@@ -28,10 +28,21 @@ class YangoCookiePoolTest {
     }
 
     @Test
-    void resetsInvalidCookiesWhenRandomCookieNeedsOne() {
-        YangoCookiePool pool = new YangoCookiePool("cookie-a");
-        pool.markInvalid(0);
+    void prioritizesCookieConfiguredForRequestedPark() {
+        YangoCookiePool pool = new YangoCookiePool(
+                "Session_id=first; park_id=park-a|||Session_id=second; park_id=park-b");
 
-        assertThat(pool.randomCookie()).isEqualTo("cookie-a");
+        assertThat(pool.validIndicesForPark("park-b")).containsExactly(1, 0);
+    }
+
+    @Test
+    void excludesCookieRejectedForRequestedParkOnly() {
+        YangoCookiePool pool = new YangoCookiePool(
+                "Session_id=first; park_id=park-a|||Session_id=second; park_id=park-b");
+
+        pool.markUnauthorizedForPark(1, "park-b");
+
+        assertThat(pool.validIndicesForPark("park-b")).containsExactly(0);
+        assertThat(pool.validIndicesForPark("park-b-other")).containsExactly(0, 1);
     }
 }

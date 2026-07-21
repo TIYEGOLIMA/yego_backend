@@ -3,6 +3,7 @@ package com.yego.backend.service.yego_pro_ops.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.config.yego_pro_ops.ProxyConfig;
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.yego.backend.integration.YangoCookiePool;
 import com.yego.backend.entity.yego_pro_ops.api.request.DriverListRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.ContractorSuggestionsResponse;
@@ -69,8 +70,9 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             ProxyConfig proxyConfig,
             YangoCookiePool cookiePool,
             ObjectMapper objectMapper,
+            YegoProOpsProperties proOpsProperties,
             DriverOrdersService driverOrdersService) {
-        super(restTemplate, yangoProxyRestTemplate, proxyConfig, cookiePool, objectMapper);
+        super(restTemplate, yangoProxyRestTemplate, proxyConfig, cookiePool, objectMapper, proOpsProperties);
         this.driverOrdersService = driverOrdersService;
     }
 
@@ -97,7 +99,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             String requestJson = objectMapper.writeValueAsString(crearDriverListRequest());
 
             ResponseEntity<String> response = ejecutarConRetryCookies(
-                YANGO_CONTRACTORS_API_URL,
+                proOpsProperties.getYango().getContractorsUrl(),
                 HttpMethod.POST,
                 requestJson,
                 this::crearHeadersConCookie
@@ -245,7 +247,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
     private JsonNode obtenerConductoresInOrderDesdeAPI() {
         try {
             Map<String, Object> requestBody = new HashMap<>();
-            requestBody.put("park_id", PARK_ID);
+            requestBody.put("park_id", proOpsProperties.getParkId());
             requestBody.put("car", new HashMap<>());
             requestBody.put("statuses", Arrays.asList("in_order", "free"));
             Map<String, Object> sort = new HashMap<>();
@@ -254,7 +256,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             requestBody.put("sort", sort);
 
             ResponseEntity<String> response = ejecutarConRetryCookies(
-                YANGO_API_URL, HttpMethod.POST, requestBody, this::crearHeadersDriversPointsConCookie);
+                proOpsProperties.getYango().getDriverPointsUrl(), HttpMethod.POST, requestBody, this::crearHeadersDriversPointsConCookie);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 return objectMapper.readTree(response.getBody()).get("items");
@@ -409,7 +411,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             requestBody.put("with_order_field", true);
 
             ResponseEntity<String> response = ejecutarConRetryCookies(
-                YANGO_DRIVERS_LIST_API_URL, HttpMethod.POST, requestBody, this::crearHeadersDriversPointsConCookie);
+                proOpsProperties.getYango().getDriversListUrl(), HttpMethod.POST, requestBody, this::crearHeadersDriversPointsConCookie);
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 return objectMapper.readTree(response.getBody()).get("items");
@@ -487,7 +489,7 @@ public class FleetDriverServiceImpl extends BaseYangoApiService implements Fleet
             HttpHeaders headers = crearHeadersSuggestionsConCookieYParkId(obtenerCookiePorIndice(cookieIndex), parkId);
             try {
                 ResponseEntity<String> response = restTemplate.exchange(
-                    YANGO_SUGGESTIONS_LIST_URL, HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
+                    proOpsProperties.getYango().getSuggestionsUrl(), HttpMethod.POST, new HttpEntity<>(body, headers), String.class);
                 int code = response.getStatusCode().value();
                 if (response.getStatusCode().is2xxSuccessful()) return response;
                 if (code == 401 || code == 403 || code == 429) {

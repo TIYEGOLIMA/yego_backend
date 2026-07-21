@@ -1,6 +1,7 @@
 package com.yego.backend.service.yego_pro_ops.mobile;
 
 import com.yego.backend.config.JwtTokenProvider;
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.yego.backend.entity.yego_api_externo.entities.DriverApi;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.MobileAuthResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.MobileOtpResponse;
@@ -25,7 +26,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @RequiredArgsConstructor
 public class MobileAuthService {
 
-    private static final String PARK_ID_YEGO_PRO = "64085dd85e124e2c808806f70d527ea8";
     private static final String WORK_STATUS_WORKING = "working";
     private static final String MOBILE_TOKEN_TYPE = "mobile_driver";
     private static final SecureRandom RANDOM = new SecureRandom();
@@ -35,6 +35,7 @@ public class MobileAuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final MobileDriverSessionService mobileSessionService;
     private final MobileShiftService shiftService;
+    private final YegoProOpsProperties proOpsProperties;
     private final Map<String, OtpEntry> otpStore = new ConcurrentHashMap<>();
     private final Map<String, RateLimitEntry> requestLimits = new ConcurrentHashMap<>();
     private final Map<String, VerifyFailureEntry> verifyFailures = new ConcurrentHashMap<>();
@@ -306,7 +307,7 @@ public class MobileAuthService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debe ingresar una licencia valida");
         }
 
-        return driverRepository.findByParkIdAndLicense(PARK_ID_YEGO_PRO, license)
+        return driverRepository.findByParkIdAndLicense(proOpsProperties.getParkId(), license)
                 .stream()
                 .filter(this::isEnabledForMobileLogin)
                 .max(Comparator.comparing(DriverApi::getUpdatedAt, Comparator.nullsFirst(Comparator.naturalOrder())))

@@ -1,5 +1,6 @@
 package com.yego.backend.service.yego_api_externo;
 
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yego.backend.entity.yego_api_externo.api.request.YangoSummaryRequest;
@@ -13,7 +14,6 @@ import com.yego.backend.entity.yego_api_externo.api.response.YangoSummaryRespons
 import com.yego.backend.entity.yego_api_externo.api.response.YangoSummaryResponse.YangoIncomeBlock;
 import com.yego.backend.exception.YangoWeeklyException;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -57,10 +57,9 @@ public class YangoWeeklyService {
     private static final DateTimeFormatter DAY = DateTimeFormatter.ISO_LOCAL_DATE;
 
     private static final String OBJECTIVE_BONUS_DESC = "Bonificación por cumplir objetivo";
-    static final String DEFAULT_PARK_ID = YangoClient.DEFAULT_PARK_ID;
-
     private final YangoClient yangoClient;
     private final ObjectMapper objectMapper;
+    private final YegoProOpsProperties proOpsProperties;
     private final String incomeUrl;
     private final String driverDetailsUrl;
     private final String driverCommonUrl;
@@ -69,23 +68,20 @@ public class YangoWeeklyService {
     public YangoWeeklyService(
             YangoClient yangoClient,
             ObjectMapper objectMapper,
-            @Value("${yego.yango.driver-income-url:https://fleet.yango.com/api/v1/cards/driver/income}") String incomeUrl,
-            @Value("${yego.yango.driver-details-url:https://fleet.yango.com/api/v1/cards/driver/details}") String driverDetailsUrl,
-            @Value("${yego.yango.driver-common-url:https://fleet.yango.com/api/fleet/router/v1/cards/driver/common}") String driverCommonUrl,
-            @Value("${yego.yango.driver-transactions-list-url:https://fleet.yango.com/api/v1/reports/transactions/driver/list}")
-                    String driverTransactionsListUrl) {
+            YegoProOpsProperties proOpsProperties) {
         this.yangoClient = yangoClient;
         this.objectMapper = objectMapper;
-        this.incomeUrl = incomeUrl;
-        this.driverDetailsUrl = driverDetailsUrl;
-        this.driverCommonUrl = driverCommonUrl;
-        this.driverTransactionsListUrl = driverTransactionsListUrl;
+        this.proOpsProperties = proOpsProperties;
+        this.incomeUrl = proOpsProperties.getYango().getDriverIncomeUrl();
+        this.driverDetailsUrl = proOpsProperties.getYango().getDriverDetailsUrl();
+        this.driverCommonUrl = proOpsProperties.getYango().getDriverCommonUrl();
+        this.driverTransactionsListUrl = proOpsProperties.getYango().getDriverTransactionsListUrl();
     }
 
     public YangoSummaryResponse summarize(YangoSummaryRequest req) {
         String parkId = req.getParkId() != null && !req.getParkId().isBlank()
                 ? req.getParkId().trim()
-                : YangoClient.DEFAULT_PARK_ID;
+                : proOpsProperties.getParkId();
 
         LocalDate anchor = resolveAnchor(req);
         PeriodRange weeklyPeriod = resolveWeeklyPeriod(anchor);
@@ -194,7 +190,7 @@ public class YangoWeeklyService {
     public Optional<YangoIncomeSummary> fetchCorrectedWeeklyIncomeSummary(
             String driverProfileId, String parkId, String dateFrom, String dateTo) {
         PeriodRange week = new PeriodRange(dateFrom, dateTo);
-        String pid = parkId != null && !parkId.isBlank() ? parkId.trim() : DEFAULT_PARK_ID;
+        String pid = parkId != null && !parkId.isBlank() ? parkId.trim() : proOpsProperties.getParkId();
 
         CompletableFuture<YangoIncomeSummary> incomeFuture =
                 CompletableFuture.supplyAsync(() -> fetchIncome(driverProfileId, week, pid), YANGO_IO);
@@ -292,7 +288,7 @@ public class YangoWeeklyService {
     public Optional<YangoIncomeSummary> fetchWeeklyIncomeSummary(
             String driverProfileId, String parkId, String dateFrom, String dateTo) {
         PeriodRange week = new PeriodRange(dateFrom, dateTo);
-        String pid = parkId != null && !parkId.isBlank() ? parkId.trim() : DEFAULT_PARK_ID;
+        String pid = parkId != null && !parkId.isBlank() ? parkId.trim() : proOpsProperties.getParkId();
         try {
             YangoIncomeSummary income = fetchIncome(driverProfileId, week, pid);
             if (income != null) {
@@ -576,7 +572,7 @@ public class YangoWeeklyService {
 
     private GoalsResult fetchGoals(String contractorId, String parkId) {
         try {
-            String goalsUrl = String.format(YangoClient.GOALS_URL_TEMPLATE, contractorId);
+            String goalsUrl = String.format(proOpsProperties.getYango().getGoalsUrlTemplate(), contractorId);
             ResponseEntity<String> resp = yangoClient.getGoals(goalsUrl, parkId);
             if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
                 JsonNode root = objectMapper.readTree(resp.getBody());

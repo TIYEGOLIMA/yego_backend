@@ -1,5 +1,6 @@
 package com.yego.backend.service.yego_pro_ops.impl;
 
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.yego.backend.entity.yego_pro_ops.api.request.LiquidarRequest;
 import com.yego.backend.entity.yego_pro_ops.api.response.DriverOrdersResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.LiquidacionPendienteResponse;
@@ -57,7 +58,6 @@ public class LiquidacionServiceImpl implements LiquidacionService {
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ISO_DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
-    private static final String DEFAULT_PARK_ID = "64085dd85e124e2c808806f70d527ea8";
     private static final BigDecimal TASA_MANTENIMIENTO = BigDecimal.valueOf(0.15);
 
     private final ShiftSessionRepository shiftSessionRepository;
@@ -69,6 +69,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
     private final PaymentPercentageRepository paymentPercentageRepository;
     private final DriverCloseRepository driverCloseRepository;
     private final YangoWeeklyService yangoWeeklyService;
+    private final YegoProOpsProperties proOpsProperties;
 
     public LiquidacionServiceImpl(
             ShiftSessionRepository shiftSessionRepository,
@@ -79,7 +80,8 @@ public class LiquidacionServiceImpl implements LiquidacionService {
             BonusThresholdRepository bonusThresholdRepository,
             PaymentPercentageRepository paymentPercentageRepository,
             DriverCloseRepository driverCloseRepository,
-            YangoWeeklyService yangoWeeklyService) {
+            YangoWeeklyService yangoWeeklyService,
+            YegoProOpsProperties proOpsProperties) {
         this.shiftSessionRepository = shiftSessionRepository;
         this.tripRepository = tripRepository;
         this.shiftSessionService = shiftSessionService;
@@ -89,6 +91,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
         this.paymentPercentageRepository = paymentPercentageRepository;
         this.driverCloseRepository = driverCloseRepository;
         this.yangoWeeklyService = yangoWeeklyService;
+        this.proOpsProperties = proOpsProperties;
     }
 
     @Override
@@ -283,7 +286,7 @@ public class LiquidacionServiceImpl implements LiquidacionService {
                     lunesDespues.format(DATE_FORMATTER) + "T00:00:00-05:00",
                     lunesDespues.format(DATE_FORMATTER) + "T23:59:59-05:00");
             Optional<Double> bonifObjetivo = yangoWeeklyService
-                    .fetchSumAmountBonificacionCumplirObjetivo(driverId, DEFAULT_PARK_ID, weeklyRange);
+                    .fetchSumAmountBonificacionCumplirObjetivo(driverId, proOpsProperties.getParkId(), weeklyRange);
             if (bonifObjetivo.isPresent() && bonifObjetivo.get() > 0) {
                 bonoYangoLunes = BigDecimal.valueOf(bonifObjetivo.get());
             }

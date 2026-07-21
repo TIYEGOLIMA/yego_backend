@@ -1,5 +1,6 @@
 package com.yego.backend.service.yego_pro_ops.mobile;
 
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.yego.backend.entity.yego_api_externo.entities.DriverApi;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.AdminDriverHistoryResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.AdminDriverResponse;
@@ -29,7 +30,6 @@ import java.util.stream.Stream;
 @Transactional(readOnly = true)
 public class MobileAdminDriverService {
 
-    private static final String YEGO_PRO_OPS_PARK_ID = "64085dd85e124e2c808806f70d527ea8";
     private static final int SEARCH_RESULT_LIMIT = 30;
     private static final int MAX_SEARCH_TERM_LENGTH = 80;
     private static final int DEFAULT_HISTORY_PAGE_SIZE = 20;
@@ -39,6 +39,7 @@ public class MobileAdminDriverService {
     private final ShiftSessionRepository shiftRepository;
     private final DriverCloseRepository closeRepository;
     private final MobileShiftResponseMapper responseMapper;
+    private final YegoProOpsProperties proOpsProperties;
 
     public List<AdminDriverResponse> search(String query) {
         String term = query == null ? "" : query.trim();
@@ -50,7 +51,7 @@ public class MobileAdminDriverService {
         }
 
         return driverRepository.searchByPark(
-                        YEGO_PRO_OPS_PARK_ID,
+                        proOpsProperties.getParkId(),
                         term,
                         PageRequest.of(0, SEARCH_RESULT_LIMIT)
                 ).stream()
@@ -117,7 +118,7 @@ public class MobileAdminDriverService {
 
     private DriverApi findYegoProOpsDriver(String driverId) {
         return driverRepository.findById(driverId)
-                .filter(driver -> YEGO_PRO_OPS_PARK_ID.equals(driver.getParkId()))
+                .filter(driver -> proOpsProperties.getParkId().equals(driver.getParkId()))
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "Conductor Yego Pro Ops no encontrado"

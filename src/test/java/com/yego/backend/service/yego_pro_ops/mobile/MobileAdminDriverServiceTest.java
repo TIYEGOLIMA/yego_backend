@@ -1,5 +1,6 @@
 package com.yego.backend.service.yego_pro_ops.mobile;
 
+import com.yego.backend.config.yego_pro_ops.YegoProOpsProperties;
 import com.yego.backend.entity.yego_api_externo.entities.DriverApi;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.AdminDriverHistoryResponse;
 import com.yego.backend.entity.yego_pro_ops.api.response.mobile.MobileShiftResponse;
@@ -31,7 +32,7 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MobileAdminDriverServiceTest {
 
-    private static final String PARK_ID = "64085dd85e124e2c808806f70d527ea8";
+    private static final String PARK_ID = "test-park";
 
     @Mock private DriverApiRepository driverRepository;
     @Mock private ShiftSessionRepository shiftRepository;
@@ -42,11 +43,14 @@ class MobileAdminDriverServiceTest {
 
     @BeforeEach
     void setUp() {
+        YegoProOpsProperties properties = new YegoProOpsProperties();
+        properties.setParkId(PARK_ID);
         service = new MobileAdminDriverService(
                 driverRepository,
                 shiftRepository,
                 closeRepository,
-                responseMapper
+                responseMapper,
+                properties
         );
     }
 
