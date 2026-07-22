@@ -34,7 +34,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     
     @Override
     public ResponseEntity<byte[]> exportarAExcel(String fechaInicio, String fechaFin, Long sedeId) {
-        log.info("Exportando estadísticas de SAC a Excel - Fecha inicio: {}, Fecha fin: {}, sedeId: {}",
+        log.info("Exportando reporte Ticketera a Excel - Fecha inicio: {}, Fecha fin: {}, sedeId: {}",
                 fechaInicio, fechaFin, sedeId);
         
         try {
@@ -58,7 +58,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     
     @Override
     public ResponseEntity<byte[]> exportarAImagen(String formato, String fechaInicio, String fechaFin, Long sedeId) {
-        log.info("Exportando estadísticas de SAC a imagen: {} - Fecha inicio: {}, Fecha fin: {}, sedeId: {}",
+        log.info("Exportando reporte Ticketera a imagen: {} - Fecha inicio: {}, Fecha fin: {}, sedeId: {}",
                 formato, fechaInicio, fechaFin, sedeId);
         
         try {
@@ -95,7 +95,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     }
     
     private ByteArrayOutputStream generarExcel(SacStatsResponse stats, String fechaInicio, String fechaFin) {
-        log.info("Exportando estadísticas de SAC a Excel");
+        log.info("Generando Excel del reporte Ticketera");
         
         try (Workbook workbook = new XSSFWorkbook()) {
             // Crear hoja principal
@@ -136,6 +136,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             // Ajustar ancho de columnas
             ajustarAnchoColumnas(sheet);
 
+            crearHojaOpciones(workbook, stats.getOptionSelectionsBySede(), headerStyle, dataStyle, numberStyle);
             crearHojaTrazabilidad(workbook, stats.getTicketTraceability(), headerStyle, dataStyle, numberStyle);
             
             // Convertir a ByteArrayOutputStream
@@ -152,7 +153,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     }
     
     private ByteArrayOutputStream generarImagen(SacStatsResponse stats, String formato, String fechaInicio, String fechaFin) {
-        log.info("Exportando estadísticas de SAC a imagen: {}", formato);
+        log.info("Generando imagen del reporte Ticketera: {}", formato);
         
         try {
             BufferedImage image = crearImagenEstadisticas(stats, fechaInicio, fechaFin);
@@ -176,7 +177,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     }
     
     private String obtenerNombreArchivoExcel(String fechaInicio, String fechaFin) {
-        String nombreBase = "estadisticas_sac_";
+        String nombreBase = "reporte_ticketera_";
         if (fechaInicio != null && fechaFin != null && !fechaInicio.isEmpty() && !fechaFin.isEmpty()) {
             // Incluir fechas en el nombre del archivo
             nombreBase += fechaInicio.replace("-", "") + "_" + fechaFin.replace("-", "") + "_";
@@ -186,7 +187,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
     
     private String obtenerNombreArchivoImagen(String formato, String fechaInicio, String fechaFin) {
         String extension = "PNG".equalsIgnoreCase(formato) ? "png" : "jpg";
-        String nombreBase = "estadisticas_sac_";
+        String nombreBase = "reporte_ticketera_";
         if (fechaInicio != null && fechaFin != null && !fechaInicio.isEmpty() && !fechaFin.isEmpty()) {
             // Incluir fechas en el nombre del archivo
             nombreBase += fechaInicio.replace("-", "") + "_" + fechaFin.replace("-", "") + "_";
@@ -265,7 +266,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         headerRow.getCell(0).setCellStyle(headerStyle);
         
         Row subHeaderRow = sheet.createRow(startRow + 2);
-        String[] headers = {"Nombre", "Usuario", "Total Tickets", "Completados", "Calificación", "Calificaciones", "% Resolución", "Tiempo Respuesta"};
+        String[] headers = {"Nombre", "Usuario", "Total Tickets", "Completados", "Calificación", "Calificaciones", "% Resolución", "Tiempo Atención"};
         for (int i = 0; i < headers.length; i++) {
             subHeaderRow.createCell(i).setCellValue(headers[i]);
             subHeaderRow.getCell(i).setCellStyle(headerStyle);
@@ -286,9 +287,9 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             row.getCell(4).setCellStyle(numberStyle);
             row.createCell(5).setCellValue(sac.getTotalRatings());
             row.getCell(5).setCellStyle(numberStyle);
-            row.createCell(6).setCellValue(String.format("%.1f%%", sac.getSatisfactionPercentage()));
+            row.createCell(6).setCellValue(String.format("%.1f%%", sac.getResolutionPercentage()));
             row.getCell(6).setCellStyle(numberStyle);
-            row.createCell(7).setCellValue(sac.getAverageResponseTime());
+            row.createCell(7).setCellValue(sac.getAverageServiceTime());
             row.getCell(7).setCellStyle(dataStyle);
         }
     }
@@ -340,6 +341,51 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         for (int i = 0; i < headers.length; i++) {
             sheet.autoSizeColumn(i);
             sheet.setColumnWidth(i, Math.min(sheet.getColumnWidth(i), i == 13 ? 12000 : 6000));
+        }
+    }
+
+    private void crearHojaOpciones(
+            Workbook workbook,
+            List<SacStatsResponse.OptionSelectionBySedeResponse> selectionsBySede,
+            CellStyle headerStyle,
+            CellStyle dataStyle,
+            CellStyle numberStyle) {
+        Sheet sheet = workbook.createSheet("Opciones por sede");
+        String[] headers = {"Sede", "Categoría", "Opción marcada", "ID opción", "Tickets", "Participación"};
+        Row header = sheet.createRow(0);
+        for (int i = 0; i < headers.length; i++) {
+            header.createCell(i).setCellValue(headers[i]);
+            header.getCell(i).setCellStyle(headerStyle);
+        }
+
+        int rowIndex = 1;
+        for (SacStatsResponse.OptionSelectionBySedeResponse sede :
+                selectionsBySede != null ? selectionsBySede : Collections.<SacStatsResponse.OptionSelectionBySedeResponse>emptyList()) {
+            for (SacStatsResponse.OptionSelectionResponse option : sede.getOptions()) {
+                Row row = sheet.createRow(rowIndex++);
+                row.createCell(0).setCellValue(valor(sede.getSedeName()));
+                row.createCell(1).setCellValue(valor(option.getCategoryName()));
+                row.createCell(2).setCellValue(valor(option.getOptionName()));
+                row.createCell(3).setCellValue(option.getOptionId());
+                row.createCell(4).setCellValue(option.getCount());
+                row.createCell(5).setCellValue(option.getPercentage() / 100.0);
+                for (int column = 0; column < headers.length; column++) {
+                    row.getCell(column).setCellStyle(column >= 3 ? numberStyle : dataStyle);
+                }
+            }
+        }
+
+        CellStyle percentageStyle = workbook.createCellStyle();
+        percentageStyle.cloneStyleFrom(numberStyle);
+        percentageStyle.setDataFormat(workbook.createDataFormat().getFormat("0.0%"));
+        for (int row = 1; row < rowIndex; row++) {
+            sheet.getRow(row).getCell(5).setCellStyle(percentageStyle);
+        }
+        sheet.createFreezePane(0, 1);
+        sheet.setAutoFilter(new org.apache.poi.ss.util.CellRangeAddress(0, Math.max(0, rowIndex - 1), 0, headers.length - 1));
+        for (int i = 0; i < headers.length; i++) {
+            sheet.autoSizeColumn(i);
+            sheet.setColumnWidth(i, Math.min(sheet.getColumnWidth(i), 7000));
         }
     }
 
@@ -518,7 +564,7 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
         g2d.drawRoundRect(x, y + 25, 1100, tablaHeight, 15, 15);
         
         // Encabezados de la tabla
-        String[] headers = {"SAC", "Total Tickets", "Completados", "Calificación", "Resolución", "Tiempo Respuesta"};
+        String[] headers = {"SAC", "Total Tickets", "Completados", "Calificación", "Resolución", "Tiempo Atención"};
         int[] columnWidths = {220, 130, 130, 130, 130, 130};
         int currentX = x + 20;
         
@@ -589,16 +635,16 @@ public class SacStatsExportServiceImpl implements SacStatsExportService {
             currentX += columnWidths[3];
             
             // Resolución con color
-            java.awt.Color resolutionColor = sac.getSatisfactionPercentage() > 50 ?
+            java.awt.Color resolutionColor = sac.getResolutionPercentage() > 50 ?
                 new java.awt.Color(34, 197, 94) : new java.awt.Color(239, 68, 68);
             g2d.setColor(resolutionColor);
             g2d.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 12));
-            g2d.drawString(String.format("%.1f%%", sac.getSatisfactionPercentage()), currentX + 15, rowY - 5);
+            g2d.drawString(String.format("%.1f%%", sac.getResolutionPercentage()), currentX + 15, rowY - 5);
             currentX += columnWidths[4];
             
             g2d.setColor(java.awt.Color.BLACK);
             g2d.setFont(new java.awt.Font("Arial", java.awt.Font.PLAIN, 12));
-            g2d.drawString(sac.getAverageResponseTime(), currentX + 15, rowY - 5);
+            g2d.drawString(sac.getAverageServiceTime(), currentX + 15, rowY - 5);
             
             rowY += 55;
         }

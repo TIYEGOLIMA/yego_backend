@@ -9,7 +9,7 @@ import java.util.List;
 import java.time.LocalDateTime;
 
 /**
- * DTO para respuesta de estadísticas generales de SAC
+ * Contrato del reporte operativo de Ticketera.
  */
 @Data
 @Builder
@@ -17,7 +17,6 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class SacStatsResponse {
     
-    private Integer totalSACs;
     private Integer totalTickets;
     private Double averageRating;
     private Integer totalRatings;
@@ -26,11 +25,33 @@ public class SacStatsResponse {
     private Integer cancelledTickets;
     private Integer traceabilityTotal;
     private List<SacPerformanceResponse> sacPerformance;
-    private List<SacPerformanceResponse> topPerformers;
-    private List<RecentRatingResponse> recentRatings;
     private List<HourlyDistribution> hourlyDistribution;
     private List<HourlyBySede> hourlyBySede;
+    private List<OptionSelectionBySedeResponse> optionSelectionsBySede;
     private List<TicketTraceabilityResponse> ticketTraceability;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OptionSelectionBySedeResponse {
+        private Long sedeId;
+        private String sedeName;
+        private Integer totalTickets;
+        private List<OptionSelectionResponse> options;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OptionSelectionResponse {
+        private Long optionId;
+        private String categoryName;
+        private String optionName;
+        private Integer count;
+        private Double percentage;
+    }
 
     @Data
     @Builder
@@ -92,34 +113,8 @@ public class SacStatsResponse {
         private Integer completedTickets;
         private Double averageRating;
         private Integer totalRatings;
-        private Double satisfactionPercentage;
-        private String averageResponseTime;
-        private List<RatingResponse> ratings;
-        
-        @Data
-        @Builder
-        @NoArgsConstructor
-        @AllArgsConstructor
-        public static class RatingResponse {
-            private Long id;
-            private Integer score;
-            private String comment;
-            private String ticketNumber;
-            private String date;
-        }
-    }
-    
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class RecentRatingResponse {
-        private Long id;
-        private String sacName;
-        private Integer score;
-        private String comment;
-        private String ticketNumber;
-        private String date;
+        private Double resolutionPercentage;
+        private String averageServiceTime;
     }
 
     @Data

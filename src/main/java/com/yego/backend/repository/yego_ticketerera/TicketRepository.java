@@ -3,10 +3,13 @@ package com.yego.backend.repository.yego_ticketerera;
 import com.yego.backend.entity.yego_ticketerera.entities.Ticket;
 import com.yego.backend.entity.yego_ticketerera.entities.Ticket.TicketStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,6 +60,8 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
 
     List<Ticket> findBySedeId(Long sedeId);
 
+    Page<Ticket> findBySedeId(Long sedeId, Pageable pageable);
+
     @Query("SELECT COUNT(t) FROM Ticket t WHERE t.sedeId = :sedeId AND t.status = :status")
     long countBySedeIdAndStatus(@Param("sedeId") Long sedeId, @Param("status") TicketStatus status);
 
@@ -79,8 +84,16 @@ public interface TicketRepository extends JpaRepository<Ticket, Long> {
     List<Ticket> findByCreatedAtBetween(@Param("fechaInicio") java.time.LocalDateTime fechaInicio,
                                          @Param("fechaFin") java.time.LocalDateTime fechaFin);
 
+    Page<Ticket> findByCreatedAtBetween(LocalDateTime fechaInicio, LocalDateTime fechaFin, Pageable pageable);
+
     @Query("SELECT t FROM Ticket t WHERE t.sedeId = :sedeId AND t.createdAt >= :fechaInicio AND t.createdAt <= :fechaFin")
     List<Ticket> findBySedeIdAndCreatedAtBetween(@Param("sedeId") Long sedeId,
                                                   @Param("fechaInicio") java.time.LocalDateTime fechaInicio,
                                                   @Param("fechaFin") java.time.LocalDateTime fechaFin);
+
+    Page<Ticket> findBySedeIdAndCreatedAtBetween(
+            Long sedeId,
+            LocalDateTime fechaInicio,
+            LocalDateTime fechaFin,
+            Pageable pageable);
 }

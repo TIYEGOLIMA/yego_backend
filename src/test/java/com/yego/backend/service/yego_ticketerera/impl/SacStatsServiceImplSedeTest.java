@@ -7,7 +7,6 @@ import com.yego.backend.entity.yego_ticketerera.entities.Option;
 import com.yego.backend.entity.yego_ticketerera.entities.QueueTicketHistory;
 import com.yego.backend.entity.yego_ticketerera.entities.Ticket;
 import com.yego.backend.repository.yego_principal.UserRepository;
-import com.yego.backend.repository.yego_ticketerera.QueueAgentRepository;
 import com.yego.backend.repository.yego_ticketerera.QueueRatingRepository;
 import com.yego.backend.repository.yego_ticketerera.QueueTicketHistoryRepository;
 import com.yego.backend.repository.yego_ticketerera.SedeRepository;
@@ -19,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
@@ -26,8 +27,8 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -37,7 +38,6 @@ class SacStatsServiceImplSedeTest {
     @Mock private UserRepository userRepository;
     @Mock private TicketRepository ticketRepository;
     @Mock private QueueRatingRepository queueRatingRepository;
-    @Mock private QueueAgentRepository queueAgentRepository;
     @Mock private SedeRepository sedeRepository;
     @Mock private OptionRepository optionRepository;
     @Mock private ModuloAtencionRepository moduloAtencionRepository;
@@ -48,7 +48,7 @@ class SacStatsServiceImplSedeTest {
     @BeforeEach
     void setUp() {
         service = new SacStatsServiceImpl(
-                userRepository, ticketRepository, queueRatingRepository, queueAgentRepository, sedeRepository,
+                userRepository, ticketRepository, queueRatingRepository, sedeRepository,
                 optionRepository, moduloAtencionRepository, queueTicketHistoryRepository);
         when(sedeRepository.findByActiveTrueOrderByNameAsc()).thenReturn(List.of(
                 Sede.builder().id(10L).name("Lima").build(),
@@ -56,7 +56,7 @@ class SacStatsServiceImplSedeTest {
     }
 
     @Test
-    void filtraTicketsYCalificacionesRecientesPorSedeAunqueElOperadorHayaCambiado() {
+    void filtraTicketsPorSedeAunqueElOperadorHayaCambiado() {
         User operador = operador(1L, 20L);
         Ticket ticketLima = ticket(101L, 1L, 10L);
 
@@ -65,8 +65,6 @@ class SacStatsServiceImplSedeTest {
         when(queueRatingRepository.countBySedeId(10L)).thenReturn(0L);
         when(queueRatingRepository.getAverageRatingBySedeId(10L)).thenReturn(0.0);
         when(ticketRepository.findBySedeId(10L)).thenReturn(List.of(ticketLima));
-        when(queueRatingRepository.findRecentRatingsBySedeId(any(Pageable.class), eq(10L)))
-                .thenReturn(List.of());
 
         SacStatsResponse response = service.obtenerTodasLasEstadisticas(null, null, 10L);
 
@@ -75,23 +73,28 @@ class SacStatsServiceImplSedeTest {
             assertThat(performance.getSedeId()).isEqualTo(10L);
             assertThat(performance.getSedeName()).isEqualTo("Lima");
             assertThat(performance.getTotalTickets()).isEqualTo(1);
+            assertThat(performance.getResolutionPercentage()).isEqualTo(100.0);
+            assertThat(performance.getAverageServiceTime()).isEqualTo("4 min");
         });
         assertThat(response.getHourlyBySede()).extracting(SacStatsResponse.HourlyBySede::getSedeId)
                 .containsExactly(10L);
-        verify(queueRatingRepository).findRecentRatingsBySedeId(any(Pageable.class), eq(10L));
-        verify(queueRatingRepository, never()).findRecentRatings(any(Pageable.class));
     }
 
     @Test
     void separaElHistorialDelMismoOperadorPorLaSedeRealDeCadaTicket() {
         User operador = operador(1L, 20L);
+        Ticket ticketLima = ticket(101L, 1L, 10L);
+        ticketLima.setOptionId(12L);
+        Ticket ticketCallao = ticket(202L, 1L, 20L);
+        ticketCallao.setOptionId(21L);
         when(userRepository.findByRoleName("SAC")).thenReturn(List.of(operador));
         when(ticketRepository.count()).thenReturn(2L);
         when(queueRatingRepository.count()).thenReturn(0L);
         when(queueRatingRepository.getAverageRating()).thenReturn(0.0);
-        when(ticketRepository.findAll()).thenReturn(List.of(
-                ticket(101L, 1L, 10L), ticket(202L, 1L, 20L)));
-        when(queueRatingRepository.findRecentRatings(any(Pageable.class))).thenReturn(List.of());
+        when(ticketRepository.findAll()).thenReturn(List.of(ticketLima, ticketCallao));
+        when(optionRepository.findAllById(eq(java.util.Set.of(12L, 21L)))).thenReturn(List.of(
+                Option.builder().id(12L).name("Actualizar datos").build(),
+                Option.builder().id(21L).name("Consultar liquidación").build()));
 
         SacStatsResponse response = service.obtenerTodasLasEstadisticas(null, null, null);
 
@@ -101,10 +104,19 @@ class SacStatsServiceImplSedeTest {
         assertThat(response.getSacPerformance())
                 .extracting(SacStatsResponse.SacPerformanceResponse::getTotalTickets)
                 .containsExactly(1, 1);
+        assertThat(response.getOptionSelectionsBySede())
+                .extracting(SacStatsResponse.OptionSelectionBySedeResponse::getSedeName)
+                .containsExactly("Callao", "Lima");
+        assertThat(response.getOptionSelectionsBySede().get(0).getOptions())
+                .extracting(SacStatsResponse.OptionSelectionResponse::getOptionName)
+                .containsExactly("Consultar liquidación");
+        assertThat(response.getOptionSelectionsBySede().get(1).getOptions())
+                .extracting(SacStatsResponse.OptionSelectionResponse::getOptionName)
+                .containsExactly("Actualizar datos");
     }
 
     @Test
-    void combinaFiltroDeFechaYSedeParaCalificacionesRecientes() {
+    void combinaFiltroDeFechaYSedeParaLosTicketsDelReporte() {
         User operador = operador(1L, 10L);
         when(userRepository.findByRoleName("SAC")).thenReturn(List.of(operador));
         when(ticketRepository.countBySedeIdAndCreatedAtBetween(eq(10L), any(), any())).thenReturn(0L);
@@ -112,14 +124,10 @@ class SacStatsServiceImplSedeTest {
         when(queueRatingRepository.getAverageRatingBySedeIdAndDateRange(eq(10L), any(), any())).thenReturn(0.0);
         when(ticketRepository.findBySedeIdAndCreatedAtBetween(eq(10L), any(), any()))
                 .thenReturn(List.of());
-        when(queueRatingRepository.findRecentRatingsBySedeIdAndDateRange(
-                any(Pageable.class), eq(10L), any(), any())).thenReturn(List.of());
-
         service.obtenerTodasLasEstadisticas("2026-07-01", "2026-07-16", 10L);
 
-        verify(queueRatingRepository).findRecentRatingsBySedeIdAndDateRange(
-                any(Pageable.class), eq(10L), any(LocalDateTime.class), any(LocalDateTime.class));
-        verify(queueRatingRepository, never()).findRecentRatingsByDateRange(any(), any(), any());
+        verify(ticketRepository).findBySedeIdAndCreatedAtBetween(
+                eq(10L), any(LocalDateTime.class), any(LocalDateTime.class));
     }
 
     @Test
@@ -145,12 +153,20 @@ class SacStatsServiceImplSedeTest {
                         .createdAt(ticket.getCompletedAt())
                         .notes("Atención finalizada")
                         .build()));
-        when(queueRatingRepository.findRecentRatingsBySedeId(any(Pageable.class), eq(10L)))
-                .thenReturn(List.of());
 
         SacStatsResponse response = service.obtenerTodasLasEstadisticas(null, null, 10L);
 
         assertThat(response.getTraceabilityTotal()).isEqualTo(1);
+        assertThat(response.getOptionSelectionsBySede()).singleElement().satisfies(sedeStats -> {
+            assertThat(sedeStats.getSedeId()).isEqualTo(10L);
+            assertThat(sedeStats.getTotalTickets()).isEqualTo(1);
+            assertThat(sedeStats.getOptions()).singleElement().satisfies(option -> {
+                assertThat(option.getCategoryName()).isEqualTo("Cuenta del conductor");
+                assertThat(option.getOptionName()).isEqualTo("Actualización de datos");
+                assertThat(option.getCount()).isEqualTo(1);
+                assertThat(option.getPercentage()).isEqualTo(100.0);
+            });
+        });
         assertThat(response.getTicketTraceability()).singleElement().satisfies(trace -> {
             assertThat(trace.getSedeId()).isEqualTo(10L);
             assertThat(trace.getSedeName()).isEqualTo("Lima");
@@ -161,6 +177,29 @@ class SacStatsServiceImplSedeTest {
                     .extracting(SacStatsResponse.TicketTraceEventResponse::getStatus)
                     .containsExactly("GENERATED", "COMPLETED");
         });
+    }
+
+    @Test
+    void paginaLaTrazabilidadPorSedeEnOrdenMasReciente() {
+        Ticket ticket = ticket(101L, 1L, 10L);
+        Pageable requestedPage = PageRequest.of(1, 10);
+        when(ticketRepository.findBySedeId(eq(10L), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(ticket), requestedPage, 25));
+
+        var response = service.obtenerTrazabilidad(null, null, 10L, 1, 10);
+
+        assertThat(response.getPage()).isEqualTo(1);
+        assertThat(response.getSize()).isEqualTo(10);
+        assertThat(response.getTotalElements()).isEqualTo(25);
+        assertThat(response.getTotalPages()).isEqualTo(3);
+        assertThat(response.getContent()).singleElement().satisfies(trace -> {
+            assertThat(trace.getTicketNumber()).isEqualTo("T-101");
+            assertThat(trace.getSedeName()).isEqualTo("Lima");
+        });
+        verify(ticketRepository).findBySedeId(eq(10L), argThat(pageable ->
+                pageable.getPageNumber() == 1
+                        && pageable.getPageSize() == 10
+                        && pageable.getSort().getOrderFor("createdAt") != null));
     }
 
     private User operador(Long id, Long sedeId) {

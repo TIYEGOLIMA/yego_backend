@@ -1,6 +1,7 @@
 package com.yego.backend.controller.yego_ticketerera;
 
 import com.yego.backend.entity.yego_ticketerera.api.response.SacStatsResponse;
+import com.yego.backend.entity.yego_ticketerera.api.response.TicketTraceabilityPageResponse;
 import com.yego.backend.service.yego_ticketerera.SacStatsExportService;
 import com.yego.backend.service.yego_ticketerera.SacStatsService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,17 @@ public class SacStatsController {
             @RequestParam(required = false) String fechaFin,
             @RequestParam(required = false) Long sedeId) {
         return ResponseEntity.ok(sacStatsService.obtenerTodasLasEstadisticas(fechaInicio, fechaFin, sedeId));
+    }
+
+    @GetMapping("/traceability")
+    public ResponseEntity<TicketTraceabilityPageResponse> obtenerTrazabilidad(
+            @RequestParam(required = false) String fechaInicio,
+            @RequestParam(required = false) String fechaFin,
+            @RequestParam(required = false) Long sedeId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(sacStatsService.obtenerTrazabilidad(
+                fechaInicio, fechaFin, sedeId, page, size));
     }
 
     @GetMapping("/export/excel")

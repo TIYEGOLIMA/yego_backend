@@ -25,4 +25,13 @@ class SacStatsControllerTest {
         verify(sacStatsExportService).exportarAExcel("2026-07-01", "2026-07-16", 10L);
         verify(sacStatsExportService).exportarAImagen("png", "2026-07-01", "2026-07-16", 10L);
     }
+
+    @Test
+    void propagaFiltrosYPaginaALaTrazabilidad() {
+        SacStatsController controller = new SacStatsController(sacStatsService, sacStatsExportService);
+
+        controller.obtenerTrazabilidad("2026-07-01", "2026-07-16", 10L, 2, 50);
+
+        verify(sacStatsService).obtenerTrazabilidad("2026-07-01", "2026-07-16", 10L, 2, 50);
+    }
 }

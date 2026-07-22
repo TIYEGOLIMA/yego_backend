@@ -48,7 +48,6 @@ class SacStatsExportServiceImplTest {
                                 .build()))
                         .build();
         SacStatsResponse stats = SacStatsResponse.builder()
-                .totalSACs(1)
                 .totalTickets(1)
                 .openTickets(0)
                 .completedTickets(1)
@@ -56,10 +55,21 @@ class SacStatsExportServiceImplTest {
                 .averageRating(5.0)
                 .totalRatings(1)
                 .sacPerformance(List.of())
-                .topPerformers(List.of())
-                .recentRatings(List.of())
                 .hourlyDistribution(List.of())
                 .hourlyBySede(List.of())
+                .optionSelectionsBySede(List.of(
+                        SacStatsResponse.OptionSelectionBySedeResponse.builder()
+                                .sedeId(10L)
+                                .sedeName("Sede Lima")
+                                .totalTickets(1)
+                                .options(List.of(SacStatsResponse.OptionSelectionResponse.builder()
+                                        .optionId(12L)
+                                        .categoryName("Cuenta del conductor")
+                                        .optionName("Actualización de datos")
+                                        .count(1)
+                                        .percentage(100.0)
+                                        .build()))
+                                .build()))
                 .ticketTraceability(List.of(trace))
                 .build();
         when(sacStatsService.obtenerTodasLasEstadisticas("2026-07-16", "2026-07-16", 10L))
@@ -80,6 +90,11 @@ class SacStatsExportServiceImplTest {
                     .isEqualTo("Actualización de datos");
             assertThat(workbook.getSheet("Trazabilidad").getRow(1).getCell(13).getStringCellValue())
                     .contains("Ticket generado");
+            assertThat(workbook.getSheet("Opciones por sede")).isNotNull();
+            assertThat(workbook.getSheet("Opciones por sede").getRow(1).getCell(0).getStringCellValue())
+                    .isEqualTo("Sede Lima");
+            assertThat(workbook.getSheet("Opciones por sede").getRow(1).getCell(2).getStringCellValue())
+                    .isEqualTo("Actualización de datos");
         }
 
         ResponseEntity<byte[]> imageResponse = service.exportarAImagen(
